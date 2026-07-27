@@ -1,0 +1,260 @@
+name: ExecutiveDysfunction
+
+options:
+  bundleIdPrefix: com.GabrielPrice
+  deploymentTarget:
+    iOS: "17.4"
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: 6.0
+    DEVELOPMENT_TEAM: 7GXNZJMGPD
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1,2"
+    CURRENT_PROJECT_VERSION: 25
+    MARKETING_VERSION: 0.1.0
+
+schemes:
+  ExecutiveDysfunction:
+    build:
+      targets:
+        ExecutiveDysfunction: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - ExecutiveDysfunctionTests
+    archive:
+      config: Release
+  ExecutiveDysfunctionMac:
+    build:
+      targets:
+        ExecutiveDysfunctionMac: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - DesktopEnforcementTests
+    archive:
+      config: Release
+
+targets:
+  ExecutiveDysfunction:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/App
+      - path: Sources/Shared
+      - path: Sources/CloudShared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunction
+        PRODUCT_NAME: ExecutiveDysfunction
+        PRODUCT_MODULE_NAME: ExecutiveDysfunction
+        CODE_SIGN_ENTITLEMENTS: Config/App.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+    info:
+      path: Config/App-Info.plist
+      properties:
+        CFBundleDisplayName: Executive Dysfunction
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+    dependencies:
+      - target: ActivityMonitorExtension
+        embed: true
+      - target: ShieldConfigurationExtension
+        embed: true
+      - target: ShieldActionExtension
+        embed: true
+
+  ExecutiveDysfunctionMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/MacApp
+      - path: Sources/CloudShared
+      - path: Sources/DesktopShared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunction
+        PRODUCT_NAME: ExecutiveDysfunctionMac
+        PRODUCT_MODULE_NAME: ExecutiveDysfunctionMac
+        CODE_SIGN_ENTITLEMENTS: Config/Mac.entitlements
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Executive Dysfunction Preferences
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        TARGETED_DEVICE_FAMILY: ""
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: Config/MacDevelopment.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: Config/Mac.entitlements
+    dependencies:
+      - target: MacWebFilterExtension
+        embed: true
+      - target: BlockPageServer
+        embed: false
+      - sdk: NetworkExtension.framework
+      - sdk: SystemExtensions.framework
+    postBuildScripts:
+      - name: Embed block page server
+        script: |
+          SRC="$BUILT_PRODUCTS_DIR/BlockPageServer"
+          DST="$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/BlockPageServer"
+          if [ -f "$SRC" ]; then cp -f "$SRC" "$DST"; fi
+
+  MacWebFilterExtension:
+    type: system-extension
+    platform: macOS
+    sources:
+      - path: Sources/MacWebFilterExtension
+      - path: Sources/DesktopShared
+      - path: Sources/CloudShared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunction.WebFilter
+        PRODUCT_NAME: com.GabrielPrice.ExecutiveDysfunction.WebFilter
+        PRODUCT_MODULE_NAME: MacWebFilterExtension
+        CODE_SIGN_ENTITLEMENTS: Config/MacWebFilterExtension.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: Config/MacWebFilterExtensionDevelopment.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: Config/MacWebFilterExtension.entitlements
+    info:
+      path: Config/MacWebFilterExtension-Info.plist
+      properties:
+        CFBundlePackageType: SYSX
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NetworkExtension:
+          NEProviderClasses:
+            com.apple.networkextension.filter-data: $(PRODUCT_MODULE_NAME).MacWebFilterProvider
+          NEMachServiceName: group.com.GabrielPrice.ExecutiveDysfunction.WebFilter
+        NSSystemExtensionUsageDescription: Blocks selected websites and common encrypted-DNS or tunneling bypass paths while configured rules are active.
+    dependencies:
+      - sdk: NetworkExtension.framework
+
+  BlockPageServer:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Sources/BlockPageServer
+    settings:
+      base:
+        PRODUCT_NAME: BlockPageServer
+        PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunction.BlockPageServer
+        SKIP_INSTALL: YES
+        CODE_SIGN_ENTITLEMENTS: ""
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: ""
+        GENERATE_INFOPLIST_FILE: YES
+
+  ActivityMonitorExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/MonitorExtension
+      - path: Sources/Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunction.ActivityMonitor
+        PRODUCT_MODULE_NAME: ActivityMonitorExtension
+        CODE_SIGN_ENTITLEMENTS: Config/ActivityMonitor.entitlements
+        SKIP_INSTALL: YES
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: Config/ActivityMonitor-Info.plist
+      properties:
+        CFBundleDisplayName: Activity Monitor
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.deviceactivity.monitor-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).DeviceActivityMonitorExtension
+
+  ShieldConfigurationExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/ShieldConfigurationExtension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunction.ShieldConfiguration
+        PRODUCT_MODULE_NAME: ShieldConfigurationExtension
+        CODE_SIGN_ENTITLEMENTS: Config/ShieldConfiguration.entitlements
+        SKIP_INSTALL: YES
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: Config/ShieldConfiguration-Info.plist
+      properties:
+        CFBundleDisplayName: Shield Configuration
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ManagedSettingsUI.shield-configuration-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldConfigurationExtension
+
+  ShieldActionExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/ShieldActionExtension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunction.ShieldAction
+        PRODUCT_MODULE_NAME: ShieldActionExtension
+        CODE_SIGN_ENTITLEMENTS: Config/ShieldAction.entitlements
+        SKIP_INSTALL: YES
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: Config/ShieldAction-Info.plist
+      properties:
+        CFBundleDisplayName: Shield Action
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ManagedSettings.shield-action-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldActionExtension
+
+  ExecutiveDysfunctionTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+        excludes:
+          - DesktopEnforcementPolicyTests.swift
+          - WebFilterFlowDeciderTests.swift
+          - FilterEnforcementStatusTests.swift
+          - DesktopRemovalAuthorizationTests.swift
+          - DesktopLockdownSessionTests.swift
+    dependencies:
+      - target: ExecutiveDysfunction
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunctionTests
+        GENERATE_INFOPLIST_FILE: YES
+
+  DesktopEnforcementTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/DesktopEnforcementPolicyTests.swift
+      - path: Tests/WebFilterFlowDeciderTests.swift
+      - path: Tests/FilterEnforcementStatusTests.swift
+      - path: Tests/DesktopRemovalAuthorizationTests.swift
+      - path: Tests/DesktopLockdownSessionTests.swift
+    dependencies:
+      - target: ExecutiveDysfunctionMac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunctionDesktopTests
+        GENERATE_INFOPLIST_FILE: YES
