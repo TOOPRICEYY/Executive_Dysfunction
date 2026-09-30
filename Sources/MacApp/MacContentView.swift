@@ -379,10 +379,12 @@ private struct MacDashboardEnforcementStatus: View {
             Spacer(minLength: 18)
 
             statusBadge(syncStatus.uppercased())
-            statusBadge("\(activeRuleCount) ACTIVE BLOCKING")
-            statusBadge("\(activeRetreatCount) ACTIVE RETREATS")
+            statusBadge("\(activeRuleCount) GROUPS ON")
+            if activeRetreatCount > 0 {
+                statusBadge("\(activeRetreatCount) RETREAT\(activeRetreatCount == 1 ? "" : "S") RUNNING")
+            }
 
-            Button("CONTROLS") {
+            Button("FILTER CONTROLS") {
                 isShowingDetails.toggle()
             }
             .buttonStyle(MacBrutalButtonStyle())
@@ -425,9 +427,9 @@ private struct MacDashboardEnforcementStatus: View {
         if controller.activationSafetyRequiresRestart { return "SAFETY LOCKED" }
         if controller.recoveryWarning != nil { return "NEEDS ATTENTION" }
         if controller.deliveryError != nil { return "DELIVERY ERROR" }
-        if controller.isBlockingDisabled { return "PAUSED" }
+        if controller.isBlockingDisabled { return "WEB FILTER OFF" }
         if controller.status == .active {
-            return FilterEnforcementSummary.isHealthy(enforcementHealth) ? "ACTIVE" : "NEEDS ATTENTION"
+            return FilterEnforcementSummary.isHealthy(enforcementHealth) ? "WEB FILTER ON" : "NEEDS ATTENTION"
         }
         return controller.status.description.uppercased()
     }
@@ -506,9 +508,9 @@ private struct MacEnforcementStatusMenu: View {
         if controller.activationSafetyRequiresRestart { return "SAFETY LOCKED" }
         if controller.recoveryWarning != nil { return "NEEDS ATTENTION" }
         if controller.deliveryError != nil { return "DELIVERY ERROR" }
-        if controller.isBlockingDisabled { return "PAUSED" }
+        if controller.isBlockingDisabled { return "WEB FILTER OFF" }
         if controller.status == .active {
-            return FilterEnforcementSummary.isHealthy(enforcementHealth) ? "ACTIVE" : "NEEDS ATTENTION"
+            return FilterEnforcementSummary.isHealthy(enforcementHealth) ? "WEB FILTER ON" : "NEEDS ATTENTION"
         }
         return controller.status.description.uppercased()
     }

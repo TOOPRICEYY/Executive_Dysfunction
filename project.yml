@@ -386,6 +386,7 @@ targets:
       - path: Tests/RemoteWeakeningHoldTests.swift
       - path: Tests/HoldfastPresetsTests.swift
       - path: Tests/GenerationalMutationQueueTests.swift
+      - path: Tests/GroupNowStatusTests.swift
       - path: Sources/MacApp/MacTemporaryPauseStore.swift
       - path: Sources/Shared/Lockdown.swift
       - path: Sources/CloudShared/HoldfastEnforcementIdentities.swift

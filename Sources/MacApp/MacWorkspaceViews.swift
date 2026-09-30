@@ -164,52 +164,116 @@ struct MacDashboardView<StatusContent: View>: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                header
-                statusContent
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: 20) {
-                        activeBlockingGroups.frame(minWidth: 440)
-                        activeRetreats.frame(minWidth: 280)
+        // Re-evaluated every 30 s so "blocking now · until 14:00" stays true
+        // without the user refreshing.
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    header(now: context.date)
+                    statusContent
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 20) {
+                            activeBlockingGroups(now: context.date).frame(minWidth: 440)
+                            activeRetreats.frame(minWidth: 280)
+                        }
+                        VStack(spacing: 20) {
+                            activeBlockingGroups(now: context.date)
+                            activeRetreats
+                        }
                     }
-                    VStack(spacing: 20) {
-                        activeBlockingGroups
-                        activeRetreats
+                    secondaryActions
+                    if !dashboardRules.isEmpty {
+                        todayPanel(now: context.date)
                     }
+                    MacBlockStatusTimeline(calendarRules: calendarRules)
+                    bypassPanel
                 }
-                secondaryActions
-                MacBlockStatusTimeline(calendarRules: calendarRules)
-                bypassPanel
+                .padding(28)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(28)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(MacBrutalPalette.canvas)
     }
 
-    private var header: some View {
-        HStack(alignment: .bottom, spacing: 24) {
-            Text("DASHBOARD")
+    /// The answer to "what is happening right now?", before any configuration.
+    private func header(now: Date) -> some View {
+        let summary = DashboardNowSummary(groups: dashboardRules.map {
+            DashboardNowSummary.Group(name: $0.name, state: state(for: $0, now: now))
+        })
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(summary.headline.uppercased())
                 .font(.system(size: 34, weight: .semibold, design: .default))
                 .tracking(-0.5)
-            Spacer()
-            Text("NOW")
-                .font(.system(.caption, design: .default, weight: .semibold))
+                .accessibilityAddTraits(.isHeader)
+            Text(summary.nextLine(now: now) ?? "No changes scheduled in the next week.")
+                .font(.system(.callout, design: .default, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.bottom, 16)
         .overlay(alignment: .bottom) {
             Rectangle().fill(MacBrutalPalette.rule).frame(height: 2)
         }
     }
 
-    private var activeBlockingGroups: some View {
+    private func state(for rule: CloudRulePreference, now: Date) -> GroupNowState {
+        GroupNowStatus.evaluate(
+            isEnabled: rule.isEnabled,
+            windows: rule.windows,
+            now: now,
+            allowanceUntil: temporaryAllowances[rule.id],
+            lockdownUntil: lockdownExpirations[rule.id]
+        )
+    }
+
+    private func todayPanel(now: Date) -> some View {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: now)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? now
+        let lanes = TodayLanesLayout.sorted(dashboardRules.map { rule in
+            TodayLanesView.Lane(
+                id: rule.id,
+                name: rule.name,
+                intervals: rule.isEnabled || lockdownExpirations[rule.id] != nil
+                    ? ScheduleTimeline.intervals(windows: rule.windows, from: dayStart, to: dayEnd)
+                    : [],
+                state: state(for: rule, now: now)
+            )
+        })
+        return TodayLanesView(
+            lanes: lanes,
+            day: now,
+            now: now,
+            accent: MacBrutalPalette.signal,
+            rule: MacBrutalPalette.rule,
+            surface: MacBrutalPalette.raisedSurface,
+            onSelect: { id in
+                if let rule = dashboardRules.first(where: { $0.id == id }) {
+                    baselineRuleIDs.contains(rule.id) ? onEdit(rule) : onOpenRetreats()
+                }
+            }
+        )
+        .padding(20)
+        .background(MacBrutalPalette.surface)
+        .overlay { Rectangle().stroke(MacBrutalPalette.rule, lineWidth: 1) }
+    }
+
+    private func activeBlockingGroups(now: Date) -> some View {
         primaryPanel(title: "Blocking Groups", count: dashboardRules.count) {
             EmptyView()
         } content: {
             if dashboardRules.isEmpty {
-                emptyState("Create a group to choose apps, websites and allowance windows.")
+                if let onAddPreset {
+                    PresetStartGrid(
+                        accent: MacBrutalPalette.signal,
+                        rule: MacBrutalPalette.rule,
+                        onPick: onAddPreset,
+                        onCustom: onAdd
+                    )
+                    .padding(20)
+                } else {
+                    emptyState("Create a group to choose apps, websites and allowance windows.")
+                }
             } else {
                 if dashboardRules.count > 4 {
                     TextField("Find a Blocking Group", text: $groupSearch).macBrutalTextField().padding(16)
@@ -217,13 +281,15 @@ struct MacDashboardView<StatusContent: View>: View {
                 if !groupSearch.isEmpty && !dashboardRules.contains(where: { $0.name.localizedCaseInsensitiveContains(groupSearch) }) {
                     emptyState("No matching groups. Try a different name.")
                 }
-                ForEach(dashboardRules.filter { groupSearch.isEmpty || $0.name.localizedCaseInsensitiveContains(groupSearch) }) { rule in
+                ForEach(sortedRules(now: now).filter { groupSearch.isEmpty || $0.name.localizedCaseInsensitiveContains(groupSearch) }) { rule in
                     Button {
                         baselineRuleIDs.contains(rule.id) ? onEdit(rule) : onOpenRetreats()
                     } label: {
                         MacDashboardBlockingGroupRow(
                             rule: rule,
                             origin: baselineRuleIDs.contains(rule.id) ? "BASELINE" : "RETREAT",
+                            state: state(for: rule, now: now),
+                            now: now,
                             allowanceExpiresAt: temporaryAllowances[rule.id],
                             lockdownEndsAt: lockdownExpirations[rule.id]
                         )
@@ -270,6 +336,20 @@ struct MacDashboardView<StatusContent: View>: View {
             Button("All retreats · \(nonActiveLiveRetreats.count) planned", action: onOpenRetreats)
                 .buttonStyle(MacBrutalButtonStyle())
         }
+    }
+
+    /// In force first, then what starts soonest, so the list reads as "now,
+    /// next, later" instead of alphabetically.
+    private func sortedRules(now: Date) -> [CloudRulePreference] {
+        dashboardRules
+            .map { ($0, state(for: $0, now: now)) }
+            .sorted { lhs, rhs in
+                if lhs.1.sortRank != rhs.1.sortRank { return lhs.1.sortRank < rhs.1.sortRank }
+                let a = lhs.1.changesAt ?? .distantFuture, b = rhs.1.changesAt ?? .distantFuture
+                if a != b { return a < b }
+                return lhs.0.name.localizedCaseInsensitiveCompare(rhs.0.name) == .orderedAscending
+            }
+            .map(\.0)
     }
 
     private var dashboardRules: [CloudRulePreference] {
@@ -341,78 +421,104 @@ struct MacDashboardView<StatusContent: View>: View {
 private struct MacDashboardBlockingGroupRow: View {
     let rule: CloudRulePreference
     let origin: String
+    let state: GroupNowState
+    let now: Date
     let allowanceExpiresAt: Date?
     let lockdownEndsAt: Date?
 
     var body: some View {
         HStack(spacing: 14) {
             Rectangle()
-                .fill(rule.isEnabled || lockdownEndsAt != nil ? MacBrutalPalette.signal : MacBrutalPalette.raisedSurface)
-                .frame(width: 9, height: 44)
+                .fill(barColor)
+                .frame(width: 9, height: 48)
             VStack(alignment: .leading, spacing: 5) {
-                Text(rule.name)
-                    .font(.system(.headline, design: .default, weight: .semibold))
+                HStack(spacing: 8) {
+                    Text(rule.name)
+                        .font(.system(.headline, design: .default, weight: .semibold))
+                    if origin == "RETREAT" {
+                        MacRowChip(text: "RETREAT")
+                    }
+                }
+                Text(GroupNowStatus.headline(state, now: now))
+                    .font(.system(.callout, design: .default, weight: .semibold))
+                    .foregroundStyle(state.isBlocking ? Color.primary : Color.secondary)
                 if let lockdownEndsAt {
                     LockdownStatusBadge(endsAt: lockdownEndsAt)
                 } else if let allowanceExpiresAt {
                     TemporaryAllowanceStatusView(expiresAt: allowanceExpiresAt)
                 }
-                Text("\(rule.isEnabled ? "Schedule enabled" : "Saved schedule disabled") · \(origin.capitalized)\n\(HoldfastPresentation.targets(rule: rule))")
+                Text(HoldfastPresentation.targets(rule: rule))
                     .font(.system(.caption2, design: .default, weight: .bold))
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            MacDashboardBlockingGroupStatusIcons(rule: rule, isForced: lockdownEndsAt != nil)
-            Image(systemName: "arrow.up.right")
+            MacRowChip(text: lockLabel, systemImage: lockIcon)
+                .help(HoldfastPresentation.policy(rule.lockdown.severity))
+            Image(systemName: "chevron.right")
                 .font(.system(.caption, design: .default, weight: .semibold))
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 20)
-        .frame(minHeight: 72)
+        .frame(minHeight: 76)
         .padding(.vertical, 6)
+        .background(state.isBlocking ? MacBrutalPalette.signal.opacity(0.06) : Color.clear)
         .contentShape(Rectangle())
         .overlay(alignment: .bottom) {
             Rectangle().fill(MacBrutalPalette.rule.opacity(0.65)).frame(height: 1)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens the group to edit it")
+    }
+
+    /// Solid only while the group is actually blocking; the old bar was lit for
+    /// every enabled group, which said nothing about the present.
+    private var barColor: Color {
+        switch state {
+        case .lockdown, .blocking: MacBrutalPalette.signal
+        case .paused: Color.orange
+        case .upcoming: MacBrutalPalette.signal.opacity(0.35)
+        case .idle, .off: MacBrutalPalette.raisedSurface
+        }
+    }
+
+    private var lockLabel: String {
+        switch rule.lockdown.severity {
+        case "none": "NO LOCK"
+        case "passageOnly": "PASSAGE"
+        case "delayed": "\(rule.lockdown.unlockDelayDays)-DAY LOCK"
+        case "repeatedConfirmations": "DAILY CONFIRM"
+        default: "APP LOCK"
+        }
+    }
+
+    private var lockIcon: String {
+        switch rule.lockdown.severity {
+        case "none": "lock.open"
+        case "passageOnly": "key"
+        case "delayed": "clock"
+        case "repeatedConfirmations": "arrow.triangle.2.circlepath"
+        default: "lock"
+        }
     }
 }
 
-private struct MacDashboardBlockingGroupStatusIcons: View {
-    let rule: CloudRulePreference
-    var isForced = false
+/// A small labelled status chip. Replaces bare icons that could only be read
+/// by hovering for a tooltip.
+private struct MacRowChip: View {
+    let text: String
+    var systemImage: String? = nil
 
     var body: some View {
-        HStack(spacing: 6) {
-            statusIcon(
-                isForced ? "lock.shield" : (rule.isEnabled ? "bolt.fill" : "pause.fill"),
-                label: isForced ? "LOCKDOWN" : (rule.isEnabled ? "ENABLED" : "DISABLED")
-            )
-            statusIcon(lockStatus.icon, label: lockStatus.label)
+        HStack(spacing: 4) {
+            if let systemImage {
+                Image(systemName: systemImage).font(.system(size: 9, weight: .bold))
+            }
+            Text(text).font(.system(size: 9, weight: .bold, design: .monospaced))
         }
-    }
-
-    private var lockStatus: (icon: String, label: String) {
-        switch rule.lockdown.severity {
-        case "none":
-            ("lock.open.fill", "UNLOCKED")
-        case "passageOnly":
-            ("key.fill", "PASSAGE LOCK")
-        case "delayed":
-            ("clock.fill", "DELAYED LOCK")
-        case "repeatedConfirmations":
-            ("arrow.triangle.2.circlepath", "REPEATED LOCK")
-        default:
-            ("lock.fill", "APP DEFAULT LOCK")
-        }
-    }
-
-    private func statusIcon(_ name: String, label: String) -> some View {
-        Image(systemName: name)
-            .font(.system(size: 11, weight: .semibold))
-            .frame(width: 27, height: 27)
-            .background(MacBrutalPalette.raisedSurface)
-            .overlay { Rectangle().stroke(MacBrutalPalette.rule, lineWidth: 1) }
-            .help(label)
-            .accessibilityLabel(label)
+        .padding(.horizontal, 7)
+        .frame(height: 22)
+        .background(MacBrutalPalette.raisedSurface)
+        .overlay { Rectangle().stroke(MacBrutalPalette.rule, lineWidth: 1) }
     }
 }
 

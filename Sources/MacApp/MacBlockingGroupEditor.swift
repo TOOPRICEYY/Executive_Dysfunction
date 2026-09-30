@@ -65,8 +65,11 @@ struct MacBlockingGroupEditor: View {
                                 hasUsageLimit: group.usageBudget.dailyLimitMinutes != nil || group.usageBudget.weeklyLimitMinutes != nil
                             )
                             if !isNew {
-                                Button("Unlock changes / view policy") { isShowingUnlock = true }
-                                    .buttonStyle(MacBrutalButtonStyle(.primary))
+                                MacEditorLockCard(
+                                    severity: group.modificationPolicy.severity,
+                                    phase: model.ruleEditPhase(group.id),
+                                    onUnlock: { isShowingUnlock = true }
+                                )
                             }
                             identitySection
                             MacBlockingTargetsEditor(targets: Binding(get: { group.targets ?? CloudBlockingTargets() }, set: { group.targets = $0 }))
@@ -609,3 +612,76 @@ struct MacBlockingGroupEditor: View {
         }
     }
 }
+
+/// Explains the lock before the form, instead of a bare "Unlock" button:
+/// what can be saved right now, and what loosening will cost.
+private struct MacEditorLockCard: View {
+    let severity: String
+    let phase: UnlockPhase
+    let onUnlock: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .bold))
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.system(.headline, design: .default, weight: .semibold))
+                Text(detail)
+                    .font(.system(.caption, design: .default, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            if severity != "none" {
+                Button(buttonTitle, action: onUnlock)
+                    .buttonStyle(MacBrutalButtonStyle())
+            }
+        }
+        .padding(16)
+        .background(MacBrutalPalette.raisedSurface)
+        .overlay { Rectangle().stroke(MacBrutalPalette.rule, lineWidth: 1) }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var isUnlocked: Bool {
+        if case .unlocked = phase { return true }
+        return false
+    }
+
+    private var icon: String {
+        if severity == "none" || isUnlocked { return "lock.open" }
+        return "lock"
+    }
+
+    private var title: String {
+        if severity == "none" { return "Not locked" }
+        switch phase {
+        case let .unlocked(editWindowEndsAt):
+            return "Unlocked until \(editWindowEndsAt.formatted(date: .omitted, time: .shortened))"
+        case let .waiting(unlocksAt, _):
+            return "Unlocking · opens \(unlocksAt.formatted(date: .abbreviated, time: .shortened))"
+        case .confirmationDue:
+            return "Unlock needs today's confirmation"
+        case .cancelled:
+            return "Unlock request lapsed"
+        case .idle:
+            return "Locked"
+        }
+    }
+
+    private var detail: String {
+        if severity == "none" { return "Any change saves immediately." }
+        if isUnlocked { return "You can loosen this group now. The lock returns when the window closes." }
+        return "Stricter changes (more sites, longer hours, a stronger lock) save right away. Loosening it needs: \(HoldfastPresentation.policy(severity).lowercased())."
+    }
+
+    private var buttonTitle: String {
+        switch phase {
+        case .idle, .cancelled: "Start unlock…"
+        case .unlocked: "View policy"
+        default: "Continue unlock…"
+        }
+    }
+}
+

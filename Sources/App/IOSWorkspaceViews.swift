@@ -102,6 +102,9 @@ struct IOSDashboardView: View {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     statusHero
                     activeObjects
+                    if !model.baseline.blockingGroups.isEmpty {
+                        todayPanel
+                    }
                     IOSBlockStatusTimeline(calendarRules: model.dashboardCalendarRules)
                     BypassActivityPanel(groups: model.rules.map { .init(id: $0.id, name: $0.name) },
                         defaults: SharedConfiguration.bypassHistoryDefaults,
@@ -162,6 +165,14 @@ struct IOSDashboardView: View {
                         .font(.title2.weight(.semibold))
                     Text(model.isAuthorized ? "\(HoldfastPresentation.count(blockingCount, "group")) blocking now · \(HoldfastPresentation.count(model.activeRetreats.count, "active retreat"))" : "Allow Screen Time access so Holdfast can enforce your groups on this device.")
                         .font(.subheadline).foregroundStyle(.secondary)
+                    if model.isAuthorized,
+                       let next = DashboardNowSummary(groups: model.baseline.blockingGroups.map {
+                           DashboardNowSummary.Group(name: $0.name, state: nowState($0, now: context.date))
+                       }).nextLine(now: context.date) {
+                        Text(next)
+                            .font(.subheadline.weight(.semibold))
+                            .accessibilityIdentifier("dashboard-next-change")
+                    }
                 }
             }
             if !model.isAuthorized {
@@ -217,7 +228,13 @@ struct IOSDashboardView: View {
     private var blockingPanel: some View {
         IOSObjectPanel(title: "BLOCKING GROUPS", count: model.baseline.blockingGroups.count) {
             if model.baseline.blockingGroups.isEmpty {
-                IOSEmptyObjectRow(text: "Choose the apps and websites you want to spend less time with.")
+                PresetStartGrid(
+                    accent: IOSBrutalPalette.signal,
+                    rule: IOSBrutalPalette.rule,
+                    onPick: { model.installPreset($0) },
+                    onCustom: { editingBlockingGroup = CloudBlockingGroup() }
+                )
+                .padding(12)
             } else {
                 if model.baseline.blockingGroups.count > 4 {
                     TextField("Find a Blocking Group", text: $groupSearch)
@@ -226,7 +243,9 @@ struct IOSDashboardView: View {
                 if !groupSearch.isEmpty && !model.baseline.blockingGroups.contains(where: { $0.name.localizedCaseInsensitiveContains(groupSearch) }) {
                     IOSEmptyObjectRow(text: "No matching groups. Try a different name.")
                 }
-                ForEach(model.baseline.blockingGroups.filter { groupSearch.isEmpty || $0.name.localizedCaseInsensitiveContains(groupSearch) }) { group in
+                let now = Date()
+                ForEach(sortedGroups(now: now).filter { groupSearch.isEmpty || $0.name.localizedCaseInsensitiveContains(groupSearch) }) { group in
+                    let state = nowState(group, now: now)
                     Button { editingBlockingGroup = group } label: {
                         VStack(alignment: .leading, spacing: 0) {
                         if let end = model.lockdownExpirations[group.id] {
@@ -237,9 +256,11 @@ struct IOSDashboardView: View {
                         }
                         IOSObjectRow(
                             title: group.name,
-                            detail: "\(HoldfastPresentation.targets(group.targets))\n\(group.isEnabled ? "Schedule enabled" : "Saved schedule disabled") · \(HoldfastPresentation.schedule(group.timeWindow))",
-                            color: group.isEnabled || model.lockdownExpirations[group.id] != nil ? IOSBrutalPalette.signal : IOSBrutalPalette.raised,
-                            statuses: blockingGroupStatuses(group)
+                            headline: GroupNowStatus.headline(state, now: now),
+                            headlineIsActive: state.isBlocking,
+                            detail: HoldfastPresentation.targets(group.targets),
+                            color: rowColor(state),
+                            statuses: [lockStatus(group.modificationPolicy)]
                         )
                         }
                     }
@@ -249,6 +270,68 @@ struct IOSDashboardView: View {
             Button("NEW BLOCKING GROUP") { editingBlockingGroup = CloudBlockingGroup() }
                 .buttonStyle(IOSBrutalButtonStyle(emphasis: .primary))
                 .padding(12)
+        }
+    }
+
+    private func nowState(_ group: CloudBlockingGroup, now: Date) -> GroupNowState {
+        GroupNowStatus.evaluate(
+            isEnabled: group.isEnabled,
+            windows: group.timeWindow.effectiveBlockingSlots(),
+            now: now,
+            allowanceUntil: model.activeTimeAllowance(for: group.id)?.expiresAt,
+            lockdownUntil: model.lockdownExpirations[group.id]
+        )
+    }
+
+    /// In force first, then soonest, so the list reads "now, next, later".
+    private func sortedGroups(now: Date) -> [CloudBlockingGroup] {
+        model.baseline.blockingGroups
+            .map { ($0, nowState($0, now: now)) }
+            .sorted { lhs, rhs in
+                if lhs.1.sortRank != rhs.1.sortRank { return lhs.1.sortRank < rhs.1.sortRank }
+                let a = lhs.1.changesAt ?? .distantFuture, b = rhs.1.changesAt ?? .distantFuture
+                if a != b { return a < b }
+                return lhs.0.name.localizedCaseInsensitiveCompare(rhs.0.name) == .orderedAscending
+            }
+            .map(\.0)
+    }
+
+    private func rowColor(_ state: GroupNowState) -> Color {
+        switch state {
+        case .lockdown, .blocking: IOSBrutalPalette.signal
+        case .paused: .orange
+        case .upcoming: IOSBrutalPalette.signal.opacity(0.35)
+        case .idle, .off: IOSBrutalPalette.raised
+        }
+    }
+
+    private var todayPanel: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            let calendar = Calendar.current
+            let dayStart = calendar.startOfDay(for: context.date)
+            let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? context.date
+            TodayLanesView(
+                lanes: TodayLanesLayout.sorted(model.baseline.blockingGroups.map { group in
+                    TodayLanesView.Lane(
+                        id: group.id,
+                        name: group.name,
+                        intervals: group.isEnabled || model.lockdownExpirations[group.id] != nil
+                            ? ScheduleTimeline.intervals(windows: group.timeWindow.effectiveBlockingSlots(), from: dayStart, to: dayEnd)
+                            : [],
+                        state: nowState(group, now: context.date)
+                    )
+                }),
+                day: context.date,
+                now: context.date,
+                accent: IOSBrutalPalette.signal,
+                rule: IOSBrutalPalette.rule,
+                surface: IOSBrutalPalette.raised,
+                onSelect: { id in
+                    editingBlockingGroup = model.baseline.blockingGroups.first { $0.id == id }
+                }
+            )
+            .padding(14)
+            .overlay { Rectangle().stroke(IOSBrutalPalette.rule, lineWidth: 1) }
         }
     }
 
@@ -336,38 +419,55 @@ private struct IOSObjectPanel<Content: View>: View {
 
 private struct IOSObjectRow: View {
     let title: String
+    var headline: String? = nil
+    var headlineIsActive = false
     let detail: String
     let color: Color
     var statuses: [IOSObjectStatus] = []
 
     var body: some View {
         HStack(spacing: 12) {
-            Rectangle().fill(color).frame(width: 7, height: 38)
+            Rectangle().fill(color).frame(width: 7, height: 44)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.system(.callout, design: .default, weight: .semibold))
-                     .lineLimit(3)
+                    .lineLimit(3)
+                if let headline {
+                    Text(headline)
+                        .font(.system(.footnote, design: .default, weight: .semibold))
+                        .foregroundStyle(headlineIsActive ? Color.primary : Color.secondary)
+                        .lineLimit(2)
+                }
                 Text(detail)
                     .font(.system(.caption2, design: .default, weight: .medium))
                     .foregroundStyle(.secondary)
-                     .lineLimit(3)
-            }
-            Spacer()
-            HStack(spacing: 5) {
-                ForEach(statuses) { status in
-                    Image(systemName: status.icon)
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(width: 25, height: 25)
-                        .background(IOSBrutalPalette.raised)
-                        .overlay { Rectangle().stroke(IOSBrutalPalette.rule, lineWidth: 1) }
-                        .accessibilityLabel(status.label)
+                    .lineLimit(3)
+                if !statuses.isEmpty {
+                    HStack(spacing: 5) {
+                        ForEach(statuses) { status in
+                            HStack(spacing: 3) {
+                                Image(systemName: status.icon)
+                                Text(status.label)
+                            }
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .padding(.horizontal, 6)
+                            .frame(height: 20)
+                            .background(IOSBrutalPalette.raised)
+                            .overlay { Rectangle().stroke(IOSBrutalPalette.rule, lineWidth: 1) }
+                            .accessibilityLabel(status.label)
+                        }
+                    }
+                    .padding(.top, 2)
                 }
             }
+            Spacer()
             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
         }
         .padding(12)
         .frame(minHeight: 62)
+        .contentShape(Rectangle())
         .overlay(alignment: .bottom) { Rectangle().fill(IOSBrutalPalette.rule.opacity(0.45)).frame(height: 1) }
+        .accessibilityElement(children: .combine)
     }
 }
 
