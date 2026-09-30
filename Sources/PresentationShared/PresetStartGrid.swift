@@ -8,34 +8,38 @@ import SwiftUI
 /// is ordinary, editable groups afterwards.
 struct PresetStartGrid: View {
     var accent: Color = .accentColor
+    /// Text-safe version of the accent (bright fills can be unreadable as text).
+    var ink: Color? = nil
     var rule: Color = .secondary
     let onPick: (HoldfastPresets.BlockingPreset) -> Void
     var onCustom: (() -> Void)? = nil
 
-    private let columns = [GridItem(.adaptive(minimum: 200), spacing: 12)]
+    private let columns = [GridItem(.adaptive(minimum: 150), spacing: 8)]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Start with one of these")
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Start with a preset")
                 .font(.headline)
-            Text("Each adds a Blocking Group with sensible apps, websites, a schedule and a lock. You can change anything later.")
+            Text("Each adds an editable group with sites, a schedule and a lock.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
                 ForEach(HoldfastPresets.blockingPresets) { preset in
                     Button { onPick(preset) } label: {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(preset.name).font(.callout.weight(.bold))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(preset.name).font(.subheadline.weight(.bold))
                             Text(preset.summary)
-                                .font(.caption)
+                                .font(.caption2)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(3)
                                 .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
                             Text(lockLabel(preset.severity))
-                                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                .foregroundStyle(accent)
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundStyle(ink ?? accent)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
-                        .padding(12)
+                        .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
+                        .padding(10)
                         .overlay { Rectangle().stroke(rule, lineWidth: 1) }
                         .contentShape(Rectangle())
                     }
@@ -47,7 +51,8 @@ struct PresetStartGrid: View {
                 Button("Or build your own", action: onCustom)
                     .font(.caption.weight(.semibold))
                     .buttonStyle(.plain)
-                    .foregroundStyle(accent)
+                    .foregroundStyle(ink ?? accent)
+                    .accessibilityIdentifier("NEW BLOCKING GROUP")
             }
         }
     }

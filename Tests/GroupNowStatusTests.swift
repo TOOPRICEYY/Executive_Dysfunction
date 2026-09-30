@@ -76,13 +76,42 @@ final class GroupNowStatusTests: XCTestCase {
 
     func testLaneLayoutClampsAndSortsInForceFirst() {
         let start = calendar.startOfDay(for: date(29, 12))
-        XCTAssertEqual(TodayLanesLayout.fraction(of: date(29, 12), dayStart: start, calendar: calendar), 0.5, accuracy: 0.001)
-        XCTAssertEqual(TodayLanesLayout.fraction(of: date(28, 12), dayStart: start, calendar: calendar), 0)
-        let lanes = TodayLanesLayout.sorted([
+        XCTAssertEqual(ScheduleLanes.fraction(of: date(29, 12), dayStart: start, calendar: calendar), 0.5, accuracy: 0.001)
+        XCTAssertEqual(ScheduleLanes.fraction(of: date(28, 12), dayStart: start, calendar: calendar), 0)
+        let lanes = ScheduleLanes.sorted([
             .init(id: UUID(), name: "Off", intervals: [], state: .off),
             .init(id: UUID(), name: "Later", intervals: [], state: .upcoming(at: date(29, 21))),
             .init(id: UUID(), name: "Now", intervals: [], state: .blocking(until: date(29, 17)))
         ])
         XCTAssertEqual(lanes.map(\.name), ["Now", "Later", "Off"])
+    }
+
+    func testLanesForAnotherDayUseScheduleRetreatRunAndLockdowns() {
+        var rule = CloudRulePreference(name: "Work")
+        rule.isEnabled = true
+        rule.windows = [weekdays]
+        var retreat = CloudRulePreference(name: "Retreat")
+        retreat.isEnabled = true
+        retreat.windows = [CloudTimeWindow(weekdays: [1, 2, 3, 4, 5, 6, 7], startMinutes: 0, endMinutes: 1_440)]
+        var disabled = CloudRulePreference(name: "Held")
+        disabled.isEnabled = false
+        disabled.windows = [weekdays]
+        let entries = [
+            BlockStatusCalendarRule(rule: rule),
+            // The retreat runs Wednesday noon to Thursday noon.
+            BlockStatusCalendarRule(rule: retreat, enforcementInterval: DateInterval(start: date(30, 12), end: date(30, 12).addingTimeInterval(86_400))),
+            BlockStatusCalendarRule(rule: disabled, forcedIntervals: [DateInterval(start: date(30, 20), end: date(30, 22))])
+        ]
+        // Wednesday 30 September, viewed from Tuesday.
+        let lanes = ScheduleLanes.lanes(for: entries, day: date(30, 0), now: date(29, 10), calendar: calendar)
+        let byName = Dictionary(uniqueKeysWithValues: lanes.map { ($0.name, $0) })
+        XCTAssertEqual(byName["Work"]?.intervals, [BlockingInterval(start: date(30, 9), end: date(30, 17))])
+        XCTAssertEqual(byName["Retreat"]?.intervals, [BlockingInterval(start: date(30, 12), end: date(30, 0).addingTimeInterval(86_400))])
+        XCTAssertEqual(byName["Held"]?.intervals, [BlockingInterval(start: date(30, 20), end: date(30, 22))])
+        XCTAssertNil(byName["Work"]?.state, "Only today carries a live state")
+        XCTAssertEqual(byName["Work"]?.blockedMinutes, 480)
+        XCTAssertEqual(ScheduleLanes.duration(minutes: 480), "8h")
+        XCTAssertEqual(ScheduleLanes.duration(minutes: 90), "1h 30m")
+        XCTAssertEqual(ScheduleLanes.duration(minutes: 0), "Free")
     }
 }

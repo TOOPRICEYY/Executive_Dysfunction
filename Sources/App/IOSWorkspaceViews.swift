@@ -99,22 +99,35 @@ struct IOSDashboardView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18) {
+                LazyVStack(alignment: .leading, spacing: 12) {
                     statusHero
                     activeObjects
-                    if !model.baseline.blockingGroups.isEmpty {
-                        todayPanel
+                    if !model.dashboardCalendarRules.isEmpty {
+                        schedulePanel
                     }
-                    IOSBlockStatusTimeline(calendarRules: model.dashboardCalendarRules)
-                    BypassActivityPanel(groups: model.rules.map { .init(id: $0.id, name: $0.name) },
-                        defaults: SharedConfiguration.bypassHistoryDefaults,
-                        coverageNote: "This iPhone or iPad only. App grants include requests opened from a Screen Time shield.")
+                    // The bypass report is a full list of reference material,
+                    // so it starts folded and remembers how you left it.
+                    IOSCollapsibleSection(
+                        title: "BYPASSES",
+                        summary: "Temporary access you granted",
+                        storageKey: "dashboard.bypasses-expanded"
+                    ) {
+                        BypassActivityPanel(groups: model.rules.map { .init(id: $0.id, name: $0.name) },
+                            defaults: SharedConfiguration.bypassHistoryDefaults,
+                            coverageNote: "This iPhone or iPad only. App grants include requests opened from a Screen Time shield.")
+                    }
+                    Text("iCloud · \(model.cloudSyncStatus)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 4)
                 }
-                .padding(16)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
             .background(IOSBrutalPalette.canvas)
             .navigationTitle("DASHBOARD")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -155,58 +168,78 @@ struct IOSDashboardView: View {
         let scheduledIDs = Set(model.rules.filter { $0.isEnabled && $0.windows.contains { $0.isActive(at: context.date) } }.map(\.id))
         let heldIDs = Set(model.activeTimedLockdowns.filter { !model.lockdownMonitoringFailures.contains($0.id) }.flatMap { $0.rules.map(\.id) })
         let blockingCount = scheduledIDs.union(heldIDs).subtracting(pausedIDs).count
-        IOSBrutalCard {
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: model.isAuthorized ? "shield.checkered" : "exclamationmark.shield")
-                    .font(.title2).foregroundStyle(model.isAuthorized ? Color.primary : Color.orange)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(model.isAuthorized ? (blockingCount == 0 ? (allowances.isEmpty ? "Ready when you are" : "Temporary access active") : "Protection is active") : "Connect Screen Time")
-                        .font(.title2.weight(.semibold))
-                    Text(model.isAuthorized ? "\(HoldfastPresentation.count(blockingCount, "group")) blocking now · \(HoldfastPresentation.count(model.activeRetreats.count, "active retreat"))" : "Allow Screen Time access so Holdfast can enforce your groups on this device.")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    if model.isAuthorized,
-                       let next = DashboardNowSummary(groups: model.baseline.blockingGroups.map {
-                           DashboardNowSummary.Group(name: $0.name, state: nowState($0, now: context.date))
-                       }).nextLine(now: context.date) {
-                        Text(next)
-                            .font(.subheadline.weight(.semibold))
-                            .accessibilityIdentifier("dashboard-next-change")
-                    }
+        let summary = DashboardNowSummary(groups: model.baseline.blockingGroups.map {
+            DashboardNowSummary.Group(name: $0.name, state: nowState($0, now: context.date))
+        })
+        VStack(alignment: .leading, spacing: 8) {
+            if model.isAuthorized {
+                Text((blockingCount == 0 && !allowances.isEmpty ? "Temporary access active" : summary.headline).uppercased())
+                    .font(.system(.title3, design: .default, weight: .bold))
+                    .accessibilityAddTraits(.isHeader)
+                if let next = summary.nextLine(now: context.date) {
+                    Text(next)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("dashboard-next-change")
                 }
-            }
-            if !model.isAuthorized {
+            } else {
+                Label("Connect Screen Time", systemImage: "exclamationmark.shield")
+                    .font(.system(.title3, design: .default, weight: .bold))
+                    .foregroundStyle(.orange)
+                Text("Allow Screen Time access so Holdfast can enforce your groups on this device.")
+                    .font(.footnote).foregroundStyle(.secondary)
                 Button("Review Screen Time access") { showProtectionSettings = true }
                     .buttonStyle(IOSBrutalButtonStyle(emphasis: .primary))
+                    .controlSize(.small)
             }
             ForEach(model.activeTimedLockdowns) { session in
-                Text(session.rules.map(\.name).joined(separator: ", ")).font(.caption.weight(.semibold))
-                LockdownStatusBadge(endsAt: session.endsAt)
+                HStack(spacing: 8) {
+                    Text(session.rules.map(\.name).joined(separator: ", "))
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                    LockdownStatusBadge(endsAt: session.endsAt)
+                }
                 if model.lockdownMonitoringFailures.contains(session.id) {
-                    Label("Lockdown needs attention: Screen Time monitor unavailable. Open lockdown controls for details.", systemImage: "exclamationmark.triangle")
+                    Label("Screen Time monitor unavailable. Open lockdown for details.", systemImage: "exclamationmark.triangle")
                         .font(.caption).foregroundStyle(.orange)
                 }
             }
-            if !model.activeTimedLockdowns.isEmpty {
-                Text(model.lockdownSyncStatus).font(.caption).foregroundStyle(.secondary)
-                Text("iOS timing is approximate in the background. Reopen Holdfast to reconcile the exact deadline.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Button(model.activeTimedLockdowns.isEmpty ? "Start lockdown" : "Manage lockdowns") { showLockdown = true }
-                .buttonStyle(IOSBrutalButtonStyle())
-                .accessibilityIdentifier("manage-timed-lockdown")
             if !allowances.isEmpty {
-                Text("\(allowances.count) temporarily allowed").font(.caption.weight(.semibold))
-                // Baseline groups have their own visible rows below. Include
-                // retreat-only groups here so their pauses are not hidden.
+                // Baseline groups show their pause in their own row below;
+                // list retreat-only groups here so their pauses stay visible.
                 ForEach(allowances.filter { pause in !model.baseline.blockingGroups.contains { $0.id == pause.ruleID } }
                     .sorted { $0.ruleID.uuidString < $1.ruleID.uuidString }, id: \.ruleID) { pause in
-                    Text(model.rules.first { $0.id == pause.ruleID }?.name ?? "Blocking Group").font(.caption)
-                    TemporaryAllowanceStatusView(expiresAt: pause.expiresAt)
+                    HStack(spacing: 8) {
+                        Text(model.rules.first { $0.id == pause.ruleID }?.name ?? "Blocking Group").font(.caption)
+                        TemporaryAllowanceStatusView(expiresAt: pause.expiresAt)
+                    }
                 }
             }
-            Text("iCloud · \(model.cloudSyncStatus)").font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Button {
+                    showLockdown = true
+                } label: {
+                    Label(model.activeTimedLockdowns.isEmpty ? "Lockdown" : "Manage lockdowns", systemImage: "lock.shield")
+                        .font(.system(.footnote, design: .default, weight: .bold))
+                        .padding(.horizontal, 10)
+                        .frame(minHeight: 34)
+                        .overlay { Rectangle().stroke(IOSBrutalPalette.rule, lineWidth: 1) }
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("manage-timed-lockdown")
+                if !model.activeTimedLockdowns.isEmpty {
+                    Text("Timing is approximate in the background.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            }
         }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(IOSBrutalPalette.surface)
+        .overlay(alignment: .leading) {
+            Rectangle().fill(blockingCount > 0 ? IOSBrutalPalette.signal : IOSBrutalPalette.rule).frame(width: 5)
+        }
+        .overlay { Rectangle().stroke(IOSBrutalPalette.rule, lineWidth: 1) }
         }
     }
 
@@ -230,6 +263,7 @@ struct IOSDashboardView: View {
             if model.baseline.blockingGroups.isEmpty {
                 PresetStartGrid(
                     accent: IOSBrutalPalette.signal,
+                    ink: IOSBrutalPalette.controlAccent,
                     rule: IOSBrutalPalette.rule,
                     onPick: { model.installPreset($0) },
                     onCustom: { editingBlockingGroup = CloudBlockingGroup() }
@@ -267,9 +301,18 @@ struct IOSDashboardView: View {
                     .buttonStyle(.plain)
                 }
             }
-            Button("NEW BLOCKING GROUP") { editingBlockingGroup = CloudBlockingGroup() }
-                .buttonStyle(IOSBrutalButtonStyle(emphasis: .primary))
-                .padding(12)
+            if !model.baseline.blockingGroups.isEmpty {
+                Button { editingBlockingGroup = CloudBlockingGroup() } label: {
+                    Label("New Blocking Group", systemImage: "plus")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(IOSBrutalPalette.controlAccent)
+                        .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("NEW BLOCKING GROUP")
+            }
         }
     }
 
@@ -305,32 +348,27 @@ struct IOSDashboardView: View {
         }
     }
 
-    private var todayPanel: some View {
+    /// One lane per group, one day at a time, with a seven-day strip.
+    private var schedulePanel: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
-            let calendar = Calendar.current
-            let dayStart = calendar.startOfDay(for: context.date)
-            let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? context.date
-            TodayLanesView(
-                lanes: TodayLanesLayout.sorted(model.baseline.blockingGroups.map { group in
-                    TodayLanesView.Lane(
-                        id: group.id,
-                        name: group.name,
-                        intervals: group.isEnabled || model.lockdownExpirations[group.id] != nil
-                            ? ScheduleTimeline.intervals(windows: group.timeWindow.effectiveBlockingSlots(), from: dayStart, to: dayEnd)
-                            : [],
-                        state: nowState(group, now: context.date)
-                    )
-                }),
-                day: context.date,
+            ScheduleLanesView(
+                calendarRules: model.dashboardCalendarRules,
                 now: context.date,
+                states: Dictionary(
+                    model.baseline.blockingGroups.map { ($0.id, nowState($0, now: context.date)) },
+                    uniquingKeysWith: { first, _ in first }
+                ),
                 accent: IOSBrutalPalette.signal,
+                ink: IOSBrutalPalette.controlAccent,
                 rule: IOSBrutalPalette.rule,
                 surface: IOSBrutalPalette.raised,
+                labelWidth: 104,
                 onSelect: { id in
                     editingBlockingGroup = model.baseline.blockingGroups.first { $0.id == id }
                 }
             )
-            .padding(14)
+            .padding(12)
+            .background(IOSBrutalPalette.surface)
             .overlay { Rectangle().stroke(IOSBrutalPalette.rule, lineWidth: 1) }
         }
     }
@@ -363,10 +401,34 @@ struct IOSDashboardView: View {
         }
     }
 
+    @ViewBuilder
     private var retreatPanel: some View {
+        if model.activeRetreats.isEmpty {
+            Button { editingRetreat = CloudRetreat() } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "house")
+                    Text("No retreat running").font(.footnote.weight(.semibold))
+                    Spacer()
+                    Text("Plan one").font(.footnote.weight(.bold)).foregroundStyle(IOSBrutalPalette.controlAccent)
+                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .frame(minHeight: 44)
+                .background(IOSBrutalPalette.surface)
+                .overlay { Rectangle().stroke(IOSBrutalPalette.rule, lineWidth: 1) }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("NEW RETREAT")
+        } else {
+            activeRetreatPanel
+        }
+    }
+
+    private var activeRetreatPanel: some View {
         IOSObjectPanel(title: "ACTIVE RETREATS", count: model.activeRetreats.count) {
             if model.activeRetreats.isEmpty {
-                IOSEmptyObjectRow(text: "Make room for something else with a time-limited retreat.")
+                EmptyView()
             } else {
                 ForEach(model.activeRetreats) { retreat in
                     Button { editingRetreat = retreat } label: {
@@ -379,9 +441,6 @@ struct IOSDashboardView: View {
                     .buttonStyle(.plain)
                 }
             }
-            Button("NEW RETREAT") { editingRetreat = CloudRetreat() }
-                .buttonStyle(IOSBrutalButtonStyle())
-                .padding(12)
         }
     }
 }
@@ -408,7 +467,8 @@ private struct IOSObjectPanel<Content: View>: View {
                     .overlay { Rectangle().stroke(IOSBrutalPalette.rule, lineWidth: 1) }
                 Spacer()
             }
-            .padding(14)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             .overlay(alignment: .bottom) { Rectangle().fill(IOSBrutalPalette.rule).frame(height: 1) }
             content
         }
@@ -463,8 +523,9 @@ private struct IOSObjectRow: View {
             Spacer()
             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
         }
-        .padding(12)
-        .frame(minHeight: 62)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(minHeight: 54)
         .contentShape(Rectangle())
         .overlay(alignment: .bottom) { Rectangle().fill(IOSBrutalPalette.rule.opacity(0.45)).frame(height: 1) }
         .accessibilityElement(children: .combine)
@@ -627,3 +688,50 @@ struct IOSSettingsHubView: View {
         }
     }
 }
+
+/// A folded section: a slim header row that expands in place. Used for the
+/// reference material below the fold so the dashboard reads as "now" first.
+private struct IOSCollapsibleSection<Content: View>: View {
+    let title: String
+    let summary: String
+    @AppStorage private var isExpanded: Bool
+    let content: Content
+
+    init(title: String, summary: String, storageKey: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.summary = summary
+        _isExpanded = AppStorage(wrappedValue: false, storageKey)
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 10) {
+                    Text(title).font(.system(.footnote, design: .default, weight: .bold))
+                    if !isExpanded {
+                        Text(summary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.bold))
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                }
+                .padding(.horizontal, 12)
+                .frame(minHeight: 44)
+                .background(IOSBrutalPalette.surface)
+                .overlay { Rectangle().stroke(IOSBrutalPalette.rule, lineWidth: 1) }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityIdentifier("section-\(title.lowercased().replacingOccurrences(of: " ", with: "-"))")
+            if isExpanded {
+                content
+            }
+        }
+    }
+}
+

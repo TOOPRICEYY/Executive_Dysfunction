@@ -10,13 +10,14 @@ import XCTest
 final class HoldfastWorkspaceUITests: XCTestCase {
     func testBypassHistoryOpensAndOffersConfigurableFilters() {
         app.tabBars.buttons["Dashboard"].tap()
+        // Bypass statistics are folded below the fold; expand them first.
+        let section = app.buttons["section-bypasses"]
+        for _ in 0..<8 where !section.isHittable { app.swipeUp() }
+        XCTAssertTrue(section.isHittable)
+        if section.value as? String != "Expanded" { section.tap() }
         let entry = app.buttons["open-bypass-history"]
         for _ in 0..<8 where !entry.isHittable { app.swipeUp() }
         XCTAssertTrue(entry.isHittable)
-        let calendar = app.staticTexts["Blocking calendar"]
-        XCTAssertTrue(calendar.exists)
-        XCTAssertLessThan(calendar.frame.minY, app.staticTexts["Bypasses"].frame.minY,
-                          "Bypass statistics belong below the blocking calendar")
         attach(named: "bypass-status-panel")
         entry.tap()
         XCTAssertTrue(app.navigationBars["Bypass history"].waitForExistence(timeout: 5))
@@ -228,7 +229,8 @@ final class HoldfastWorkspaceUITests: XCTestCase {
         let scroll = app.scrollViews.firstMatch
         XCTAssertTrue(scroll.waitForExistence(timeout: 10))
 
-        let newRetreat = app.buttons["NEW RETREAT"]
+        // The folded bypass section is the dashboard's last action.
+        let newRetreat = app.buttons["section-bypasses"]
         XCTAssertTrue(newRetreat.waitForExistence(timeout: 5))
 
         var previous = CGRect.null

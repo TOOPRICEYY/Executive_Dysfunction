@@ -183,9 +183,8 @@ struct MacDashboardView<StatusContent: View>: View {
                     }
                     secondaryActions
                     if !dashboardRules.isEmpty {
-                        todayPanel(now: context.date)
+                        schedulePanel(now: context.date)
                     }
-                    MacBlockStatusTimeline(calendarRules: calendarRules)
                     bypassPanel
                 }
                 .padding(28)
@@ -226,27 +225,20 @@ struct MacDashboardView<StatusContent: View>: View {
         )
     }
 
-    private func todayPanel(now: Date) -> some View {
-        let calendar = Calendar.current
-        let dayStart = calendar.startOfDay(for: now)
-        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? now
-        let lanes = TodayLanesLayout.sorted(dashboardRules.map { rule in
-            TodayLanesView.Lane(
-                id: rule.id,
-                name: rule.name,
-                intervals: rule.isEnabled || lockdownExpirations[rule.id] != nil
-                    ? ScheduleTimeline.intervals(windows: rule.windows, from: dayStart, to: dayEnd)
-                    : [],
-                state: state(for: rule, now: now)
-            )
-        })
-        return TodayLanesView(
-            lanes: lanes,
-            day: now,
+    /// One lane per group, one day at a time, with a seven-day strip.
+    private func schedulePanel(now: Date) -> some View {
+        ScheduleLanesView(
+            calendarRules: calendarRules,
             now: now,
+            states: Dictionary(
+                dashboardRules.map { ($0.id, state(for: $0, now: now)) },
+                uniquingKeysWith: { first, _ in first }
+            ),
             accent: MacBrutalPalette.signal,
+            ink: MacBrutalPalette.controlAccent,
             rule: MacBrutalPalette.rule,
             surface: MacBrutalPalette.raisedSurface,
+            labelWidth: 170,
             onSelect: { id in
                 if let rule = dashboardRules.first(where: { $0.id == id }) {
                     baselineRuleIDs.contains(rule.id) ? onEdit(rule) : onOpenRetreats()
@@ -266,6 +258,7 @@ struct MacDashboardView<StatusContent: View>: View {
                 if let onAddPreset {
                     PresetStartGrid(
                         accent: MacBrutalPalette.signal,
+                        ink: MacBrutalPalette.controlAccent,
                         rule: MacBrutalPalette.rule,
                         onPick: onAddPreset,
                         onCustom: onAdd
