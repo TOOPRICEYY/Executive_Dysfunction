@@ -16,6 +16,8 @@ struct MacTemporaryPauseSheet: View {
     @State private var typedPassage = ""
     @State private var showsMismatch = false
     @State private var intent: BypassEvent.Intent?
+    @State private var reflection = ""
+    @State private var reflectionPrompt = ReflectionPrompt.prompt(for: UUID())
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -31,6 +33,7 @@ struct MacTemporaryPauseSheet: View {
             }
             .pickerStyle(.segmented)
             BypassIntentPicker(selection: $intent)
+            BypassReflectionField(prompt: reflectionPrompt, answer: $reflection)
 
             Text("Type this passage exactly. Case and line breaks do not matter.")
                 .font(.caption)
@@ -62,7 +65,8 @@ struct MacTemporaryPauseSheet: View {
                     .buttonStyle(MacBrutalButtonStyle())
                 Button("Disable for \(duration.title)", role: .destructive, action: confirm)
                     .buttonStyle(MacBrutalButtonStyle(.danger))
-                    .disabled(intent == nil || typedPassage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(intent == nil || !ReflectionPrompt.isSufficient(reflection)
+                        || typedPassage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(20)
@@ -94,7 +98,8 @@ struct MacTemporaryPauseSheet: View {
             return
         }
         if model.grantTemporaryPause(for: ruleID, duration: duration,
-            verifiedWordCount: CommitmentPassage.normalizedWords(in: requiredPassage).count, intent: intent) {
+            verifiedWordCount: CommitmentPassage.normalizedWords(in: requiredPassage).count, intent: intent,
+            reflection: ReflectionPrompt.normalized(reflection)) {
             dismiss()
         }
     }

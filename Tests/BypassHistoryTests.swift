@@ -96,3 +96,23 @@ final class BypassHistoryTests: XCTestCase {
         XCTAssertEqual(BypassReport.Period.week.start(at: now, calendar: calendar), start.addingTimeInterval(-6 * 86_400))
     }
 }
+
+final class EmergencyDisableHistoryTests: XCTestCase {
+    func testEmergencyDisableIsRecordedAgainstAllWebBlocks() throws {
+        let suite = "EmergencyDisableHistoryTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let now = Date(timeIntervalSince1970: 1_790_000_000)
+
+        let healthy = BypassEvent.emergencyDisable(at: now, recoveryWarningLive: false)
+        let warning = BypassEvent.emergencyDisable(at: now.addingTimeInterval(10), recoveryWarningLive: true)
+        XCTAssertTrue(healthy.isValid)
+        XCTAssertTrue(BypassHistoryStore.record([healthy, warning], defaults: defaults, at: now.addingTimeInterval(10)))
+
+        let events = BypassHistoryStore.read(defaults: defaults, at: now).document.events
+        XCTAssertEqual(events.map(\.source), [.emergencyDisable, .emergencyDisable])
+        XCTAssertEqual(Set(events.map(\.groupID)), [BypassEvent.allWebBlocksGroupID])
+        XCTAssertNotEqual(events[0].groupName, events[1].groupName, "The warning state is visible in the record")
+        XCTAssertEqual(BypassEvent.Source.emergencyDisable.title, "Emergency disable")
+    }
+}

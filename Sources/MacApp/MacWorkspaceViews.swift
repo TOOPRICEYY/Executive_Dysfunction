@@ -126,6 +126,7 @@ struct MacDashboardView<StatusContent: View>: View {
     let lockdownExpirations: [UUID: Date]
     let onEdit: (CloudRulePreference) -> Void
     let onAdd: () -> Void
+    let onAddPreset: ((HoldfastPresets.BlockingPreset) -> Void)?
     let onOpenRetreats: () -> Void
     let onOpenRetreat: (CloudRetreat) -> Void
     let statusContent: StatusContent
@@ -141,6 +142,7 @@ struct MacDashboardView<StatusContent: View>: View {
         lockdownExpirations: [UUID: Date] = [:],
         onEdit: @escaping (CloudRulePreference) -> Void,
         onAdd: @escaping () -> Void,
+        onAddPreset: ((HoldfastPresets.BlockingPreset) -> Void)? = nil,
         onOpenRetreats: @escaping () -> Void,
         onOpenRetreat: @escaping (CloudRetreat) -> Void,
         bypassPanel: BypassActivityPanel? = nil,
@@ -154,6 +156,7 @@ struct MacDashboardView<StatusContent: View>: View {
         self.lockdownExpirations = lockdownExpirations
         self.onEdit = onEdit
         self.onAdd = onAdd
+        self.onAddPreset = onAddPreset
         self.onOpenRetreats = onOpenRetreats
         self.onOpenRetreat = onOpenRetreat
         self.statusContent = statusContent()
@@ -253,6 +256,16 @@ struct MacDashboardView<StatusContent: View>: View {
         HStack(spacing: 12) {
             Button("NEW BLOCKING GROUP", action: onAdd)
                 .buttonStyle(MacBrutalButtonStyle(.primary))
+            if let onAddPreset {
+                Menu("START FROM PRESET") {
+                    ForEach(HoldfastPresets.blockingPresets) { preset in
+                        Button("\(preset.name) — \(preset.summary)") { onAddPreset(preset) }
+                    }
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Adds a ready-made Blocking Group and its Activity Groups. Everything stays editable.")
+            }
             Spacer()
             Button("All retreats · \(nonActiveLiveRetreats.count) planned", action: onOpenRetreats)
                 .buttonStyle(MacBrutalButtonStyle())

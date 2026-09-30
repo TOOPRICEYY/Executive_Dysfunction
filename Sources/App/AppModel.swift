@@ -584,6 +584,7 @@ final class AppModel: ObservableObject {
         duration: TemporaryAccessDuration,
         verifiedWordCount: Int? = nil,
         intent: BypassEvent.Intent? = nil,
+        reflection: String? = nil,
         now: Date = Date()
     ) -> Bool {
         guard TimedLockdownSession.expirations(SharedConfiguration.loadTimedLockdowns(), at: now)[ruleID] == nil else {
@@ -640,7 +641,8 @@ final class AppModel: ObservableObject {
             SharedConfiguration.recordAllowanceBackoff(for: ruleID, resetDays: days, at: now)
         }
         BypassHistoryStore.record([BypassEvent(id: UUID(), groupID: ruleID, groupName: rule.name,
-            grantedAt: now, expiresAt: allowance.expiresAt, grantedMinutes: duration.minutes, source: .app, intent: intent)],
+            grantedAt: now, expiresAt: allowance.expiresAt, grantedMinutes: duration.minutes, source: .app, intent: intent,
+            reflection: reflection)],
             defaults: SharedConfiguration.bypassHistoryDefaults, at: now)
         return true
     }
@@ -682,6 +684,7 @@ final class AppModel: ObservableObject {
         duration selectedDuration: TemporaryAccessDuration? = nil,
         verifiedWordCount: Int? = nil,
         intent: BypassEvent.Intent? = nil,
+        reflection: String? = nil,
         now: Date = Date()
     ) -> Bool {
         guard let request = ShieldTemporaryAccessCoordinator.loadPendingRequest(now: now),
@@ -701,7 +704,8 @@ final class AppModel: ObservableObject {
             clearPendingTemporaryAccessRequest(id: request.id)
             return false
         }
-        guard grantTimeAllowance(for: ruleID, duration: duration, verifiedWordCount: verifiedWordCount, intent: intent, now: now) else { return false }
+        guard grantTimeAllowance(for: ruleID, duration: duration, verifiedWordCount: verifiedWordCount,
+                                 intent: intent, reflection: reflection, now: now) else { return false }
         clearPendingTemporaryAccessRequest(id: request.id)
         return true
     }
@@ -815,6 +819,16 @@ final class AppModel: ObservableObject {
         }
         ActivityGroupSelectionPersistence.remove(value.id)
         return true
+    }
+
+    /// Adds a ready-made Blocking Group (and any Activity Groups it needs).
+    /// On iPhone the preset's websites apply immediately; apps and categories
+    /// can be added to its Activity Groups with the Screen Time picker.
+    @discardableResult
+    func installPreset(_ preset: HoldfastPresets.BlockingPreset) -> Bool {
+        var document = cloudDocument
+        HoldfastPresets.install(preset, into: &document)
+        return commitArchitectureDocument(document, status: "\(preset.name) added")
     }
 
     @discardableResult

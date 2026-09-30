@@ -21,6 +21,7 @@ struct MacDiagnosticsSheet: View {
             if let report {
                 ScrollView([.horizontal, .vertical]) {
                     LazyVStack(alignment: .leading, spacing: 20) {
+                        TamperJournalList(events: TamperJournal.shared.events())
                         ForEach(report.renderedBlocks()) { block in
                             Text(block.body)
                                 .font(.system(size: 11, design: .monospaced))

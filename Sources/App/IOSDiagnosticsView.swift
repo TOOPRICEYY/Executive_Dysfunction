@@ -53,6 +53,12 @@ struct IOSDiagnosticsView: View {
                 }
             }
 
+            Section {
+                TamperJournalList(events: TamperJournalCloudMirror.read())
+            } footer: {
+                Text("Mirrored from your Mac through iCloud.")
+            }
+
             if let exportError {
                 Section {
                     Label(exportError, systemImage: "exclamationmark.triangle")

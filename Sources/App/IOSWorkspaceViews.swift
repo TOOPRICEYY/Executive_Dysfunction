@@ -122,6 +122,13 @@ struct IOSDashboardView: View {
                         Button("New Retreat", systemImage: "house.badge.plus") {
                             editingRetreat = CloudRetreat()
                         }
+                        Menu {
+                            ForEach(HoldfastPresets.blockingPresets) { preset in
+                                Button(preset.name) { model.installPreset(preset) }
+                            }
+                        } label: {
+                            Label("Start from Preset", systemImage: "square.stack.3d.up")
+                        }
                     } label: { Image(systemName: "plus") }
                 }
             }

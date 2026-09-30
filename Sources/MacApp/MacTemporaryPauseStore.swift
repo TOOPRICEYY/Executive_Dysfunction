@@ -27,14 +27,14 @@ enum MacTemporaryPauseStore {
         }
     }
 
-    static func load(defaults: UserDefaults) -> [UUID: RuleTimeAllowance] {
+    static func load(defaults: any KeyValueLedger) -> [UUID: RuleTimeAllowance] {
         guard let data = defaults.data(forKey: defaultsKey),
               let stored = try? JSONDecoder().decode([UUID: RuleTimeAllowance].self, from: data)
         else { return [:] }
         return stored
     }
 
-    static func save(_ pauses: [UUID: RuleTimeAllowance], defaults: UserDefaults) {
+    static func save(_ pauses: [UUID: RuleTimeAllowance], defaults: any KeyValueLedger) {
         if pauses.isEmpty {
             defaults.removeObject(forKey: defaultsKey)
         } else {
@@ -45,7 +45,7 @@ enum MacTemporaryPauseStore {
     static func active(
         for ruleID: UUID,
         at now: Date,
-        defaults: UserDefaults
+        defaults: any KeyValueLedger
     ) -> RuleTimeAllowance? {
         guard let pause = load(defaults: defaults)[ruleID], pause.expiresAt > now else { return nil }
         return pause
@@ -54,7 +54,7 @@ enum MacTemporaryPauseStore {
     /// What the published policy stamps onto its rules. Expired records are
     /// dropped rather than published, so a stale entry can never release a
     /// block.
-    static func activeExpirations(at now: Date, defaults: UserDefaults) -> [UUID: Date] {
+    static func activeExpirations(at now: Date, defaults: any KeyValueLedger) -> [UUID: Date] {
         load(defaults: defaults)
             .filter { $0.value.expiresAt > now }
             .mapValues(\.expiresAt)
@@ -63,7 +63,7 @@ enum MacTemporaryPauseStore {
     /// Removes records that have run out, so the session maximum resets once a
     /// pause ends rather than counting against the user forever.
     @discardableResult
-    static func pruneExpired(at now: Date, defaults: UserDefaults) -> Int {
+    static func pruneExpired(at now: Date, defaults: any KeyValueLedger) -> Int {
         let stored = load(defaults: defaults)
         let live = stored.filter { $0.value.expiresAt > now }
         guard live.count != stored.count else { return 0 }
@@ -74,7 +74,7 @@ enum MacTemporaryPauseStore {
     static func availableDurations(
         for rule: DesktopEnforcementRule,
         at now: Date,
-        defaults: UserDefaults
+        defaults: any KeyValueLedger
     ) -> [TemporaryAccessDuration] {
         guard rule.lockdown.allowsTimeExtensions else { return [] }
         let spent = active(for: rule.id, at: now, defaults: defaults)?.totalMinutesGranted ?? 0
@@ -92,7 +92,7 @@ enum MacTemporaryPauseStore {
     static func passageWordCount(
         for rule: DesktopEnforcementRule,
         at now: Date,
-        defaults: UserDefaults
+        defaults: any KeyValueLedger
     ) -> Int {
         let sessionWords = TimeAllowancePolicy.passageWordCount(
             base: rule.lockdown.effectiveTemporaryAccessPassageWordCount,
@@ -110,7 +110,7 @@ enum MacTemporaryPauseStore {
         _ duration: TemporaryAccessDuration,
         for rule: DesktopEnforcementRule,
         at now: Date,
-        defaults: UserDefaults
+        defaults: any KeyValueLedger
     ) -> Result<RuleTimeAllowance, GrantError> {
         guard rule.lockdown.allowsTimeExtensions else { return .failure(.notPermitted) }
 
@@ -146,7 +146,7 @@ enum MacTemporaryPauseStore {
     }
 
     @discardableResult
-    static func cancel(ruleID: UUID, defaults: UserDefaults) -> Bool {
+    static func cancel(ruleID: UUID, defaults: any KeyValueLedger) -> Bool {
         var stored = load(defaults: defaults)
         guard stored.removeValue(forKey: ruleID) != nil else { return false }
         save(stored, defaults: defaults)

@@ -340,7 +340,7 @@ enum WebFilterFlowDecider {
         }
         return policy.activeRules(at: date).contains { rule in
             rule.enforcementMode == .blockList
-                && rule.macApplicationIdentifiers.contains(identifier)
+                && rule.matchesApplication(identifier)
         }
     }
 

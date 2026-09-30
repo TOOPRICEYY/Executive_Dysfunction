@@ -46,19 +46,31 @@ old failed connection, because the filter still refuses it. Failing back to
 ## What it trusts — read this before installing
 
 `Scripts/setup-block-page.sh` creates a root CA and marks it trusted for SSL on
-this machine. **That CA can impersonate any site to this Mac.** Its private key
-lives at `/Library/Application Support/ExecutiveDysfunction/blockpage/ca.key`,
-root-owned and `0600`. Anyone who can read that key can intercept your TLS.
+this machine. Since 2026-09-29 that CA is deliberately narrow:
+
+- **Name-constrained.** X.509 `nameConstraints` (critical) permit only the
+  blocked domains and their subdomains, and exclude every IP address. macOS
+  rejects any certificate it signs for another name, so it cannot be used to
+  impersonate your bank, email or anything else.
+- **Leaf-only and short-lived.** `pathlen:0`, `keyCertSign` only, valid for 825
+  days.
+- **No key left behind.** The CA key is deleted as soon as the leaf is signed.
+  Each run mints a fresh CA for the current block list, trusts it, then removes
+  the previous one.
+
+Before this change the CA was unconstrained, valid for ten years, and its key
+stayed on disk: anyone who could read the key could intercept any TLS on this
+Mac. Re-run the script once to replace an old CA.
 
 This is inherent to showing a real page in the tab for an HTTPS site: answering
 as `x.com` means holding a certificate a browser accepts for `x.com`.
-`--uninstall` removes the key, the trust setting, and the hosts entries.
+`--uninstall` removes the trust setting, the leaf, and the hosts entries.
 
 ## Install
 
     sudo Scripts/setup-block-page.sh
 
-It generates the CA on first run and reuses it afterwards, mints a leaf whose
+It generates a fresh name-constrained CA on every run, mints a leaf whose
 SANs cover the currently explicitly blocked domains (each plus its `www.`
 form), installs a `KeepAlive` LaunchDaemon for the server, and records the names
 that certificate can answer. The daemon writes its marked `/etc/hosts` block

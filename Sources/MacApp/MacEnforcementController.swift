@@ -206,6 +206,8 @@ private struct FilterPreferenceMutation: Sendable {
     var baselineProviderSessionID: String? = nil
 }
 
+extension FilterPreferenceMutation: GenerationStamped {}
+
 private struct SameBootResetHTTPSObservation: Sendable {
     var isHealthy: Bool
     var statusCode: Int?
@@ -287,6 +289,10 @@ final class MacEnforcementController: NSObject, ObservableObject {
     @Published private(set) var recoveryWarning: String?
     @Published private(set) var enforcementPreparationMessage: String?
     private var recoveryWarnings: [String: String] = [:]
+    /// External (System Settings) disable tracking; see ExternalFilterToggleGate.
+    private var externalToggleObserver: NSObjectProtocol?
+    private var externalToggleObservedOffAt: Date?
+    private var externalToggleRecheckTask: Task<Void, Never>?
 
     /// Diagnostic failures are not authorization to pause every rule.
     func reportRecoveryWarning(trigger: String, message: String) {
@@ -345,10 +351,22 @@ final class MacEnforcementController: NSObject, ObservableObject {
     /// never commit after a newer emergency disable without the disable being
     /// applied last. New requests replace `pendingPreferenceMutation` with the
     /// latest desired state.
-    private var preferenceGeneration: UInt64 = 0
+    private var preferenceQueue = GenerationalMutationQueue<FilterPreferenceMutation>()
+    /// Views onto `preferenceQueue`, kept under their original names so every
+    /// existing call site behaves exactly as before the extraction.
+    private var preferenceGeneration: UInt64 {
+        get { preferenceQueue.generation }
+        set { preferenceQueue.generation = newValue }
+    }
     private var desiredStateGeneration: UInt64 = 0
-    private var activePreferenceMutation: FilterPreferenceMutation?
-    private var pendingPreferenceMutation: FilterPreferenceMutation?
+    private var activePreferenceMutation: FilterPreferenceMutation? {
+        get { preferenceQueue.active }
+        set { preferenceQueue.active = newValue }
+    }
+    private var pendingPreferenceMutation: FilterPreferenceMutation? {
+        get { preferenceQueue.pending }
+        set { preferenceQueue.pending = newValue }
+    }
     private var preferenceMutationDeadlineTask: Task<Void, Never>?
     private var preferenceMutationDeadlineGeneration: UInt64?
     private var isBreakGlassRemovalInFlight = false
@@ -2750,8 +2768,7 @@ final class MacEnforcementController: NSObject, ObservableObject {
     }
 
     private func enqueuePreferenceMutation(_ mutation: FilterPreferenceMutation) {
-        let replacedGeneration = pendingPreferenceMutation?.generation ?? 0
-        pendingPreferenceMutation = mutation
+        let replacedGeneration = preferenceQueue.enqueue(mutation)
         MacEnforcementLog.delivery.notice(
             "Network Extension preference mutation queued generation=\(mutation.generation, privacy: .public) target=\(mutation.goal.isEnabled ? "enabled" : "disabled", privacy: .public) trigger=\(mutation.goal.triggerDescription, privacy: .public) revision=\(mutation.goal.revision, privacy: .public) retry=\(mutation.goal.retry, privacy: .public) activeGeneration=\(self.activePreferenceMutation?.generation ?? 0, privacy: .public) replacedPendingGeneration=\(replacedGeneration, privacy: .public)"
         )
@@ -2772,10 +2789,7 @@ final class MacEnforcementController: NSObject, ObservableObject {
     }
 
     private func startNextPreferenceMutationIfNeeded() {
-        guard activePreferenceMutation == nil,
-              let mutation = pendingPreferenceMutation else { return }
-        pendingPreferenceMutation = nil
-        activePreferenceMutation = mutation
+        guard let mutation = preferenceQueue.startNextIfIdle() else { return }
         performPreferenceMutation(mutation)
     }
 
@@ -4724,3 +4738,94 @@ extension MacEnforcementController: OSSystemExtensionRequestDelegate {
         }
     }
 }
+
+// MARK: - Filter switched off outside Holdfast
+
+extension MacEnforcementController {
+    /// Watches for the content-filter preference being changed by anything,
+    /// including System Settings. Our own saves also post this notification;
+    /// the gate ignores them because a mutation is in flight or the app no
+    /// longer intends to enforce.
+    func startExternalToggleMonitoring() {
+        guard externalToggleObserver == nil else { return }
+        externalToggleObserver = NotificationCenter.default.addObserver(
+            forName: .NEFilterConfigurationDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.checkForExternalFilterToggle()
+            }
+        }
+    }
+
+    private var appIntendsEnforcement: Bool {
+        !isBlockingDisabled && !isRemoving && !isResettingEnforcement
+            && !activationSafetyRequiresRestart
+            && (status == .active || status == .rebootRequired)
+    }
+
+    func checkForExternalFilterToggle() {
+        // Only read the shared manager while no mutation of ours is running:
+        // a load that lands between another operation's property change and
+        // its save would silently overwrite that change.
+        guard appIntendsEnforcement, !preferenceQueue.isBusy else { return }
+        let manager = NEFilterManager.shared()
+        manager.loadFromPreferences { [weak self] error in
+            Task { @MainActor [weak self] in
+                // An unreadable preference is not evidence of tampering.
+                let enabled = error == nil ? manager.isEnabled : true
+                self?.applyExternalToggleObservation(preferenceEnabled: enabled, now: Date())
+            }
+        }
+    }
+
+    private func applyExternalToggleObservation(preferenceEnabled: Bool, now: Date) {
+        let action = ExternalFilterToggleGate.decide(
+            .init(
+                appIntendsEnforcement: appIntendsEnforcement,
+                mutationInFlight: preferenceQueue.isBusy,
+                preferenceEnabled: preferenceEnabled,
+                firstObservedOffAt: externalToggleObservedOffAt
+            ),
+            at: now
+        )
+        switch action {
+        case .none:
+            break
+        case .clear:
+            externalToggleObservedOffAt = nil
+            externalToggleRecheckTask?.cancel()
+            externalToggleRecheckTask = nil
+        case let .recordAndSchedule(reenableAt):
+            externalToggleObservedOffAt = now
+            TamperJournal.shared.record(
+                .filterDisabledOutsideApp,
+                detail: "re-arming in \(Int(ExternalFilterToggleGate.reenableGrace / 60)) min",
+                at: now
+            )
+            reportRecoveryWarning(
+                trigger: "external-filter-toggle",
+                message: "The web filter was switched off outside Holdfast. It will turn back on automatically in 15 minutes. Use Disable Blocking With Passage to keep it off."
+            )
+            DesktopDiagnosticTrace.record(component: "enforcement", event: "external_filter_disable_observed", fields: [:])
+            externalToggleRecheckTask?.cancel()
+            externalToggleRecheckTask = Task { @MainActor [weak self] in
+                let delay = max(0, reenableAt.timeIntervalSinceNow)
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                self?.checkForExternalFilterToggle()
+            }
+        case .reenable:
+            externalToggleObservedOffAt = nil
+            externalToggleRecheckTask = nil
+            recoveryWarnings["external-filter-toggle"] = nil
+            recoveryWarning = recoveryWarnings.isEmpty ? nil
+                : recoveryWarnings.keys.sorted().compactMap { recoveryWarnings[$0] }.joined(separator: "\n")
+            TamperJournal.shared.record(.filterReenabledAutomatically, at: now)
+            DesktopDiagnosticTrace.record(component: "enforcement", event: "external_filter_disable_rearmed", fields: [:])
+            reassert()
+        }
+    }
+}
+

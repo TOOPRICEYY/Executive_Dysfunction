@@ -201,6 +201,7 @@ targets:
       - path: Sources/MonitorExtension
       - path: Sources/Shared
       - path: Sources/CloudShared/TemporaryAllowanceBackoff.swift
+      - path: Sources/CloudShared/KeyValueLedger.swift
       - path: Sources/CloudShared/CloudLockdownExitPolicy.swift
     settings:
       base:
@@ -295,6 +296,12 @@ targets:
           - AllowanceSchedulePainterTests.swift
           - DesktopDiagnosticTraceTests.swift
           - MacTemporaryPauseStoreTests.swift
+          - DesktopPauseBoundTests.swift
+          - ClockTamperGuardTests.swift
+          - ExternalFilterToggleGateTests.swift
+          - RemoteWeakeningHoldTests.swift
+          - HoldfastPresetsTests.swift
+          - GenerationalMutationQueueTests.swift
     dependencies:
       - target: Holdfast
     settings:
@@ -372,6 +379,13 @@ targets:
       - path: Tests/HoldfastDiagnosticDocumentSectionsTests.swift
       - path: Tests/HoldfastEnforcementIdentitiesTests.swift
       - path: Tests/MacTemporaryPauseStoreTests.swift
+      - path: Tests/DesktopPauseBoundTests.swift
+      - path: Tests/ClockTamperGuardTests.swift
+      - path: Tests/ExternalFilterToggleGateTests.swift
+      - path: Tests/TamperJournalTests.swift
+      - path: Tests/RemoteWeakeningHoldTests.swift
+      - path: Tests/HoldfastPresetsTests.swift
+      - path: Tests/GenerationalMutationQueueTests.swift
       - path: Sources/MacApp/MacTemporaryPauseStore.swift
       - path: Sources/Shared/Lockdown.swift
       - path: Sources/CloudShared/HoldfastEnforcementIdentities.swift

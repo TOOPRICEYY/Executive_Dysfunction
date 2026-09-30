@@ -77,6 +77,10 @@ final class MacWebFilterProvider: NEFilterDataProvider, @unchecked Sendable {
     private static let stopCompletionDeadline: TimeInterval = 2
 
     override func startFilter(completionHandler: @escaping (Error?) -> Void) {
+        // Before any policy evaluation: from here on a wall-clock change makes
+        // rule windows and lockdowns stricter, not looser.
+        TamperJournal.shared.install(storage: UserDefaults.standard, origin: "mac-filter")
+        ClockTamperGuard.shared.install()
         let now = Date()
         let operationToken = beginProviderSettingsLifecycle()
         let policy = refreshTemporaryPauses(
@@ -563,6 +567,7 @@ final class MacWebFilterProvider: NEFilterDataProvider, @unchecked Sendable {
             ? temporaryPauseExpirations.filter { $0.value > date } : [:]
         status.browserBypassEvents = browserBypassEvents
         settingsLock.unlock()
+        status.tamperEvents = Array(TamperJournal.shared.events().suffix(100))
         status.temporaryAllowanceExpirations = (status.temporaryAllowanceExpirations ?? [:]).merging(browserAllowances, uniquingKeysWith: max)
         status.macFilterSettings = MacFilterSettingsStatus(
             isReady: isReady,

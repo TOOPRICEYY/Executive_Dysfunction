@@ -93,6 +93,24 @@ struct BypassIntentPicker: View {
     }
 }
 
+/// Asks what the time is for before the passage becomes available.
+struct BypassReflectionField: View {
+    let prompt: String
+    @Binding var answer: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(prompt).font(.subheadline.weight(.semibold))
+            TextField("At least \(ReflectionPrompt.minimumWords) words", text: $answer, axis: .vertical)
+                .lineLimit(2...4)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("bypass-reflection")
+            Text("Saved with this bypass in your history. It does not change the passage or the time.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
 struct BypassActivityPanel: View {
     let groups: [BypassReport.Group]
     let defaults: UserDefaults
@@ -264,6 +282,9 @@ struct BypassHistoryDetailView: View {
                                 Text(groups.first { $0.id == event.groupID }?.name ?? event.groupName).fontWeight(.semibold)
                                 Text("\(event.grantedAt.formatted(date: .abbreviated, time: .shortened)) · \(event.grantedMinutes) min · \(event.source.title)")
                                 Text(event.intent?.title ?? "Unspecified").foregroundStyle(.secondary)
+                                if let reflection = event.reflection {
+                                    Text("“\(reflection)”").italic().foregroundStyle(.secondary)
+                                }
                                 Text("Authorized until \(event.expiresAt.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary)
                             }.font(.callout)
                         }

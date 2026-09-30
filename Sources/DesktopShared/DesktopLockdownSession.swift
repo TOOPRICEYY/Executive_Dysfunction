@@ -80,7 +80,12 @@ struct DesktopLockdownSession: Codable, Equatable, Identifiable, Sendable {
 extension DesktopEnforcementPolicy {
     /// Sessions currently holding rules on.
     func activeSessions(at date: Date = Date()) -> [DesktopLockdownSession] {
-        (lockdownSessions ?? []).filter { $0.isActive(at: date) }
+        // A session is also held while it is active at the trusted instant, so
+        // moving the clock past `endsAt` does not end it early.
+        let trusted = ClockTamperGuard.shared.alternateDate(for: date)
+        return (lockdownSessions ?? []).filter {
+            $0.isActive(at: date) || (trusted.map($0.isActive(at:)) ?? false)
+        }
     }
 
     /// Rules a session is holding on, regardless of their schedule or their

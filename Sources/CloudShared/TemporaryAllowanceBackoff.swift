@@ -24,11 +24,11 @@ enum TemporaryAllowanceBackoff {
         return min(maximumWords, max(sessionWordCount, min(300, max(20, base)) * (count + 1)))
     }
 
-    static func history(for id: UUID, defaults: UserDefaults) -> History? {
+    static func history(for id: UUID, defaults: any KeyValueLedger) -> History? {
         load(defaults: defaults)[id]
     }
 
-    static func recordGrant(for id: UUID, resetDays: Int, at now: Date, defaults: UserDefaults) {
+    static func recordGrant(for id: UUID, resetDays: Int, at now: Date, defaults: any KeyValueLedger) {
         var histories = load(defaults: defaults)
         let existing = histories[id]
         let count = existing?.count(at: now, resetDays: resetDays) ?? 0
@@ -36,7 +36,7 @@ enum TemporaryAllowanceBackoff {
         defaults.set(try? JSONEncoder().encode(histories), forKey: defaultsKey)
     }
 
-    private static func load(defaults: UserDefaults) -> [UUID: History] {
+    private static func load(defaults: any KeyValueLedger) -> [UUID: History] {
         guard let data = defaults.data(forKey: defaultsKey),
               let values = try? JSONDecoder().decode([UUID: History].self, from: data) else { return [:] }
         return values

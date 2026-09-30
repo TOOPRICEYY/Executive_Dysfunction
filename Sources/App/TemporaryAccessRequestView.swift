@@ -9,6 +9,8 @@ struct TemporaryAccessRequestView: View {
     @State private var selectedDuration: TemporaryAccessDuration
     @State private var showPassage = false
     @State private var intent: BypassEvent.Intent?
+    @State private var reflection = ""
+    @State private var reflectionPrompt = ReflectionPrompt.prompt(for: UUID())
 
     init(request: PendingTemporaryAccessRequest, onFinished: @escaping () -> Void) {
         self.request = request
@@ -29,7 +31,10 @@ struct TemporaryAccessRequestView: View {
                 } else {
                     ruleSection
                     durationSection
-                    Section("Intention") { BypassIntentPicker(selection: $intent) }
+                    Section("Intention") {
+                        BypassIntentPicker(selection: $intent)
+                        BypassReflectionField(prompt: reflectionPrompt, answer: $reflection)
+                    }
                     confirmationSection
                 }
             }
@@ -64,7 +69,8 @@ struct TemporaryAccessRequestView: View {
                             for: selectedRuleID,
                             duration: selectedDuration,
                             verifiedWordCount: count,
-                            intent: intent
+                            intent: intent,
+                            reflection: ReflectionPrompt.normalized(reflection)
                         ) {
                             onFinished()
                         }
@@ -130,7 +136,7 @@ struct TemporaryAccessRequestView: View {
             Button("Type Confirmation Passage…") {
                 showPassage = true
             }
-            .disabled(intent == nil)
+            .disabled(intent == nil || !ReflectionPrompt.isSufficient(reflection))
         }
     }
 
@@ -168,6 +174,8 @@ struct RuleTemporaryAccessRequestView: View {
     @State private var selectedDuration: TemporaryAccessDuration = .tenMinutes
     @State private var showPassage = false
     @State private var intent: BypassEvent.Intent?
+    @State private var reflection = ""
+    @State private var reflectionPrompt = ReflectionPrompt.prompt(for: UUID())
 
     var body: some View {
         NavigationStack {
@@ -184,7 +192,10 @@ struct RuleTemporaryAccessRequestView: View {
                         }
                         .pickerStyle(.segmented)
                     }
-                    Section("Intention") { BypassIntentPicker(selection: $intent) }
+                    Section("Intention") {
+                        BypassIntentPicker(selection: $intent)
+                        BypassReflectionField(prompt: reflectionPrompt, answer: $reflection)
+                    }
                     Section("Confirmation") {
                         Text("Type the full confirmation passage before this filter can be disabled.")
                             .font(.caption)
@@ -192,7 +203,7 @@ struct RuleTemporaryAccessRequestView: View {
                         Button("Type Confirmation Passage…") {
                             showPassage = true
                         }
-                        .disabled(intent == nil)
+                        .disabled(intent == nil || !ReflectionPrompt.isSufficient(reflection))
                     }
                 } else {
                     ContentUnavailableView(
@@ -216,7 +227,8 @@ struct RuleTemporaryAccessRequestView: View {
                     explanation: passageExplanation,
                     wordCount: model.timeAllowancePassageWordCount(for: ruleID),
                     onVerified: { count in
-                        if model.grantTimeAllowance(for: ruleID, duration: selectedDuration, verifiedWordCount: count, intent: intent) {
+                        if model.grantTimeAllowance(for: ruleID, duration: selectedDuration, verifiedWordCount: count,
+                            intent: intent, reflection: ReflectionPrompt.normalized(reflection)) {
                             dismiss()
                         }
                     }, onComplete: {}

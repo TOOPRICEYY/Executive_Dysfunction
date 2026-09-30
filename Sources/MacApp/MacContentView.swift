@@ -104,6 +104,7 @@ struct MacContentView: View {
                 lockdownExpirations: model.lockdownExpirations,
                 onEdit: editBlockingGroup,
                 onAdd: { editingBlockingGroup = CloudBlockingGroup() },
+                onAddPreset: { model.installPreset($0) },
                 onOpenRetreats: {
                     editingRetreatID = nil
                     selectedSection = .retreats
@@ -571,6 +572,15 @@ private struct MacEnforcementBanner: View {
                         .font(.caption)
                         .foregroundStyle(Color.orange)
                         .textSelection(.enabled)
+                }
+                ForEach(model.heldWeakenings) { held in
+                    Label(
+                        "\(held.name): a looser version arrived without this Mac's unlock. The current rules stay in force until \(held.appliesAt.formatted(date: .abbreviated, time: .shortened)), or unlock the group here to apply it now.",
+                        systemImage: "hourglass"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+                    .textSelection(.enabled)
                 }
                 if let deliveryError = controller.deliveryError {
                     Label("Policy delivery: \(deliveryError)", systemImage: "exclamationmark.octagon.fill")

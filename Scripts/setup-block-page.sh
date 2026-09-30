@@ -107,35 +107,58 @@ chmod 755 "$SUPPORT"
 chmod 700 "$DIR"
 
 CREATED_CA=0
+OLD_CA_FP=""
+if [ -f "$DIR/ca.pem" ]; then
+  OLD_CA_FP=$(openssl x509 -in "$DIR/ca.pem" -noout -fingerprint -sha1 2>/dev/null | cut -d= -f2 | tr -d ':' || true)
+fi
 rollback_new_ca() {
   CODE=$?
   if [ "$CODE" -ne 0 ] && [ "$CREATED_CA" -eq 1 ]; then
     echo "Installation failed; removing the newly trusted block-page CA." >&2
     if [ -f "$DIR/ca.pem" ]; then
       FP=$(openssl x509 -in "$DIR/ca.pem" -noout -fingerprint -sha1 2>/dev/null | cut -d= -f2 | tr -d ':')
-      [ -z "$FP" ] || security delete-certificate -Z "$FP" /Library/Keychains/System.keychain >/dev/null 2>&1 || true
+      [ -z "$FP" ] || [ "$FP" = "$OLD_CA_FP" ] || security delete-certificate -Z "$FP" /Library/Keychains/System.keychain >/dev/null 2>&1 || true
     fi
-    rm -rf "$DIR"
+    rm -f "$DIR/ca.key" "$DIR/ca.cnf"
   fi
   exit "$CODE"
 }
 trap rollback_new_ca ERR
 
 # ---------------------------------------------------------------- CA
-if [ ! -f "$DIR/ca.pem" ]; then
-  CREATED_CA=1
-  echo "Generating root CA…"
-  openssl ecparam -name prime256v1 -genkey -noout -out "$DIR/ca.key" 2>/dev/null
-  openssl req -x509 -new -key "$DIR/ca.key" -sha256 -days 3650 \
-    -subj "/CN=Holdfast Block Page CA/O=Holdfast" \
-    -out "$DIR/ca.pem" 2>/dev/null
-  chmod 600 "$DIR/ca.key"
-  echo "Trusting the CA (this is the part that lets the page answer as a blocked site)…"
-  security add-trusted-cert -d -r trustRoot \
-    -k /Library/Keychains/System.keychain "$DIR/ca.pem"
-else
-  echo "Reusing existing CA."
-fi
+# A fresh CA every run, limited by X.509 name constraints to exactly the
+# blocked domains (and their subdomains), valid for at most 825 days, and able
+# to sign only end-entity certificates (pathlen:0). Its private key is deleted
+# as soon as the leaf is signed. Previously one unconstrained CA, trusted for
+# every domain for ten years, lived on disk: anyone who could read its key
+# could impersonate any website to this Mac. Now the trusted certificate can
+# only vouch for names this Mac already refuses to connect to, and no key
+# remains that could sign anything new.
+CA_PERMITTED=$(printf '%s\n' "$DOMAINS" | sed 's/^www\.//' | sort -u | awk '{printf "permitted;DNS:%s,", $0}' | sed 's/,$//')
+cat > "$DIR/ca.cnf" <<EOF
+[req]
+distinguished_name=dn
+[dn]
+[ca_ext]
+basicConstraints=critical,CA:TRUE,pathlen:0
+keyUsage=critical,keyCertSign,cRLSign
+subjectKeyIdentifier=hash
+nameConstraints=critical,$CA_PERMITTED,excluded;IP:0.0.0.0/0.0.0.0,excluded;IP:0:0:0:0:0:0:0:0/0:0:0:0:0:0:0:0
+EOF
+
+echo "Generating a name-constrained block-page CA…"
+openssl ecparam -name prime256v1 -genkey -noout -out "$DIR/ca.key" 2>/dev/null
+chmod 600 "$DIR/ca.key"
+openssl req -x509 -new -key "$DIR/ca.key" -sha256 -days 825 \
+  -subj "/CN=Holdfast Block Page CA $(date -u +%Y%m%d%H%M%S)/O=Holdfast" \
+  -config "$DIR/ca.cnf" -extensions ca_ext \
+  -out "$DIR/ca.new.pem" 2>/dev/null
+mv -f "$DIR/ca.new.pem" "$DIR/ca.pem"
+chmod 644 "$DIR/ca.pem"
+CREATED_CA=1
+echo "Trusting the CA (this is the part that lets the page answer as a blocked site)…"
+security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain "$DIR/ca.pem"
 
 COUNT=$(printf '%s\n' "$DOMAINS" | wc -l | tr -d ' ')
 echo "Minting a leaf certificate for $COUNT name(s)…"
@@ -146,8 +169,8 @@ cat > "$DIR/leaf.cnf" <<EOF
 distinguished_name=dn
 [dn]
 [ext]
-basicConstraints=CA:FALSE
-keyUsage=digitalSignature,keyEncipherment
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature
 extendedKeyUsage=serverAuth
 subjectAltName=$SAN
 EOF
@@ -160,12 +183,23 @@ openssl x509 -req -in "$DIR/leaf.csr" -CA "$DIR/ca.pem" -CAkey "$DIR/ca.key" \
   -CAcreateserial -days 800 -sha256 \
   -extfile "$DIR/leaf.cnf" -extensions ext -out "$DIR/leaf.pem" 2>/dev/null
 
+# The CA key has done its only job. Remove it so nothing can sign again.
+rm -f "$DIR/ca.key" "$DIR/ca.srl" "$DIR/ca.cnf" "$DIR/leaf.csr"
+
 PASS=$(openssl rand -hex 16)
 printf '%s' "$PASS" > "$DIR/identity.pass"
 chmod 600 "$DIR/identity.pass"
 openssl pkcs12 -export -inkey "$DIR/leaf.key" -in "$DIR/leaf.pem" -certfile "$DIR/ca.pem" \
   -passout "pass:$PASS" -out "$DIR/identity.p12" 2>/dev/null
-chmod 600 "$DIR/identity.p12" "$DIR/leaf.key" "$DIR/ca.key"
+chmod 600 "$DIR/identity.p12" "$DIR/leaf.key"
+
+# Retire the previous CA only now that its replacement is trusted and in use.
+if [ -n "$OLD_CA_FP" ]; then
+  NEW_CA_FP=$(openssl x509 -in "$DIR/ca.pem" -noout -fingerprint -sha1 | cut -d= -f2 | tr -d ':')
+  if [ "$OLD_CA_FP" != "$NEW_CA_FP" ]; then
+    security delete-certificate -Z "$OLD_CA_FP" /Library/Keychains/System.keychain >/dev/null 2>&1 || true
+  fi
+fi
 
 # ------------------------------------------------------------- server
 # Shipped inside the app bundle, so a refresh always installs the server that

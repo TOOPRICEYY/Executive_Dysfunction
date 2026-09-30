@@ -120,6 +120,10 @@ final class MacAppModel: ObservableObject {
                 )
             }
         }
+        MacLockLedger.migrateLegacyState()
+        TamperJournal.shared.install(storage: MacLockLedger.shared, origin: "mac-app")
+        ClockTamperGuard.shared.install(defaults: MacLockLedger.shared)
+        enforcement.startExternalToggleMonitoring()
         retreatUnlockProcesses = loadRetreatUnlockProcesses()
         if let data = retreatUnlockDefaults.data(forKey: "lockdown.mac-rule-edits.v1") {
             ruleEditUnlocks = (try? JSONDecoder().decode([UUID: DesktopRuleEditUnlock].self, from: data)) ?? [:]
@@ -338,6 +342,23 @@ final class MacAppModel: ObservableObject {
         }
     }
 
+    /// Adds a ready-made Blocking Group (and any Activity Groups it needs).
+    /// Purely additive, so it never needs an unlock.
+    func installPreset(_ preset: HoldfastPresets.BlockingPreset) {
+        guard !uiPreviewMode else { return }
+        do {
+            var document = try store.load()
+            HoldfastPresets.install(preset, into: &document)
+            try store.save(document)
+            apply(document)
+            syncStatus = "\(preset.name) added"
+            publishDesktopPolicy()
+        } catch {
+            syncStatus = "Sync failed"
+            errorMessage = error.localizedDescription
+        }
+    }
+
     @discardableResult
     func saveBlockingGroup(_ value: CloudBlockingGroup) -> Bool {
         guard !uiPreviewMode else { return false }
@@ -376,7 +397,10 @@ final class MacAppModel: ObservableObject {
             try store.save(document)
             apply(document)
             syncStatus = "Blocking Group saved"
-            return publishDesktopPolicy(weakeningAuthorizationExpiresAt: authorization)
+            return publishDesktopPolicy(
+                weakeningAuthorizationExpiresAt: authorization,
+                authorizedRuleIDs: authorization == nil ? [] : [group.id]
+            )
         } catch {
             syncStatus = "Sync failed"
             errorMessage = error.localizedDescription
@@ -389,12 +413,12 @@ final class MacAppModel: ObservableObject {
         lastPublishedPolicy?.rules.first(where: { $0.id == id })?.lockdown ?? desktopRule(for: id)?.lockdown
     }
 
-    func ruleEditPhase(_ id: UUID, now: Date = Date()) -> UnlockPhase {
+    func ruleEditPhase(_ id: UUID, now: Date = ClockTamperGuard.shared.conservativeNow()) -> UnlockPhase {
         guard let policy = ruleEditPolicy(id) else { return .idle }
         return ruleEditUnlocks[id]?.phase(for: policy, at: now) ?? .idle
     }
 
-    func submitRuleEditPassage(_ id: UUID, typed: String, expectedPolicy: DesktopLockdownPolicy, now: Date = Date()) -> Bool {
+    func submitRuleEditPassage(_ id: UUID, typed: String, expectedPolicy: DesktopLockdownPolicy, now: Date = ClockTamperGuard.shared.conservativeNow()) -> Bool {
         guard !uiPreviewMode, ruleEditPolicy(id) == expectedPolicy else { return false }
         let config = DesktopRuleEditUnlock.configuration(expectedPolicy)
         guard DesktopRemovalGate.passageMatches(typed, requiredPassage: DesktopRemovalGate.passage(wordCount: config.passageWordCount, seed: id)) else { return false }
@@ -538,7 +562,9 @@ final class MacAppModel: ObservableObject {
             let published = publishDesktopPolicy(
                 weakeningAuthorizationExpiresAt: early && policy.requiresAuthorization
                     ? now.addingTimeInterval(120)
-                    : nil
+                    : nil,
+                // Ending passed this Mac's Retreat gate, so its groups may go.
+                authorizedRuleIDs: Set(retreat.versions.flatMap { $0.blockingGroups.map(\.id) })
             )
             guard published else {
                 try? store.save(original)
@@ -565,7 +591,7 @@ final class MacAppModel: ObservableObject {
         return CloudRetreatEarlyEndGate.policy(for: retreat, appDefault: retreatAppDefaultPolicy)
     }
 
-    func retreatUnlockPhase(for id: UUID, now: Date = Date()) -> UnlockPhase {
+    func retreatUnlockPhase(for id: UUID, now: Date = ClockTamperGuard.shared.conservativeNow()) -> UnlockPhase {
         guard let policy = retreatChangePolicy(for: id) else { return .idle }
         return Lockdown.phase(
             of: retreatUnlockProcesses[id],
@@ -574,7 +600,7 @@ final class MacAppModel: ObservableObject {
         )
     }
 
-    func refreshRetreatLockdowns(now: Date = Date()) {
+    func refreshRetreatLockdowns(now: Date = ClockTamperGuard.shared.conservativeNow()) {
         let knownIDs = Set(retreats.filter { $0.state == .active }.map(\.id))
         retreatUnlockProcesses = retreatUnlockProcesses.filter { knownIDs.contains($0.key) }
         var phases: [UUID: UnlockPhase] = [:]
@@ -592,7 +618,7 @@ final class MacAppModel: ObservableObject {
         saveRetreatUnlockProcesses()
     }
 
-    func startRetreatUnlock(_ id: UUID, now: Date = Date()) {
+    func startRetreatUnlock(_ id: UUID, now: Date = ClockTamperGuard.shared.conservativeNow()) {
         guard let policy = retreatChangePolicy(for: id),
               policy.requiresAuthorization,
               retreatUnlockProcesses[id] == nil
@@ -602,7 +628,7 @@ final class MacAppModel: ObservableObject {
         refreshRetreatLockdowns(now: now)
     }
 
-    func confirmRetreatUnlock(_ id: UUID, now: Date = Date()) {
+    func confirmRetreatUnlock(_ id: UUID, now: Date = ClockTamperGuard.shared.conservativeNow()) {
         guard let policy = retreatChangePolicy(for: id),
               var process = retreatUnlockProcesses[id],
               case .confirmationDue = Lockdown.phase(
@@ -642,8 +668,10 @@ final class MacAppModel: ObservableObject {
         return configuration
     }
 
-    private var retreatUnlockDefaults: UserDefaults {
-        UserDefaults(suiteName: "group.com.GabrielPrice.ExecutiveDysfunction") ?? .standard
+    /// Unlock progress lives in the protected ledger, not the app-group plist,
+    /// so it cannot be backdated by editing a preferences file.
+    private var retreatUnlockDefaults: any KeyValueLedger {
+        MacLockLedger.shared
     }
 
     private var retreatUnlockKey: String { "lockdown.retreat-unlocks.v1" }
@@ -754,6 +782,25 @@ final class MacAppModel: ObservableObject {
         blockingDisableLogger.notice(
             "blocking_disable_challenge_accepted id=\(challenge.id.uuidString, privacy: .public) revision=\(challenge.policyRevision, privacy: .public) action=disable"
         )
+        // Kept as the always-available fallback, but never silent: each use is
+        // counted in bypass history with whether the filter was misbehaving.
+        let recoveryWarningLive = enforcement.recoveryWarning != nil || enforcement.deliveryError != nil
+        BypassHistoryStore.record(
+            [BypassEvent.emergencyDisable(at: now, recoveryWarningLive: recoveryWarningLive)],
+            defaults: .standard,
+            at: now
+        )
+        DesktopDiagnosticTrace.record(
+            component: "enforcement",
+            event: "emergency_disable_recorded",
+            fields: ["recovery_warning_live": recoveryWarningLive]
+        )
+        TamperJournal.shared.record(
+            .emergencyDisable,
+            detail: recoveryWarningLive ? "filter warning was live" : "filter was healthy",
+            at: now
+        )
+        mirrorTamperJournal()
         enforcement.disableBlockingImmediately()
         return .authorized
     }
@@ -761,6 +808,8 @@ final class MacAppModel: ObservableObject {
     func beginDesktopEnforcementRemoval() {
         guard !uiPreviewMode else { return }
         enforcement.beginRemoval()
+        TamperJournal.shared.record(.removalRequested)
+        mirrorTamperJournal()
     }
 
     func cancelDesktopEnforcementRemoval() {
@@ -785,7 +834,7 @@ final class MacAppModel: ObservableObject {
 
     var temporaryAllowanceExpirations: [UUID: Date] {
         let now = Date()
-        var values = MacTemporaryPauseStore.activeExpirations(at: now, defaults: .standard)
+        var values = MacTemporaryPauseStore.activeExpirations(at: now, defaults: MacLockLedger.shared)
         if let status = FilterStatusStore.readResult().status,
            abs(status.updatedAt.timeIntervalSince(now)) < 20 {
             values.merge((status.temporaryAllowanceExpirations ?? [:]).filter { $0.value > now }, uniquingKeysWith: max)
@@ -796,7 +845,7 @@ final class MacAppModel: ObservableObject {
     /// The pause currently in force for a Blocking Group, if any.
     func temporaryPause(for ruleID: UUID, at now: Date = Date()) -> RuleTimeAllowance? {
         guard !lockdownSessions.contains(where: { $0.isActive(at: now) && $0.ruleIDs.contains(ruleID) }) else { return nil }
-        return MacTemporaryPauseStore.active(for: ruleID, at: now, defaults: .standard)
+        return MacTemporaryPauseStore.active(for: ruleID, at: now, defaults: MacLockLedger.shared)
     }
 
     func availablePauseDurations(
@@ -804,12 +853,12 @@ final class MacAppModel: ObservableObject {
         at now: Date = Date()
     ) -> [TemporaryAccessDuration] {
         guard let rule = desktopRule(for: ruleID) else { return [] }
-        return MacTemporaryPauseStore.availableDurations(for: rule, at: now, defaults: .standard)
+        return MacTemporaryPauseStore.availableDurations(for: rule, at: now, defaults: MacLockLedger.shared)
     }
 
     func pausePassageWordCount(for ruleID: UUID, at now: Date = Date()) -> Int {
         guard let rule = desktopRule(for: ruleID) else { return 0 }
-        return MacTemporaryPauseStore.passageWordCount(for: rule, at: now, defaults: .standard)
+        return MacTemporaryPauseStore.passageWordCount(for: rule, at: now, defaults: MacLockLedger.shared)
     }
 
     func allowsTemporaryPause(for ruleID: UUID) -> Bool {
@@ -833,6 +882,7 @@ final class MacAppModel: ObservableObject {
         duration: TemporaryAccessDuration,
         verifiedWordCount: Int? = nil,
         intent: BypassEvent.Intent? = nil,
+        reflection: String? = nil,
         at now: Date = Date()
     ) -> Bool {
         guard !uiPreviewMode else { return false }
@@ -849,17 +899,18 @@ final class MacAppModel: ObservableObject {
             errorMessage = "The required passage changed. Reopen temporary access and type the new passage."
             return false
         }
-        let previousPauses = MacTemporaryPauseStore.load(defaults: .standard)
-        let previousBackoff = UserDefaults.standard.data(forKey: TemporaryAllowanceBackoff.defaultsKey)
-        switch MacTemporaryPauseStore.grant(duration, for: rule, at: now, defaults: .standard) {
+        let previousPauses = MacTemporaryPauseStore.load(defaults: MacLockLedger.shared)
+        let previousBackoff = MacLockLedger.shared.data(forKey: TemporaryAllowanceBackoff.defaultsKey)
+        switch MacTemporaryPauseStore.grant(duration, for: rule, at: now, defaults: MacLockLedger.shared) {
         case let .success(allowance):
             guard publishDesktopPolicy() else {
-                MacTemporaryPauseStore.save(previousPauses, defaults: .standard)
-                UserDefaults.standard.set(previousBackoff, forKey: TemporaryAllowanceBackoff.defaultsKey)
+                MacTemporaryPauseStore.save(previousPauses, defaults: MacLockLedger.shared)
+                MacLockLedger.shared.set(previousBackoff, forKey: TemporaryAllowanceBackoff.defaultsKey)
                 return false
             }
             BypassHistoryStore.record([BypassEvent(id: UUID(), groupID: ruleID, groupName: rule.name,
-                grantedAt: now, expiresAt: allowance.expiresAt, grantedMinutes: duration.minutes, source: .app, intent: intent)],
+                grantedAt: now, expiresAt: allowance.expiresAt, grantedMinutes: duration.minutes, source: .app, intent: intent,
+                reflection: reflection)],
                 defaults: .standard, at: now)
             DesktopDiagnosticTrace.record(
                 component: "policy",
@@ -877,7 +928,7 @@ final class MacAppModel: ObservableObject {
     @discardableResult
     func cancelTemporaryPause(for ruleID: UUID) -> Bool {
         guard !uiPreviewMode else { return false }
-        guard MacTemporaryPauseStore.cancel(ruleID: ruleID, defaults: .standard) else { return false }
+        guard MacTemporaryPauseStore.cancel(ruleID: ruleID, defaults: MacLockLedger.shared) else { return false }
         DesktopDiagnosticTrace.record(component: "policy", event: "temporary_pause_cancelled")
         publishDesktopPolicy()
         objectWillChange.send()
@@ -888,7 +939,7 @@ final class MacAppModel: ObservableObject {
     /// resets and the policy stops carrying a spent pause.
     private func pruneExpiredTemporaryPauses(at now: Date = Date()) {
         guard !uiPreviewMode else { return }
-        guard MacTemporaryPauseStore.pruneExpired(at: now, defaults: .standard) > 0 else { return }
+        guard MacTemporaryPauseStore.pruneExpired(at: now, defaults: MacLockLedger.shared) > 0 else { return }
         publishDesktopPolicy()
     }
 
@@ -941,6 +992,48 @@ final class MacAppModel: ObservableObject {
         return [textURL, jsonURL]
     }
 
+    private var tamperJournalMirrored = false
+
+    /// Locked rules whose weakening arrived without this Mac's unlock and is
+    /// waiting out the rule's delay. Shown so a held change is never silent.
+    @Published private(set) var heldWeakenings: [RemoteWeakeningHold.HeldWeakening] = []
+    private static let weakeningHoldsKey = "desktop-enforcement.weakening-holds.v1"
+
+    private func loadWeakeningHolds() -> [UUID: Date] {
+        MacLockLedger.shared.data(forKey: Self.weakeningHoldsKey)
+            .flatMap { try? JSONDecoder().decode([UUID: Date].self, from: $0) } ?? [:]
+    }
+
+    private func saveWeakeningHolds(_ holds: [UUID: Date]) {
+        guard holds != loadWeakeningHolds() else { return }
+        if holds.isEmpty {
+            MacLockLedger.shared.removeObject(forKey: Self.weakeningHoldsKey)
+        } else {
+            MacLockLedger.shared.set(try? JSONEncoder().encode(holds), forKey: Self.weakeningHoldsKey)
+        }
+    }
+
+    /// Rules whose weakening is legitimate without a hold: ones this Mac has
+    /// unlocked, and groups of a Retreat that reached its planned end.
+    private func weakeningHoldExemptions(now: Date = Date()) -> Set<UUID> {
+        var exempt = Set<UUID>()
+        for id in lastPublishedPolicy?.rules.map(\.id) ?? [] {
+            if case .unlocked = ruleEditPhase(id) { exempt.insert(id) }
+        }
+        for retreat in retreats where retreat.plannedEnd <= now {
+            for version in retreat.versions {
+                exempt.formUnion(version.blockingGroups.map(\.id))
+            }
+        }
+        return exempt
+    }
+
+    /// Mirrors newly recorded app-side events (emergency disable, removal
+    /// request) without waiting for the next health poll.
+    private func mirrorTamperJournal() {
+        TamperJournalCloudMirror.publish(TamperJournal.shared.events())
+    }
+
     func refreshEnforcementHealth() {
         let now = Date()
         let published = UInt64(max(0, UserDefaults.standard.integer(forKey: desktopRevisionKey)))
@@ -952,6 +1045,14 @@ final class MacAppModel: ObservableObject {
         if let events = readResult.status?.browserBypassEvents, events != lastImportedBrowserBypasses,
            BypassHistoryStore.record(events, defaults: .standard) {
             lastImportedBrowserBypasses = events
+        }
+        // Fold the filter's own tamper observations into the journal, then keep
+        // the iCloud copy current so the iPhone (and an accountability
+        // partner) can see them.
+        let filterTamperEvents = readResult.status?.tamperEvents ?? []
+        if TamperJournal.shared.merge(filterTamperEvents) || !tamperJournalMirrored {
+            tamperJournalMirrored = true
+            TamperJournalCloudMirror.publish(TamperJournal.shared.events())
         }
         logStatusReadTransition(readResult)
         let filterStatus = readResult.status
@@ -1191,12 +1292,12 @@ final class MacAppModel: ObservableObject {
         guard let index = lockdownSessions.firstIndex(where: { $0.id == id }) else { return false }
         let session = lockdownSessions[index]
         guard DesktopLockdownSessionGate.passageMatches(passage, session: session) else { return false }
-        let exitKey = "lockdown.mac-session-exits.v1"
-        let defaults = UserDefaults.standard
+        let exitKey = MacLockLedger.sessionExitsKey
+        let defaults: any KeyValueLedger = MacLockLedger.shared
         var exits = defaults.data(forKey: exitKey).flatMap {
             try? JSONDecoder().decode([UUID: DesktopRuleEditUnlock].self, from: $0)
         } ?? [:]
-        let now = Date()
+        let now = ClockTamperGuard.shared.conservativeNow()
         let phase = exits[id]?.phase(for: session.lockdown, at: now) ?? .idle
         switch phase {
         case .idle, .cancelled:
@@ -1308,7 +1409,11 @@ final class MacAppModel: ObservableObject {
     /// 226 to 239 with no rule edits. Unchanged content must not produce a new
     /// revision.
     @discardableResult
-    private func publishDesktopPolicy(weakeningAuthorizationExpiresAt: Date? = nil, cancelledLockdownEnds: [UUID: Date] = [:]) -> Bool {
+    private func publishDesktopPolicy(
+        weakeningAuthorizationExpiresAt: Date? = nil,
+        cancelledLockdownEnds: [UUID: Date] = [:],
+        authorizedRuleIDs: Set<UUID> = []
+    ) -> Bool {
         let defaults = UserDefaults.standard
         let previous = UInt64(max(0, defaults.integer(forKey: desktopRevisionKey)))
         // `rules` already contains the additive Baseline + active Retreat
@@ -1317,10 +1422,51 @@ final class MacAppModel: ObservableObject {
         // A pause is part of the published content, so granting or expiring one
         // produces a new revision and the filter picks it up like any other
         // policy change.
-        let blockProfile = DesktopBlockProfile(
+        var blockProfile = DesktopBlockProfile(
             cloudRules: rules,
-            temporaryPauses: MacTemporaryPauseStore.activeExpirations(at: Date(), defaults: defaults)
+            temporaryPauses: MacTemporaryPauseStore.activeExpirations(at: Date(), defaults: MacLockLedger.shared)
         )
+        // Give Retreat groups their planned interval, and include Retreats that
+        // start soon, so the filter starts and ends them on time by itself.
+        let schedule = CloudPreferencesDocument(
+            activityGroups: activityGroups,
+            baseline: baseline,
+            retreats: retreats
+        ).scheduledRetreatRules()
+        if !schedule.isEmpty {
+            let baselineIDs = Set(baseline.blockingGroups.map(\.id))
+            var byID = Dictionary(
+                blockProfile.rules.enumerated().map { ($0.element.id, $0.offset) },
+                uniquingKeysWith: { first, _ in first }
+            )
+            for entry in schedule where !baselineIDs.contains(entry.rule.id) {
+                if let index = byID[entry.rule.id] {
+                    blockProfile.rules[index].activeFrom = entry.start
+                    blockProfile.rules[index].activeUntil = entry.end
+                } else if var upcoming = DesktopBlockProfile(cloudRules: [entry.rule]).rules.first {
+                    upcoming.activeFrom = entry.start
+                    upcoming.activeUntil = entry.end
+                    byID[upcoming.id] = blockProfile.rules.count
+                    blockProfile.rules.append(upcoming)
+                }
+            }
+        }
+        // A weakening that did not pass this Mac's lock (synced from another
+        // device, or an Activity Group edit) waits out the rule's own delay.
+        // Only the groups this Mac just authorized are exempt; a local unlock
+        // of one group must not release a held change to another.
+        if let enforced = lastPublishedPolicy {
+            let hold = RemoteWeakeningHold.apply(
+                previous: enforced.rules,
+                proposed: blockProfile.rules,
+                exempt: weakeningHoldExemptions().union(authorizedRuleIDs),
+                holds: loadWeakeningHolds(),
+                now: ClockTamperGuard.shared.conservativeNow()
+            )
+            blockProfile.rules = hold.rules
+            saveWeakeningHolds(hold.holds)
+            if heldWeakenings != hold.held { heldWeakenings = hold.held }
+        }
         // Keep the narrow authorization through the original deadline, so a
         // sleeping provider cannot miss a short-lived cancellation publish.
         var cancellation = lastPublishedPolicy?.lockdownCancellationAuthorization

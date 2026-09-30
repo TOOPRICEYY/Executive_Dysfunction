@@ -29,7 +29,16 @@ struct BypassEvent: Codable, Equatable, Identifiable, Sendable {
     }
     enum Source: String, Codable, CaseIterable, Sendable {
         case app, browser
-        var title: String { self == .app ? "App" : "Block page" }
+        /// The Mac's passage-gated "Disable Blocking" fallback. It turns off
+        /// every web rule, so it is recorded against a single synthetic group.
+        case emergencyDisable
+        var title: String {
+            switch self {
+            case .app: "App"
+            case .browser: "Block page"
+            case .emergencyDisable: "Emergency disable"
+            }
+        }
     }
     var id: UUID
     var groupID: UUID
@@ -39,6 +48,27 @@ struct BypassEvent: Codable, Equatable, Identifiable, Sendable {
     var grantedMinutes: Int
     var source: Source
     var intent: Intent? = nil
+    /// The user's answer to the reflection question, when one was asked.
+    var reflection: String? = nil
+
+    /// Synthetic group for events that affect every web rule at once.
+    static let allWebBlocksGroupID = UUID(uuidString: "00000000-0000-0000-0000-00000000E0E0")!
+
+    /// The emergency disable has no planned end, so the record marks the moment
+    /// with a nominal one-minute span; it is a count, not a duration.
+    static func emergencyDisable(at now: Date, recoveryWarningLive: Bool, id: UUID = UUID()) -> BypassEvent {
+        BypassEvent(
+            id: id,
+            groupID: allWebBlocksGroupID,
+            groupName: recoveryWarningLive
+                ? "All web blocks (disabled during a filter warning)"
+                : "All web blocks (disabled while healthy)",
+            grantedAt: now,
+            expiresAt: now.addingTimeInterval(60),
+            grantedMinutes: 1,
+            source: .emergencyDisable
+        )
+    }
 
     var isValid: Bool {
         grantedAt.timeIntervalSince1970.isFinite && expiresAt.timeIntervalSince1970.isFinite

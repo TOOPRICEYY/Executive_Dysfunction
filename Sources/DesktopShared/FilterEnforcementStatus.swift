@@ -65,6 +65,10 @@ struct FilterEnforcementStatus: Codable, Equatable {
     var previousDiagnostics: WebFilterDiagnosticsSnapshot?
     /// macOS-only applied-settings readiness and retry-guard coverage.
     var macFilterSettings: MacFilterSettingsStatus?
+    /// Recent tamper events the filter itself noticed (clock changes). The app
+    /// folds these into its journal and mirrors them to iCloud. Optional for
+    /// compatibility with older builds.
+    var tamperEvents: [TamperEvent]? = nil
 
     init(
         policy: DesktopEnforcementPolicy,
@@ -123,6 +127,7 @@ struct FilterEnforcementStatus: Codable, Equatable {
         diagnostics = nil
         previousDiagnostics = nil
         macFilterSettings = base.macFilterSettings
+        tamperEvents = base.tamperEvents
     }
 }
 
@@ -141,6 +146,7 @@ fileprivate struct FilterEnforcementStatusBase: Decodable {
     @BypassEventBuffer var browserBypassEvents: [BypassEvent]?
     var lockdownEndsAt: Date?
     var macFilterSettings: MacFilterSettingsStatus?
+    var tamperEvents: [TamperEvent]?
 }
 
 private struct FilterDiagnosticsSchemaProbe: Decodable {
