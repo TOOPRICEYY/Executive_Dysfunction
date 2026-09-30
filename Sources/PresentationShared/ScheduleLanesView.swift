@@ -155,8 +155,10 @@ struct ScheduleLanesView: View {
             case .lockdown: return "LOCKED DOWN"
             case .blocking: return "BLOCKING"
             case .paused: return "PAUSED"
-            case let .upcoming(at): return calendar.isDate(at, inSameDayAs: now) ? "LATER TODAY" : "NOT TODAY"
-            case .idle: return "FREE TODAY"
+            case let .upcoming(at):
+                if calendar.isDate(at, inSameDayAs: now) { return "LATER TODAY" }
+                return lane.intervals.isEmpty ? "NOT TODAY" : "DONE FOR TODAY"
+            case .idle: return lane.intervals.isEmpty ? "FREE TODAY" : "DONE FOR TODAY"
             case .off: return "OFF"
             }
         }
