@@ -118,7 +118,7 @@ struct TodayLanesView: View {
         case .lockdown: "LOCKED DOWN"
         case .blocking: "BLOCKING"
         case .paused: "PAUSED"
-        case .upcoming: "LATER"
+        case let .upcoming(at): Calendar.current.isDate(at, inSameDayAs: now) ? "LATER TODAY" : "NOT TODAY"
         case .idle: "FREE TODAY"
         case .off: "OFF"
         }
