@@ -1,7 +1,247 @@
 import XCTest
-@testable import ExecutiveDysfunction
+@testable import Holdfast
 
 final class LockdownTests: XCTestCase {
+    func testAllowanceEndAcceptsWholeSecondBoundaryButRejectsOldCallbackAfterExtension() {
+        let boundary = Date(timeIntervalSince1970: 1_700_000_600)
+        var allowance = RuleTimeAllowance(
+            ruleID: UUID(), expiresAt: boundary.addingTimeInterval(0.875),
+            totalMinutesGranted: 10, grantCount: 1, restoreUsageShield: false
+        )
+        XCTAssertFalse(allowance.isDueForMonitorEnd(at: boundary.addingTimeInterval(-1)))
+        XCTAssertTrue(allowance.isDueForMonitorEnd(at: boundary))
+        allowance.expiresAt = allowance.expiresAt.addingTimeInterval(600)
+        XCTAssertFalse(allowance.isDueForMonitorEnd(at: boundary))
+    }
+    func testTemporaryAccessOffersOnlyTenThirtyAndSixtyMinutes() {
+        XCTAssertEqual(TemporaryAccessDuration.allCases.map(\.rawValue), [10, 30, 60])
+        XCTAssertEqual(TemporaryAccessDuration.thirtyMinutes.seconds, 30 * 60)
+    }
+
+    func testTemporaryAccessCapUsesCumulativeMinutes() {
+        XCTAssertTrue(TimeAllowancePolicy.canGrant(
+            .thirtyMinutes,
+            afterMinutes: 120,
+            maximumHours: 3
+        ))
+        XCTAssertTrue(TimeAllowancePolicy.canGrant(
+            .sixtyMinutes,
+            afterMinutes: 120,
+            maximumHours: 3
+        ))
+        XCTAssertFalse(TimeAllowancePolicy.canGrant(
+            .tenMinutes,
+            afterMinutes: 180,
+            maximumHours: 3
+        ))
+        XCTAssertFalse(TimeAllowancePolicy.canGrant(
+            .sixtyMinutes,
+            afterMinutes: 150,
+            maximumHours: 3
+        ))
+    }
+
+    func testLegacyHourlyAllowanceDecodesWithMinuteAndGrantAccounting() throws {
+        struct LegacyAllowance: Encodable {
+            var ruleID: UUID
+            var expiresAt: Date
+            var incrementsGranted: Int
+            var restoreUsageShield: Bool
+        }
+
+        let id = UUID()
+        let expiry = Date(timeIntervalSinceReferenceDate: 12_345)
+        let data = try JSONEncoder().encode(LegacyAllowance(
+            ruleID: id,
+            expiresAt: expiry,
+            incrementsGranted: 2,
+            restoreUsageShield: true
+        ))
+        let decoded = try JSONDecoder().decode(RuleTimeAllowance.self, from: data)
+
+        XCTAssertEqual(decoded.ruleID, id)
+        XCTAssertEqual(decoded.expiresAt, expiry)
+        XCTAssertEqual(decoded.incrementsGranted, 2)
+        XCTAssertEqual(decoded.grantCount, 2)
+        XCTAssertEqual(decoded.totalMinutesGranted, 120)
+        XCTAssertTrue(decoded.restoreUsageShield)
+    }
+
+    func testMinuteAllowanceRoundTripsNewAccounting() throws {
+        let original = RuleTimeAllowance(
+            ruleID: UUID(),
+            expiresAt: Date(timeIntervalSinceReferenceDate: 54_321),
+            totalMinutesGranted: 40,
+            grantCount: 2,
+            restoreUsageShield: false
+        )
+
+        let decoded = try JSONDecoder().decode(
+            RuleTimeAllowance.self,
+            from: JSONEncoder().encode(original)
+        )
+
+        XCTAssertEqual(decoded, original)
+        XCTAssertEqual(decoded.incrementsGranted, decoded.grantCount)
+    }
+
+    func testShieldEligibilityUsesRuleModeEnabledStateAndOptIn() {
+        let activeWindow = TimeWindow(
+            weekdays: [2],
+            startMinutes: 0,
+            endMinutes: 1_439
+        )
+        var selectedBlockList = BlockingRule()
+        selectedBlockList.lockdownPolicy.allowsTimeExtensions = true
+        selectedBlockList.windows = [activeWindow]
+
+        var selectedFortress = BlockingRule()
+        selectedFortress.enforcementMode = .fortressAllowList
+        selectedFortress.lockdownPolicy.allowsTimeExtensions = true
+        selectedFortress.windows = [activeWindow]
+
+        var unselectedFortress = BlockingRule()
+        unselectedFortress.enforcementMode = .fortressAllowList
+        unselectedFortress.lockdownPolicy.allowsTimeExtensions = true
+        unselectedFortress.windows = [activeWindow]
+
+        var disabled = BlockingRule()
+        disabled.isEnabled = false
+        disabled.lockdownPolicy.allowsTimeExtensions = true
+        disabled.windows = [activeWindow]
+
+        var notOptedIn = BlockingRule()
+        notOptedIn.windows = [activeWindow]
+        let selected = Set([selectedBlockList.id, selectedFortress.id, disabled.id, notOptedIn.id])
+        let result = ShieldTemporaryAccessCoordinator.eligibleRuleIDs(
+            rules: [selectedBlockList, selectedFortress, unselectedFortress, disabled, notOptedIn],
+            at: start,
+            targetIsSelected: { selected.contains($0.id) }
+        )
+
+        XCTAssertEqual(Set(result), Set([selectedBlockList.id, unselectedFortress.id]))
+    }
+
+    func testShieldEligibilityExcludesInactiveOverlappingAndAlreadyPausedRules() {
+        let activeWindow = TimeWindow(weekdays: [2], startMinutes: 0, endMinutes: 1_439)
+        var active = BlockingRule()
+        active.lockdownPolicy.allowsTimeExtensions = true
+        active.windows = [activeWindow]
+
+        var inactive = BlockingRule()
+        inactive.lockdownPolicy.allowsTimeExtensions = true
+        inactive.windows = []
+
+        let selected = Set([active.id, inactive.id])
+        XCTAssertEqual(
+            ShieldTemporaryAccessCoordinator.eligibleRuleIDs(
+                rules: [inactive, active],
+                at: start,
+                targetIsSelected: { selected.contains($0.id) }
+            ),
+            [active.id]
+        )
+        XCTAssertTrue(ShieldTemporaryAccessCoordinator.eligibleRuleIDs(
+            rules: [inactive, active],
+            at: start,
+            activeAllowanceRuleIDs: [active.id],
+            targetIsSelected: { selected.contains($0.id) }
+        ).isEmpty)
+    }
+
+    func testShieldEligibilityUsesActuallyEnforcingStoreProvenance() {
+        var scheduled = BlockingRule()
+        scheduled.lockdownPolicy.allowsTimeExtensions = true
+        scheduled.windows = [TimeWindow(weekdays: [2], startMinutes: 0, endMinutes: 1_439)]
+
+        var configuredUsageLimit = BlockingRule()
+        configuredUsageLimit.lockdownPolicy.allowsTimeExtensions = true
+        configuredUsageLimit.windows = []
+        configuredUsageLimit.usageLimitEnabled = true
+
+        let selected = Set([scheduled.id, configuredUsageLimit.id])
+        let eligible = ShieldTemporaryAccessCoordinator.eligibleRuleIDs(
+            rules: [scheduled, configuredUsageLimit],
+            at: start,
+            currentlyEnforcedRuleIDs: [scheduled.id],
+            targetIsSelected: { selected.contains($0.id) }
+        )
+
+        XCTAssertEqual(eligible, [scheduled.id])
+    }
+
+    func testPendingShieldRequestExpiresAndDeduplicatesRules() throws {
+        let suiteName = "LockdownTests.pending.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let now = Date(timeIntervalSinceReferenceDate: 100_000)
+        let first = UUID()
+        let second = UUID()
+
+        let request = try XCTUnwrap(ShieldTemporaryAccessCoordinator.savePendingRequest(
+            eligibleRuleIDs: [second, first, second],
+            duration: .thirtyMinutes,
+            now: now,
+            defaults: defaults
+        ))
+
+        XCTAssertEqual(Set(request.eligibleRuleIDs), Set([first, second]))
+        XCTAssertEqual(request.eligibleRuleIDs.count, 2)
+        XCTAssertEqual(request.expiresAt, now.addingTimeInterval(10 * 60))
+        XCTAssertEqual(
+            ShieldTemporaryAccessCoordinator.loadPendingRequest(
+                now: now.addingTimeInterval(599),
+                defaults: defaults
+            ),
+            request
+        )
+        XCTAssertNil(ShieldTemporaryAccessCoordinator.loadPendingRequest(
+            now: now.addingTimeInterval(600),
+            defaults: defaults
+        ))
+    }
+
+    func testClearingOldPendingRequestDoesNotDeleteNewerRequest() throws {
+        let suiteName = "LockdownTests.pending-replacement.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let now = Date(timeIntervalSinceReferenceDate: 200_000)
+        let ruleID = UUID()
+        let first = try XCTUnwrap(ShieldTemporaryAccessCoordinator.savePendingRequest(
+            eligibleRuleIDs: [ruleID],
+            duration: .tenMinutes,
+            now: now,
+            defaults: defaults
+        ))
+        let second = try XCTUnwrap(ShieldTemporaryAccessCoordinator.savePendingRequest(
+            eligibleRuleIDs: [ruleID],
+            duration: .sixtyMinutes,
+            now: now.addingTimeInterval(1),
+            defaults: defaults
+        ))
+
+        ShieldTemporaryAccessCoordinator.clearPendingRequest(id: first.id, defaults: defaults)
+
+        XCTAssertEqual(
+            ShieldTemporaryAccessCoordinator.loadPendingRequest(
+                now: now.addingTimeInterval(2),
+                defaults: defaults
+            ),
+            second
+        )
+    }
+
+    func testShieldCoordinatorLoadsRulesFromInjectedAppGroupDefaults() throws {
+        let suiteName = "LockdownTests.rules.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        var rule = BlockingRule()
+        rule.name = "Loaded in shield"
+        defaults.set(try JSONEncoder().encode([rule]), forKey: "blocking.rules.v1")
+
+        XCTAssertEqual(ShieldTemporaryAccessCoordinator.loadRules(defaults: defaults), [rule])
+    }
+
     func testAdditionalTimePassageDoublesForEachConsecutiveHour() {
         XCTAssertEqual(TimeAllowancePolicy.passageWordCount(base: 40, incrementsAlreadyGranted: 0), 40)
         XCTAssertEqual(TimeAllowancePolicy.passageWordCount(base: 40, incrementsAlreadyGranted: 1), 80)

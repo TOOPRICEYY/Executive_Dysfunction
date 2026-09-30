@@ -5,13 +5,16 @@ import Security
 ///
 /// macOS gives a content filter an audit token rather than the bundle
 /// identifier iOS provides. Translating it costs a Security round trip, which
-/// is far too expensive to repeat per flow, so results are memoised per
-/// process instance. The pid *version* is part of the key so a recycled pid
-/// can never inherit a previous process's identity.
+/// is far too expensive to repeat per flow, so the provider calls this only
+/// while an application rule is active or an otherwise-denied authentication
+/// flow needs the captive-login exception. Results are memoised per process
+/// instance. The pid *version* is part of the key so a recycled pid can never
+/// inherit a previous process's identity.
 final class FlowSourceResolver: @unchecked Sendable {
     struct Identity: Equatable {
         var signingIdentifier: String?
         var executablePath: String
+        var isVerifiedCaptivePortalComponent = false
     }
 
     private struct Key: Hashable {
@@ -65,9 +68,9 @@ final class FlowSourceResolver: @unchecked Sendable {
             }
         }
 
-        // A crash here takes the whole machine offline, because macOS drops all
-        // traffic when a content filter stops answering. Nothing in this path
-        // may force-unwrap or reinterpret a type it has not been handed.
+        // A crash or long synchronous stall here withholds Network Extension
+        // verdicts. Nothing in this path may force-unwrap or reinterpret a type
+        // it has not been handed.
         guard let staticCode else { return Identity(signingIdentifier: nil, executablePath: path) }
 
         var information: CFDictionary?
@@ -81,6 +84,20 @@ final class FlowSourceResolver: @unchecked Sendable {
         }
 
         let identifier = dictionary[kSecCodeInfoIdentifier as String] as? String
-        return Identity(signingIdentifier: identifier, executablePath: path)
+        var isVerifiedCaptivePortalComponent = false
+        if MacCaptivePortalPolicy.isSystemComponent(signingIdentifier: identifier, executablePath: path) {
+            // Validate the live audit-token owner, not a self-asserted signing
+            // identifier. Only the two exact protected OS executables qualify.
+            var requirement: SecRequirement?
+            if SecRequirementCreateWithString("anchor apple" as CFString, [], &requirement) == errSecSuccess,
+               let requirement {
+                isVerifiedCaptivePortalComponent = SecCodeCheckValidity(code, [], requirement) == errSecSuccess
+            }
+        }
+        return Identity(
+            signingIdentifier: identifier,
+            executablePath: path,
+            isVerifiedCaptivePortalComponent: isVerifiedCaptivePortalComponent
+        )
     }
 }

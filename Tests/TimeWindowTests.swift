@@ -1,7 +1,27 @@
 import XCTest
-@testable import ExecutiveDysfunction
+@testable import Holdfast
 
 final class TimeWindowTests: XCTestCase {
+    func testNextTransitionUsesWallClockAfterSpringAndFallClockChanges() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+        let window = TimeWindow(weekdays: [1], startMinutes: 540, endMinutes: 1_020)
+        for (month, day) in [(3, 8), (11, 1)] {
+            let before = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: 8)))
+            let expected = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: 9)))
+            XCTAssertEqual(window.nextTransition(after: before, calendar: calendar), expected)
+        }
+    }
+
+    func testNextTransitionFindsSecondOccurrenceOfRepeatedHour() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+        let formatter = ISO8601DateFormatter()
+        let before = try XCTUnwrap(formatter.date(from: "2026-11-01T01:46:00-04:00"))
+        let expected = try XCTUnwrap(formatter.date(from: "2026-11-01T01:30:00-05:00"))
+        let window = TimeWindow(weekdays: [1], startMinutes: 90, endMinutes: 105)
+        XCTAssertEqual(window.nextTransition(after: before, calendar: calendar), expected)
+    }
     func testWeekdayWindow() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))

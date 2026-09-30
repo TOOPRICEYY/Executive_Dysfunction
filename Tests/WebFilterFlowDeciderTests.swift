@@ -1,11 +1,119 @@
 import XCTest
-@testable import ExecutiveDysfunctionMac
+// The desktop decision layer is compiled directly into this hostless test
+// bundle; see project.yml. Importing the app module would drag in
+// NetworkExtension and a live filter configuration.
 
 /// These tests pin down the two failure modes that matter for a self-restraint
 /// filter: it must not be trivially bypassable, and it must never become the
 /// reason the machine has no network.
 final class WebFilterFlowDeciderTests: XCTestCase {
     // MARK: - Never take the machine offline
+
+    func testCaptiveProbeSurvivesFortressWithoutAllowingAllAppleHosts() {
+        let policy = makePolicy(mode: .fortressAllowList, domains: ["work.example"])
+        for host in ["captive.apple.com", "CAPTIVE.APPLE.COM."] {
+            for port in [80, 443] {
+                let result = WebFilterFlowDecider.outcome(
+                    for: WebFilterFlowDescriptor(hostname: host, remotePort: port),
+                    policy: policy, at: activeDate
+                )
+                XCTAssertEqual(result, .allow(.captivePortalProbeAllowed))
+            }
+        }
+        for host in ["apple.com", "sub.captive.apple.com", "captive.apple.com.evil.example"] {
+            XCTAssertEqual(decide(WebFilterFlowDescriptor(hostname: host, remotePort: 80), policy), .drop)
+        }
+        XCTAssertEqual(decide(WebFilterFlowDescriptor(hostname: "captive.apple.com", remotePort: 8443), policy), .drop)
+        XCTAssertEqual(decide(WebFilterFlowDescriptor(hostname: "captive.apple.com", remotePort: 443, isTCP: false), policy), .drop)
+    }
+
+    func testVerifiedCaptiveAssistantCanFollowPublicAndUnnamedPortalRedirects() {
+        let policy = makePolicy(mode: .fortressAllowList, domains: ["work.example"])
+        for hostname: String? in [nil, "198.51.100.42", "login.hotel.example"] {
+            let flow = WebFilterFlowDescriptor(
+                hostname: hostname, remoteAddress: "198.51.100.42", remotePort: 443,
+                sourceIsVerifiedCaptivePortalComponent: true
+            )
+            XCTAssertEqual(WebFilterFlowDecider.outcome(
+                for: flow, policy: policy, at: activeDate, matchesRecentlyBlockedEndpoint: true
+            ), .allow(.captivePortalAssistantAllowed))
+            XCTAssertEqual(WebFilterFlowDecider.decisionAtOutboundCompletion(
+                for: flow, policy: policy, at: activeDate
+            ), .allow(.captivePortalAssistantAllowed))
+            XCTAssertEqual(WebFilterFlowDecider.outcome(
+                forOutboundBytes: Data(), flow: flow, policy: policy, at: activeDate
+            ), .allow(.captivePortalAssistantAllowed))
+        }
+    }
+
+    func testCaptiveDNSPublicAddressCollisionDoesNotGrantBrowserBypass() {
+        let policy = makePolicy(domains: ["blocked.example"])
+        var flow = WebFilterFlowDescriptor(remoteAddress: "198.51.100.42", remotePort: 80)
+        XCTAssertEqual(WebFilterFlowDecider.outcome(
+            for: flow, policy: policy, at: activeDate, matchesRecentlyBlockedEndpoint: true
+        ), .drop(.named, reason: .correlatedBlockedEndpoint))
+        flow.sourceIsVerifiedCaptivePortalComponent = true
+        XCTAssertEqual(WebFilterFlowDecider.outcome(
+            for: flow, policy: policy, at: activeDate, matchesRecentlyBlockedEndpoint: true
+        ), .allow(.captivePortalAssistantAllowed))
+    }
+
+    func testCaptiveExceptionDoesNotOverrideExplicitBlocksOrOtherTransports() {
+        let policy = makePolicy(mode: .fortressAllowList, domains: ["work.example"],
+                                blockedOverride: ["blocked.example", "captive.apple.com"])
+        for host in ["blocked.example", "www.blocked.example", "captive.apple.com"] {
+            let flow = WebFilterFlowDescriptor(hostname: host, remotePort: 443,
+                                               sourceIsVerifiedCaptivePortalComponent: true)
+            XCTAssertEqual(decide(flow, policy), .drop)
+            XCTAssertEqual(WebFilterFlowDecider.decisionAtOutboundCompletion(
+                for: flow, policy: policy, at: activeDate
+            ).decision, .drop)
+            XCTAssertEqual(WebFilterFlowDecider.outcome(
+                forOutboundBytes: Data(), flow: flow, policy: policy, at: activeDate
+            ).decision, .drop)
+        }
+        for port in [22, 853, 8443] {
+            XCTAssertEqual(decide(WebFilterFlowDescriptor(remotePort: port,
+                sourceIsVerifiedCaptivePortalComponent: true), policy), .drop)
+        }
+        XCTAssertEqual(decide(WebFilterFlowDescriptor(remotePort: 443, isTCP: false,
+            sourceIsVerifiedCaptivePortalComponent: true), policy), .drop)
+    }
+
+    func testCaptiveIdentityStringsAloneCannotGrantException() {
+        let policy = makePolicy(mode: .fortressAllowList, domains: ["work.example"])
+        let assistantPath = "/System/Library/CoreServices/Captive Network Assistant.app/Contents/MacOS/Captive Network Assistant"
+        let flow = WebFilterFlowDescriptor(remotePort: 443,
+            sourceSigningIdentifier: "com.apple.CaptiveNetworkAssistant", sourceExecutablePath: assistantPath)
+        XCTAssertEqual(decide(flow, policy), .drop, "An Apple signature must also have been verified")
+        XCTAssertTrue(MacCaptivePortalPolicy.isSystemComponent(
+            signingIdentifier: "com.apple.CaptiveNetworkAssistant", executablePath: assistantPath))
+        XCTAssertTrue(MacCaptivePortalPolicy.isSystemComponent(
+            signingIdentifier: "com.apple.captiveagent", executablePath: "/usr/libexec/captiveagent"))
+        XCTAssertFalse(MacCaptivePortalPolicy.isSystemComponent(
+            signingIdentifier: "com.apple.CaptiveNetworkAssistant", executablePath: "/Applications/Fake.app/Contents/MacOS/Fake"))
+        XCTAssertFalse(MacCaptivePortalPolicy.isSystemComponent(
+            signingIdentifier: "com.apple.Safari", executablePath: assistantPath))
+        XCTAssertFalse(MacCaptivePortalPolicy.isSystemComponent(
+            signingIdentifier: nil, executablePath: assistantPath))
+    }
+
+    func testPortalLoginInOrdinaryBrowserStillObeysFortressAndAppRules() {
+        var policy = makePolicy(mode: .fortressAllowList, domains: ["work.example"])
+        XCTAssertEqual(decide(WebFilterFlowDescriptor(hostname: "login.hotel.example", remotePort: 443), policy), .drop)
+        policy.rules[0].enforcementMode = .blockList
+        policy.rules[0].macApplicationIdentifiers = ["com.example.browser"]
+        XCTAssertEqual(decide(WebFilterFlowDescriptor(hostname: "captive.apple.com", remotePort: 80,
+            sourceSigningIdentifier: "com.example.browser", sourceExecutablePath: "/Applications/Browser.app/browser"), policy), .drop)
+    }
+
+    func testBrowserFlowURLProvidesAuthenticationPortWithoutSocketEndpoint() {
+        XCTAssertEqual(MacCaptivePortalPolicy.webPort(for: URL(string: "http://captive.apple.com/hotspot-detect.html")), 80)
+        XCTAssertEqual(MacCaptivePortalPolicy.webPort(for: URL(string: "https://login.hotel.example")), 443)
+        XCTAssertEqual(MacCaptivePortalPolicy.webPort(for: URL(string: "https://login.hotel.example:8443")), 8443)
+        XCTAssertNil(MacCaptivePortalPolicy.webPort(for: URL(string: "file:///portal.html")))
+        XCTAssertNil(MacCaptivePortalPolicy.webPort(for: nil))
+    }
 
     func testIdlePolicyAllowsEveryFlowWithoutInspection() {
         let policy = makePolicy(domains: ["blocked.example"])
@@ -19,10 +127,17 @@ final class WebFilterFlowDeciderTests: XCTestCase {
         XCTAssertEqual(decide(flow, policy), .allow)
     }
 
-    /// QUIC to an unnamed destination is the one path that reaches a site with
-    /// no inspectable name, so it is refused to force the inspectable TCP retry.
-    func testUnnamedQUICIsRefusedToForceInspectableTCP() {
+    /// Unnamed QUIC has no later SNI callback, so it is refused and browsers
+    /// retry over the inspectable TCP path.
+    func testUnnamedQUICIsRefusedUnderABlockListRule() {
         let policy = makePolicy(domains: ["blocked.example"])
+        let flow = WebFilterFlowDescriptor(remoteAddress: "93.184.216.34", remotePort: 443, isTCP: false)
+        XCTAssertEqual(decide(flow, policy), .drop)
+    }
+
+    /// Fortress is default-deny by definition, so it still refuses.
+    func testUnnamedQUICIsStillRefusedUnderFortress() {
+        let policy = makePolicy(mode: .fortressAllowList, domains: ["allowed.example"])
         let flow = WebFilterFlowDescriptor(remoteAddress: "93.184.216.34", remotePort: 443, isTCP: false)
         XCTAssertEqual(decide(flow, policy), .drop)
     }
@@ -72,9 +187,11 @@ final class WebFilterFlowDeciderTests: XCTestCase {
         )
     }
 
-    /// Concealment is a hello with no readable name at all.
-    func testECHWithNoReadableNameIsRefused() {
-        let policy = makePolicy(domains: ["blocked.example"])
+    /// Concealment is a hello with no readable name at all. The parser must
+    /// still classify it as such — that classification is load-bearing for
+    /// Fortress — but a block-list rule releases it for the same reason it
+    /// releases any other unreadable hello.
+    func testECHWithNoReadableNameIsClassifiedAndBlocked() {
         XCTAssertEqual(
             NetworkHostnameInspector.tlsClientHello(in: clientHelloWithECHOnly()),
             .encryptedClientHello
@@ -83,7 +200,16 @@ final class WebFilterFlowDeciderTests: XCTestCase {
             WebFilterFlowDecider.decision(
                 forOutboundBytes: clientHelloWithECHOnly(),
                 flow: WebFilterFlowDescriptor(remotePort: 443),
-                policy: policy,
+                policy: makePolicy(domains: ["blocked.example"]),
+                at: activeDate
+            ),
+            .drop
+        )
+        XCTAssertEqual(
+            WebFilterFlowDecider.decision(
+                forOutboundBytes: clientHelloWithECHOnly(),
+                flow: WebFilterFlowDescriptor(remotePort: 443),
+                policy: makePolicy(mode: .fortressAllowList, domains: ["allowed.example"]),
                 at: activeDate
             ),
             .drop
@@ -212,7 +338,15 @@ final class WebFilterFlowDeciderTests: XCTestCase {
         )
     }
 
-    func testTLSClientHelloWithoutSNIIsRefusedDuringDomainEnforcement() {
+    /// A hello this filter cannot read a name from is released under a
+    /// block-list rule.
+    ///
+    /// "I could not read a name" is not "this destination is blocked", and
+    /// treating the two as the same is how a parser limitation becomes a
+    /// network outage. The accepted cost is that TLS to a raw IP with no SNI
+    /// reaches a blocked site — one deliberate evasion, against a failure mode
+    /// that took the whole machine offline.
+    func testTLSClientHelloWithoutSNIIsReleasedUnderABlockListRule() {
         let policy = makePolicy(domains: ["blocked.example"])
         XCTAssertEqual(
             WebFilterFlowDecider.decision(
@@ -221,8 +355,42 @@ final class WebFilterFlowDeciderTests: XCTestCase {
                 policy: policy,
                 at: activeDate
             ),
+            .allow
+        )
+    }
+
+    func testTLSClientHelloWithoutSNIIsStillRefusedUnderFortress() {
+        let policy = makePolicy(mode: .fortressAllowList, domains: ["allowed.example"])
+        XCTAssertEqual(
+            WebFilterFlowDecider.decision(
+                forOutboundBytes: clientHelloWithoutExtensions(),
+                flow: WebFilterFlowDescriptor(remotePort: 443),
+                policy: policy,
+                at: activeDate
+            ),
             .drop,
-            "A valid but unnamed TLS retry must not bypass a hostname rule"
+            "A default-deny rule has no name to match and must fail closed"
+        )
+    }
+
+    /// A non-TLS binary protocol on 443 whose first byte happens to be 0x16 is
+    /// classified `.malformed`. That is traffic the block list was never about,
+    /// and it must not be killed.
+    func testUnparseableBinaryPayloadOnPort443IsReleased() {
+        let policy = makePolicy(domains: ["blocked.example"])
+        let payload = Data([0x16, 0x03, 0x01, 0xFF, 0xFF] + Array(repeating: UInt8(0xAB), count: 64))
+        XCTAssertEqual(
+            NetworkHostnameInspector.tlsClientHello(in: payload),
+            .malformed
+        )
+        XCTAssertEqual(
+            WebFilterFlowDecider.decision(
+                forOutboundBytes: payload,
+                flow: WebFilterFlowDescriptor(remotePort: 443),
+                policy: policy,
+                at: activeDate
+            ),
+            .allow
         )
     }
 
@@ -280,8 +448,7 @@ final class WebFilterFlowDeciderTests: XCTestCase {
     func testExplicitRuleStillBeatsTheRecoveryExemption() {
         let policy = makePolicy(mode: .fortressAllowList, domains: [], blockedOverride: ["icloud-content.com"])
         let flow = WebFilterFlowDescriptor(hostname: "p01-content.icloud-content.com", remotePort: 443)
-        // Held for fast failure, then refused on the strength of the name.
-        XCTAssertEqual(decide(flow, policy), .inspect(peekBytes: WebFilterFlowDecider.plaintextPeekBytes))
+        XCTAssertEqual(decide(flow, policy), .drop)
         XCTAssertEqual(
             WebFilterFlowDecider.decision(
                 forOutboundBytes: Data(),
@@ -301,12 +468,10 @@ final class WebFilterFlowDeciderTests: XCTestCase {
         XCTAssertEqual(decide(flow, policy), .drop)
     }
 
-    /// A blocked web flow is held for one write so it can be refused instantly
-    /// instead of hanging until the client's own connect timeout.
-    func testKnownBlockedWebHostFailsFastRatherThanHanging() {
+    func testKnownBlockedWebHostIsDroppedWithoutHeldState() {
         let policy = makePolicy(domains: ["blocked.example"])
         let flow = WebFilterFlowDescriptor(hostname: "cdn.blocked.example", remotePort: 443)
-        XCTAssertEqual(decide(flow, policy), .inspect(peekBytes: WebFilterFlowDecider.plaintextPeekBytes))
+        XCTAssertEqual(decide(flow, policy), .drop)
 
         // ...and the name still decides it, even if the payload is opaque.
         XCTAssertEqual(
@@ -348,7 +513,7 @@ final class WebFilterFlowDeciderTests: XCTestCase {
         )
     }
 
-    func testDNSInspectionEngagesWhenStagedOn() {
+    func testDNSNeverEntersTheTCPPartialPassStreamer() {
         let policy = makePolicy(domains: ["blocked.example"])
         XCTAssertEqual(
             WebFilterFlowDecider.decision(
@@ -357,17 +522,17 @@ final class WebFilterFlowDeciderTests: XCTestCase {
                 at: activeDate,
                 inspectsDNS: true
             ),
-            .inspect(peekBytes: WebFilterFlowDecider.plaintextPeekBytes)
+            .allow
         )
     }
 
-    func testUnnamedWebFlowIsInspectedRatherThanWavedThrough() {
+    func testUnnamedWebFlowIsReleasedWithoutPreconnectInspection() {
         let policy = makePolicy(domains: ["blocked.example"])
         for port in [80, 443] {
             XCTAssertEqual(
                 decide(WebFilterFlowDescriptor(remoteAddress: "93.184.216.34", remotePort: port), policy),
-                .inspect(peekBytes: WebFilterFlowDecider.plaintextPeekBytes),
-                "port \(port) carries a recoverable hostname"
+                .allow,
+                "a BSD socket may not write until connect completes"
             )
         }
     }
@@ -451,21 +616,12 @@ final class WebFilterFlowDeciderTests: XCTestCase {
         XCTAssertEqual(decide(flow, policy), .allow)
     }
 
-    /// Chrome shuffles its TLS extension order per connection and its
-    /// post-quantum ClientHello runs past 1700 bytes, so the server name lands
-    /// beyond a fixed 1024-byte peek on most attempts. Measured on a live
-    /// machine: SNI offsets of 1691, 1426, 1722, 1760, 1419, 429, 1748, 1798
-    /// across eight connections to one host -- seven of eight past the window.
-    /// A peek-once parser therefore blocks the site roughly one try in eight
-    /// and releases it the rest of the time, which presents as a site that
-    /// fails and then "re-routes" itself.
-    /// The peek window must cover a real browser ClientHello. Chrome's
-    /// post-quantum hello was measured at 1735-1831 bytes on this machine.
-    func testPeekWindowCoversARealBrowserClientHello() {
+    func testInitialPeekCannotWaitForAWholeClientHello() {
+        XCTAssertEqual(WebFilterFlowDecider.initialTCPPeekBytes, 1)
+        XCTAssertEqual(WebFilterStreamingInspection.maximumPeekBytes, 512)
         XCTAssertGreaterThanOrEqual(
-            WebFilterFlowDecider.plaintextPeekBytes,
-            2_048,
-            "A peek shorter than a browser ClientHello lets late SNI through"
+            WebFilterStreamingInspection.maximumRetainedBytes,
+            NetworkHostnameInspector.maximumClientHelloBytes
         )
     }
 
@@ -506,6 +662,143 @@ final class WebFilterFlowDeciderTests: XCTestCase {
                 forOutboundBytes: hello, flow: flow, policy: policy, at: activeDate
             ),
             .allow
+        )
+    }
+
+    func testStreamingBlockedLateSNIWithholdsTheCompletingChunk() throws {
+        let policy = makePolicy(domains: ["blocked.example"])
+        let flow = WebFilterFlowDescriptor(remoteAddress: "104.18.35.15", remotePort: 443)
+        let hello = clientHello(serverName: "www.blocked.example", paddingBeforeServerName: 1_700)
+        var stream = WebFilterStreamingInspection()
+        var offset = 0
+        var requested = WebFilterStreamingInspection.initialPeekBytes
+
+        while offset < hello.count {
+            let end = min(hello.count, offset + requested)
+            let chunk = Data(hello[offset..<end])
+            _ = try stream.append(chunk, at: offset).get()
+            let outcome = WebFilterFlowDecider.outcome(
+                forOutboundBytes: stream.prefix,
+                flow: flow,
+                policy: policy,
+                at: activeDate
+            )
+            if outcome.decision == .drop {
+                XCTAssertLessThan(stream.passedThroughOffset, hello.count)
+                XCTAssertEqual(
+                    NetworkHostnameInspector.tlsClientHello(
+                        in: Data(hello.prefix(stream.passedThroughOffset))
+                    ),
+                    .incomplete(requiredBytes: hello.count)
+                )
+                return
+            }
+            guard case let .inspect(requiredBytes) = outcome.decision else {
+                return XCTFail("A blocked fragmented ClientHello was released at offset \(offset)")
+            }
+            let continuation = try stream.continueInspection(
+                requiredPrefixBytes: requiredBytes
+            ).get()
+            XCTAssertEqual(continuation.passBytes, chunk.count)
+            XCTAssertGreaterThan(continuation.peekBytes, 0)
+            XCTAssertLessThanOrEqual(
+                continuation.peekBytes,
+                WebFilterStreamingInspection.maximumPeekBytes
+            )
+            offset = continuation.passedThroughOffset
+            requested = continuation.peekBytes
+        }
+        XCTFail("The blocked ClientHello never reached a drop verdict")
+    }
+
+    func testStreamingAllowedLateSNIResolvesAfterMoreThanEightCallbacks() throws {
+        let policy = makePolicy(domains: ["blocked.example"])
+        let flow = WebFilterFlowDescriptor(remoteAddress: "104.18.35.15", remotePort: 443)
+        let hello = clientHello(serverName: "www.allowed.example", paddingBeforeServerName: 6_000)
+        var stream = WebFilterStreamingInspection()
+        var offset = 0
+        var requested = WebFilterStreamingInspection.initialPeekBytes
+
+        while offset < hello.count {
+            let end = min(hello.count, offset + requested)
+            let chunk = Data(hello[offset..<end])
+            _ = try stream.append(chunk, at: offset).get()
+            let outcome = WebFilterFlowDecider.outcome(
+                forOutboundBytes: stream.prefix,
+                flow: flow,
+                policy: policy,
+                at: activeDate
+            )
+            if outcome.decision == .allow {
+                XCTAssertGreaterThan(stream.callbacks, 8)
+                XCTAssertEqual(stream.prefix, hello)
+                return
+            }
+            guard case let .inspect(requiredBytes) = outcome.decision else {
+                return XCTFail("Allowed ClientHello was dropped")
+            }
+            let continuation = try stream.continueInspection(
+                requiredPrefixBytes: requiredBytes
+            ).get()
+            offset = continuation.passedThroughOffset
+            requested = continuation.peekBytes
+        }
+        XCTFail("The allowed ClientHello never resolved")
+    }
+
+    func testStreamingHTTPHostSplitNeverAllowsACompleteBlockedRequest() throws {
+        let policy = makePolicy(domains: ["blocked.example"])
+        let flow = WebFilterFlowDescriptor(remotePort: 80)
+        let request = Data("GET / HTTP/1.1\r\nHost: www.blocked.example\r\nUser-Agent: test\r\n\r\n".utf8)
+        var stream = WebFilterStreamingInspection()
+
+        for offset in request.indices {
+            _ = try stream.append(Data([request[offset]]), at: offset).get()
+            let outcome = WebFilterFlowDecider.outcome(
+                forOutboundBytes: stream.prefix,
+                flow: flow,
+                policy: policy,
+                at: activeDate
+            )
+            if outcome.decision == .drop {
+                XCTAssertLessThan(stream.passedThroughOffset, request.count)
+                XCTAssertFalse(
+                    Data(request.prefix(stream.passedThroughOffset))
+                        .range(of: Data("\r\n\r\n".utf8)) != nil
+                )
+                return
+            }
+            guard case let .inspect(requiredBytes) = outcome.decision else {
+                return XCTFail("A partial HTTP Host was allowed at offset \(offset)")
+            }
+            let continuation = try stream.continueInspection(
+                requiredPrefixBytes: requiredBytes
+            ).get()
+            XCTAssertEqual(continuation.passBytes, 1)
+            XCTAssertGreaterThan(continuation.peekBytes, 0)
+            XCTAssertLessThanOrEqual(
+                continuation.peekBytes,
+                WebFilterStreamingInspection.maximumPeekBytes
+            )
+        }
+        XCTFail("The blocked HTTP Host never reached a drop verdict")
+    }
+
+    func testStreamingRejectsEmptyGapReplayAndOverlappingCallbacks() throws {
+        var stream = WebFilterStreamingInspection()
+        XCTAssertEqual(stream.append(Data(), at: 0), .failure(.emptyCallback))
+        XCTAssertEqual(stream.append(Data([0x16]), at: 1), .failure(.offsetGap))
+
+        _ = try stream.append(Data([0x16]), at: 0).get()
+        _ = try stream.continueInspection(requiredPrefixBytes: 5).get()
+        XCTAssertEqual(stream.append(Data([0x16]), at: 0), .failure(.replayOnly))
+        XCTAssertEqual(stream.append(Data([0x03]), at: 2), .failure(.offsetGap))
+
+        var pending = WebFilterStreamingInspection()
+        _ = try pending.append(Data([0x16]), at: 0).get()
+        XCTAssertEqual(
+            pending.append(Data([0x16, 0x03]), at: 0),
+            .failure(.conflictingOverlap)
         )
     }
 

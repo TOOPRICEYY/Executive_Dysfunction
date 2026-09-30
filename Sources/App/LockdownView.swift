@@ -245,6 +245,7 @@ struct PassageEntryView: View {
     let title: String
     let explanation: String
     let wordCount: Int
+    var onVerified: ((Int) -> Void)? = nil
     let onComplete: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -262,10 +263,13 @@ struct PassageEntryView: View {
                 }
                 Section("Type this passage") {
                     Text(passage)
+                        .textSelection(.disabled)
                         .font(.callout)
                 }
                 Section("Your entry") {
-                    TextEditor(text: $typed)
+                    Text("Type directly. Paste, drag-and-drop, and bulk text insertion are disabled.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    IOSPassageInput(text: $typed)
                         .frame(minHeight: 140)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
@@ -285,7 +289,8 @@ struct PassageEntryView: View {
                 }
                 Section {
                     Button("Confirm") {
-                        onComplete()
+                        if let onVerified { onVerified(CommitmentPassage.normalizedWords(in: passage).count) }
+                        else { onComplete() }
                         dismiss()
                     }
                     .disabled(!CommitmentPassage.matches(typed, passage: passage))

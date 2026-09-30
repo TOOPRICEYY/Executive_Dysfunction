@@ -1,0 +1,2291 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		005ECDF54F3CAE6928AF3317 /* CloudLockdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 897495821663F1069B0D3CFA /* CloudLockdown.swift */; };
+		00ECC0128B12BFA6A09034ED /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DE6D111691CB4B11596CC7 /* AppModel.swift */; };
+		0193A150CFB6809248B15593 /* DesktopNetworkExtensionRemovalAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ADD3F61807F74CEDD039514 /* DesktopNetworkExtensionRemovalAuthorization.swift */; };
+		01BD4E470E87B929168C9393 /* BlockedEndpointCorrelationCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093ADF44E328299D2B2A5253 /* BlockedEndpointCorrelationCache.swift */; };
+		01F524823D30802AE376DA64 /* MacFilterPreparedRetryGuardsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4422FEB5D847A24017688156 /* MacFilterPreparedRetryGuardsTests.swift */; };
+		039A59EFA8C4F47194F8CFAB /* NetworkHostnameInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 599A8BD8BCFAFF1480192297 /* NetworkHostnameInspector.swift */; };
+		040D062E1FA0F0DB08017F19 /* HoldfastEnforcementIdentitiesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08273F0D99AA0843E451A081 /* HoldfastEnforcementIdentitiesTests.swift */; };
+		044B2B14216A21CADE1C6505 /* ShieldTemporaryAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2828B88C7E1419933B9F1CD6 /* ShieldTemporaryAccess.swift */; };
+		04A797E5F952DAC7E8900964 /* MacFilterSettingsLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A9EAF29AC65DF900052AF50 /* MacFilterSettingsLifecycle.swift */; };
+		04E8EA7CF1573C72EF3C3907 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F55EAA2A3610FFEF954A8030 /* Assets.xcassets */; };
+		0549F0FBDDB9F3DEDD48A2AF /* HoldfastIconVariant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1C2A6AA76370EFE2289692 /* HoldfastIconVariant.swift */; };
+		0698D62B7D7D5E4EBEA29AA8 /* TemporaryAllowanceBackoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55B989BA56C920ED89839565 /* TemporaryAllowanceBackoff.swift */; };
+		0807D4ECC398DF0CFB89D030 /* MacFilterActivationSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83DB865BB00ED41424754560 /* MacFilterActivationSafety.swift */; };
+		0821FB29FFF3F7D1BB8D514A /* TemporaryAllowanceBackoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55B989BA56C920ED89839565 /* TemporaryAllowanceBackoff.swift */; };
+		085294192B60689841C93E52 /* CloudPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B33F366441C2E592E9FC2C69 /* CloudPreferences.swift */; };
+		09CDDFDCBE6DCE8ACDACCFA5 /* AllowanceSchedulePainterCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAD710A4223D995BF2321E0 /* AllowanceSchedulePainterCodec.swift */; };
+		0D2261ABA25AB9E8019399CE /* MacFilterActivationAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C5DB7F2DA5314B64F3E263F /* MacFilterActivationAuthorization.swift */; };
+		1077C22EE588D843D154C644 /* AllowanceSchedulePainterCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAD710A4223D995BF2321E0 /* AllowanceSchedulePainterCodec.swift */; };
+		110D8FBE3CA8E43CBD5CDCA1 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F446292A6E9FF30D8A3D0EB0 /* NetworkExtension.framework */; };
+		1190A9E26F8338186764FB28 /* HoldfastWorkspaceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B65BCFEC6765E7AF07BAF63 /* HoldfastWorkspaceUITests.swift */; };
+		1250C6A68FE101A8EAC8769A /* CloudLockdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B996FB98981A20B80949A3BB /* CloudLockdownTests.swift */; };
+		129679D6B03DDD5C10F32F57 /* WebFilterFlowDecider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F55F53AE7D6F9AB6CAAB8FB /* WebFilterFlowDecider.swift */; };
+		12CA45097C12F6FD2FD2BDD6 /* DesktopLockdownSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 417299D70A1258BEE245F121 /* DesktopLockdownSession.swift */; };
+		12E18FB7AE87C92464067894 /* MacFilterSmokeTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6C09F91D9639B05CB2F2E25 /* MacFilterSmokeTest.swift */; };
+		13D1D292250B7F04010E38FC /* TemporaryAllowanceBackoffEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FB8AD43163ADB6E8538601C /* TemporaryAllowanceBackoffEditor.swift */; };
+		154144434ED8F84E7B052A94 /* BlockPagePauseChallenge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45B7668D8A9F7DA567C21426 /* BlockPagePauseChallenge.swift */; };
+		158398C4E3FF6E255A865F71 /* DesktopDiagnosticTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A75C8583D5246629686639B /* DesktopDiagnosticTrace.swift */; };
+		16F94A9663D5D4EA9D4EAF15 /* Rule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BEBBF3F78368D749A9F5796 /* Rule.swift */; };
+		176CF3319BF1B9768945A8FF /* BlockingSchedulePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8935C05CE3B5EF7CAAC8FBE8 /* BlockingSchedulePreview.swift */; };
+		196D6124F0548D34ECAD3451 /* MacFilterActivationSafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFEC0BFE15FC1E436FA634CC /* MacFilterActivationSafetyTests.swift */; };
+		1B3A625730269280BE1C1306 /* MacFilterInterceptionPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 529CA96CC53BBC880A3C3D63 /* MacFilterInterceptionPlan.swift */; };
+		1B3E30DC0BA3C6CF43F9998D /* DesktopLockdownSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 417299D70A1258BEE245F121 /* DesktopLockdownSession.swift */; };
+		1BEF2DBF83A6892CA28236CC /* MacPassageInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCCE65D383120D17100EE40F /* MacPassageInput.swift */; };
+		1CC76DF88FEF269E61A85448 /* FilterEnforcementStatusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A7E0DBE7576F5B9225B45BB /* FilterEnforcementStatusTests.swift */; };
+		1D8079EAB07A6C753C97A3D9 /* LockdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 896866D30EEB8675467D74F3 /* LockdownView.swift */; };
+		1E623706DB5C52B1AC5DE279 /* HoldfastDiagnosticReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3291F0759C57985A53C772 /* HoldfastDiagnosticReport.swift */; };
+		1FC8CD6D55A7BD43FF0A5F34 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EF8656C65902DAF66EA3056 /* main.swift */; };
+		2087B294D4FF14DC52314DAA /* MacDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8340D1F92468F26DA4969C4 /* MacDesignSystem.swift */; };
+		221978AAF6E0484648485ED7 /* HoldfastEnforcementIdentitiesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08273F0D99AA0843E451A081 /* HoldfastEnforcementIdentitiesTests.swift */; };
+		221AE9482BD131E24C20EAFA /* TimedLockdownSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629A0A0C544392A8270D0D24 /* TimedLockdownSession.swift */; };
+		24954E9E325F5552DEFB000E /* MacFilterSmokeTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6C09F91D9639B05CB2F2E25 /* MacFilterSmokeTest.swift */; };
+		24AAC5A33C64BB298640C6CB /* DesktopRuleEditUnlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = E969142D25A82AEDC6BA4EF9 /* DesktopRuleEditUnlock.swift */; };
+		25945741304123CC439F2ED4 /* Lockdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F2CCC327D6A8E31870B7CFD /* Lockdown.swift */; };
+		25DA572AFD05BFD3F662B837 /* MacWorkspaceLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E856FF9A1818DCD09E9584C6 /* MacWorkspaceLayoutTests.swift */; };
+		26E05F6BC3CEAFEA2D2A26C4 /* BlockPageTypingGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D62BFF7A7A1C8E2A148E8ED1 /* BlockPageTypingGuard.swift */; };
+		2752198F3D34906FB2828F4C /* MacEnforcementController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF688022B715ED76C718E27 /* MacEnforcementController.swift */; };
+		27FA4FDE8AD34E3F240ACCB5 /* WebFilterStreamingInspection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54B9C470331100D9E5269095 /* WebFilterStreamingInspection.swift */; };
+		288E3A7F070D9E60D3E877E5 /* IOSDiagnosticsReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 153C09838B70D12CD83696DA /* IOSDiagnosticsReport.swift */; };
+		2A331F15E39457B57D86BA54 /* DesktopDiagnosticTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A75C8583D5246629686639B /* DesktopDiagnosticTrace.swift */; };
+		2AD25036A9B1137B2936E515 /* ActivityMonitorCapacityPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14C26048F309D2ADC68A9E9B /* ActivityMonitorCapacityPlan.swift */; };
+		2BF4FF52694FD715B56AEC15 /* DesktopLockdownSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 417299D70A1258BEE245F121 /* DesktopLockdownSession.swift */; };
+		2D3B88236F5F155B98CC5D0B /* MacFilterPreferenceTimeoutSafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02A4BB8517C1119FC9D11A76 /* MacFilterPreferenceTimeoutSafetyTests.swift */; };
+		2EEC3CD310712E44428258D0 /* MacFilterPreferenceTimeoutSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFDD0AD77C81F90FA9645FB3 /* MacFilterPreferenceTimeoutSafety.swift */; };
+		2EFAC2210AC648F28C345CEB /* IOSDynamicAppIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CB87020C3FEA9A0DFD28EA /* IOSDynamicAppIcon.swift */; };
+		2F74847CEBD9FD441D9A8EF8 /* TemporaryAllowanceBackoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55B989BA56C920ED89839565 /* TemporaryAllowanceBackoff.swift */; };
+		2FA3B0CFAFA0AFFDC4B3E3E5 /* ActivityMonitorCapacityPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1343E1BE5D484011261E90AD /* ActivityMonitorCapacityPlanTests.swift */; };
+		30EA39608D8299A1564AA364 /* CloudLockdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 897495821663F1069B0D3CFA /* CloudLockdown.swift */; };
+		347C9D2A40B2AC737D9DE888 /* DesktopDiagnosticTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A75C8583D5246629686639B /* DesktopDiagnosticTrace.swift */; };
+		36A123F61508E8FA59E633FC /* RuleEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05C24F778CE5DC18C04661B4 /* RuleEditorView.swift */; };
+		36DD4FD8B16E03619262D48A /* TemporaryAllowanceBackoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55B989BA56C920ED89839565 /* TemporaryAllowanceBackoff.swift */; };
+		37906C12C6CECEFC990453D1 /* MacFilterActivationSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83DB865BB00ED41424754560 /* MacFilterActivationSafety.swift */; };
+		380292B79E925CCFE87B628F /* BlockStatusCalendarLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85C15F270485EE32A975CD0D /* BlockStatusCalendarLayout.swift */; };
+		3A5DC5ECFDA770605FD78E1A /* MacFilterLateEnableQuarantineSafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C69E411B509A36EDBAEFD2F4 /* MacFilterLateEnableQuarantineSafetyTests.swift */; };
+		3ADA1EFA2843045D6D6B82D3 /* MacFilterPreferenceTimeoutSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFDD0AD77C81F90FA9645FB3 /* MacFilterPreferenceTimeoutSafety.swift */; };
+		3AE48B4CD1EB0A9BC241C860 /* DesktopTemporaryPausePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE95B69C6281E3301F64987E /* DesktopTemporaryPausePolicy.swift */; };
+		3B51C2428F6A3007D81F1DE8 /* BlockPageTemporaryPause.swift in Sources */ = {isa = PBXBuildFile; fileRef = 697C0AA5E42A655A2CB38E54 /* BlockPageTemporaryPause.swift */; };
+		3B7552869FA26CE4BD4EB0A4 /* MacBlockingTargetsEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4E1E56BD996662B42013EAE /* MacBlockingTargetsEditor.swift */; };
+		3B8AFFED733B74B357529AF4 /* BlockingSchedulePreviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B6C72CAC68A3D62F209418B /* BlockingSchedulePreviewTests.swift */; };
+		3C6C73A0E64575C7728FE87D /* Lockdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F2CCC327D6A8E31870B7CFD /* Lockdown.swift */; };
+		3D7DA268FC3BEE5015EE5F37 /* WebFilterDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB77B155F9D35C52D1ED6A2D /* WebFilterDiagnostics.swift */; };
+		3E3A6678DDF3A5EC1133DAC5 /* HoldfastApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B1AE5565970A227456C059B /* HoldfastApp.swift */; };
+		3E54FA82E199435D218B894B /* BlockPageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010841574DCAF624068064DB /* BlockPageRenderer.swift */; };
+		3E8B16E4998C76A6BB41B2B8 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150F0C654E9B712143CFEC45 /* main.swift */; };
+		3EEED5094A0D08BD987D9628 /* NetworkPacketInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518B38A6C09A07E4D42BE53D /* NetworkPacketInspector.swift */; };
+		3F15A856FCBB4B17056CCD68 /* FlowSourceResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D73837FE3753577BD3C2301 /* FlowSourceResolver.swift */; };
+		3F1E36A513B7B6972937FD99 /* MacTemporaryPauseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F55EE382D8D69F8109344034 /* MacTemporaryPauseSheet.swift */; };
+		3FD3CC6D0AD41F27141C38B9 /* WebFilterOutageRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F229F892462061C835E14140 /* WebFilterOutageRegressionTests.swift */; };
+		40859350C9852A67BD1CC5C3 /* MacFilterSameBootResetSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABA9A39D47EDA933D92935BB /* MacFilterSameBootResetSafety.swift */; };
+		41901DDCBAA182E398A5E209 /* FilterEnforcementStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E453F2F15843170DBFDF0B45 /* FilterEnforcementStatus.swift */; };
+		4244961350E84232B7F887A4 /* HoldfastDiagnosticReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3291F0759C57985A53C772 /* HoldfastDiagnosticReport.swift */; };
+		425E9F83764A67F7B876B370 /* ShieldConfigurationExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 66BD3B878A1B883BB16CE97D /* ShieldConfigurationExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		43924E72117665A6BF91BBD7 /* BypassActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C98F502BAA97413981B7AFD /* BypassActivityView.swift */; };
+		448E19EC493F7AB1DDD03BD4 /* BlockingSchedulePreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A4A1DA9F65AE0A2B517B34 /* BlockingSchedulePreviewView.swift */; };
+		44B8539B28B6BB8C0BB9BD20 /* BypassHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6EB54EDADF74B88B494757C /* BypassHistory.swift */; };
+		45559F27880BC4BF145BFA4B /* WebFilterFlowDeciderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A467A39815F8200E2EA5452 /* WebFilterFlowDeciderTests.swift */; };
+		45D50D2B5F8DF72C1785BE99 /* MacFilterActivationAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C5DB7F2DA5314B64F3E263F /* MacFilterActivationAuthorization.swift */; };
+		462B0F2426889EB8365502AE /* CloudLockdownExitPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96DF37FC054BAD27104341C1 /* CloudLockdownExitPolicy.swift */; };
+		4674319DFEED7200107A7CE0 /* HoldfastPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 328F517375DE7456A3AB9DE0 /* HoldfastPresentation.swift */; };
+		475FE77A232420BC5B59CDA4 /* IOSPassageInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76B6504123116B42268A8E95 /* IOSPassageInputTests.swift */; };
+		47EE1C512F10E38890B80AD3 /* ActivityMonitorCapacityPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14C26048F309D2ADC68A9E9B /* ActivityMonitorCapacityPlan.swift */; };
+		48542A73C04C40FE7F897C27 /* IOSDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE28CDF845971515661D9A18 /* IOSDiagnosticsView.swift */; };
+		488E7A0BF6AD6ECC13DE25CC /* HoldfastDiagnosticDocumentSectionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5409B7CC26DB804DB2AAF9F2 /* HoldfastDiagnosticDocumentSectionsTests.swift */; };
+		489FDE477E90B162EE41F9E8 /* AllowanceSchedulePainterCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAD710A4223D995BF2321E0 /* AllowanceSchedulePainterCodec.swift */; };
+		48BC5A63803F34C524E98CA4 /* RuleScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4873134BEEA102AD6B0E26DA /* RuleScheduler.swift */; };
+		4A194C2234667DBEFEE51B62 /* BlockPageHTTP.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F1DB22D5DC44A31AC1C946 /* BlockPageHTTP.swift */; };
+		4B8AEAE20B3647D84B2038AC /* BlockPageHostPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E1DE27C4BF4A0802CE79BD /* BlockPageHostPolicy.swift */; };
+		4BB1A74A366A65583AAADFD0 /* HoldfastDiagnosticDocumentSectionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5409B7CC26DB804DB2AAF9F2 /* HoldfastDiagnosticDocumentSectionsTests.swift */; };
+		4BCA280FC444E2656811F67A /* BlockPageHTTP.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F1DB22D5DC44A31AC1C946 /* BlockPageHTTP.swift */; };
+		4DD60A1D63C9920BED123363 /* NetworkPacketInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518B38A6C09A07E4D42BE53D /* NetworkPacketInspector.swift */; };
+		4E2A318AA4BA43EE37DCAB9C /* BlockingSchedulePreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A4A1DA9F65AE0A2B517B34 /* BlockingSchedulePreviewView.swift */; };
+		4F35C2F8FC40865E6DA07729 /* DesktopEnforcementPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF1B605D7CF710A729C33DD7 /* DesktopEnforcementPolicy.swift */; };
+		50062A16EBFF98814EC9B1DC /* DesktopEnforcementPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF1B605D7CF710A729C33DD7 /* DesktopEnforcementPolicy.swift */; };
+		514668DF2A0B052BF5A5D035 /* DeviceActivityMonitorExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 330624EEDB195EBC1F532740 /* DeviceActivityMonitorExtension.swift */; };
+		5173FFBA4FB36A1BFED66ADE /* TemporaryAccessRequestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 578DA29731ACA3FCF3830F01 /* TemporaryAccessRequestView.swift */; };
+		521110237223441DB32EEE7F /* BlockedEndpointCorrelationCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093ADF44E328299D2B2A5253 /* BlockedEndpointCorrelationCache.swift */; };
+		527056778F71CB3CAEF5CA9F /* HoldfastDiagnosticDocumentSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 975039DDA6C7FA535D205D32 /* HoldfastDiagnosticDocumentSections.swift */; };
+		533F6C2F0F4E2BEF226C65DA /* DomainClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 127AFA821477A7646EBC8377 /* DomainClassifier.swift */; };
+		540528F5B7D1ADA4B5E42861 /* BlockPageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010841574DCAF624068064DB /* BlockPageRenderer.swift */; };
+		54B9E25DF48468C151D1EF03 /* DesktopTemporaryPausePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE95B69C6281E3301F64987E /* DesktopTemporaryPausePolicy.swift */; };
+		557660028636613B604D6F9C /* ActivityMonitorCapacityPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1343E1BE5D484011261E90AD /* ActivityMonitorCapacityPlanTests.swift */; };
+		55CEA008723BDEB06D267720 /* MacEnforcementSafetyStateReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9DB7BAD220260C893DC7304 /* MacEnforcementSafetyStateReporter.swift */; };
+		5663529AC9FF018FC0A104DC /* DesktopBlockingDisableAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5242EC0004666041A9C624A5 /* DesktopBlockingDisableAuthorization.swift */; };
+		5669D4370FAFCD91224D3119 /* DesktopDiagnosticTraceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E6B9300078732CE2FCF05CC /* DesktopDiagnosticTraceTests.swift */; };
+		570E0362D9FDED623F7B3D9B /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F446292A6E9FF30D8A3D0EB0 /* NetworkExtension.framework */; };
+		57530742DEDE582451F9CC42 /* SystemExtensions.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22BC29AE24EC93BA0D438503 /* SystemExtensions.framework */; };
+		5AAFA153EEC560F02AC9880D /* HoldfastDiagnosticReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3291F0759C57985A53C772 /* HoldfastDiagnosticReport.swift */; };
+		5ACAF2A8562DA8C967EC090A /* EnforcementEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 791FF77BA0006CB01DFE277A /* EnforcementEngine.swift */; };
+		5AD8E5BA0BF37E35FECFFF76 /* DesktopEnforcementPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C296B3A4519719D64503D389 /* DesktopEnforcementPolicyTests.swift */; };
+		5C8D899E3802C970CE07A5B1 /* IOSPassageInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCD453C3B8E6AAEA8ABFDC37 /* IOSPassageInput.swift */; };
+		5CBD2449F9147FFE4033AB88 /* AppModelDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62C3A25E3DCDE76839301502 /* AppModelDiagnostics.swift */; };
+		5D86D47CAD792D5AF1CE7C4C /* MacWorkspaceLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E856FF9A1818DCD09E9584C6 /* MacWorkspaceLayoutTests.swift */; };
+		5DA95F683E8C2FD810FDB48A /* DesktopRemovalAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07F24204374587F47E2BF20 /* DesktopRemovalAuthorization.swift */; };
+		5FD95D25C71659C9BF5FFC1A /* TemporaryAllowanceBackoffEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FB8AD43163ADB6E8538601C /* TemporaryAllowanceBackoffEditor.swift */; };
+		61E07F932116C45443E3601C /* MacFilterInterceptionPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 529CA96CC53BBC880A3C3D63 /* MacFilterInterceptionPlan.swift */; };
+		6271FA32C876D583DA8D055C /* BlockPageTemporaryPause.swift in Sources */ = {isa = PBXBuildFile; fileRef = 697C0AA5E42A655A2CB38E54 /* BlockPageTemporaryPause.swift */; };
+		651FD00DBF1036AA5517DA4D /* Lockdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F2CCC327D6A8E31870B7CFD /* Lockdown.swift */; };
+		65519227A57BFC010C2D2B31 /* HoldfastPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 328F517375DE7456A3AB9DE0 /* HoldfastPresentation.swift */; };
+		66254C12DE2982B05AC52D71 /* MacConfirmationPassageLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC90C613841A07C589331E8 /* MacConfirmationPassageLayoutTests.swift */; };
+		67178A89131549501E049841 /* TemporaryAllowanceStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D9F6ACA43526F8683CE1BA1 /* TemporaryAllowanceStatusView.swift */; };
+		69FEF8817AF75B874721ED64 /* BlockingSchedulePreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A4A1DA9F65AE0A2B517B34 /* BlockingSchedulePreviewView.swift */; };
+		6A7D7B104F03270AD769E4B3 /* CloudPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4ABC8FA5B802FFD46E2EA1F /* CloudPreferencesTests.swift */; };
+		6B65D2CF88424FC3E19B486F /* MacBlockStatusTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE7210530389250FE6F592C9 /* MacBlockStatusTimeline.swift */; };
+		6C0DBE023CC60C4A75BAE2A7 /* RuleSchedulerShieldSweep.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88E2C1D8E0B1480261DF8406 /* RuleSchedulerShieldSweep.swift */; };
+		6C2E7DE7D2FCF2C7C72D180A /* MacDiagnosticsReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BD8D95FDCDCB5E6F4297D84 /* MacDiagnosticsReport.swift */; };
+		6D2424AF3D0AE412B7E71F84 /* BlockPagePauseChallenge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45B7668D8A9F7DA567C21426 /* BlockPagePauseChallenge.swift */; };
+		6DDB4965DD340B20E4880FCB /* BypassHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6EB54EDADF74B88B494757C /* BypassHistory.swift */; };
+		6DE23E5C8ECD94C6841A4C06 /* HoldfastDiagnosticDocumentSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 975039DDA6C7FA535D205D32 /* HoldfastDiagnosticDocumentSections.swift */; };
+		6ECA5AACC3E236CECE7A3720 /* TemporaryAllowanceBackoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55B989BA56C920ED89839565 /* TemporaryAllowanceBackoff.swift */; };
+		6FEC34770716C1EE340F10DD /* BlockPageHostPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E1DE27C4BF4A0802CE79BD /* BlockPageHostPolicy.swift */; };
+		712DF9A031B2741F249EE872 /* MacAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7FEADC34D95768A25A2A5E0 /* MacAppModel.swift */; };
+		723F76B18CFCA7AB247E61DF /* FilterStatusPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = D86DE061491C40E4219571DA /* FilterStatusPublisher.swift */; };
+		728F0FEB97AFBD1FC791CCC5 /* Lockdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F2CCC327D6A8E31870B7CFD /* Lockdown.swift */; };
+		74DA1EC7A23AB6B26B16E710 /* BlockPageRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1479AFDC71CF044C265AEAC3 /* BlockPageRendererTests.swift */; };
+		7543FF6D941F240E3376E26A /* MacContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BF6A031D8BECCBEBE27A01E /* MacContentView.swift */; };
+		765D2FDA34301D4CC69908F6 /* Rule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BEBBF3F78368D749A9F5796 /* Rule.swift */; };
+		76E8214610D8A22FD7DE7FFF /* DesktopBlockingDisableAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5242EC0004666041A9C624A5 /* DesktopBlockingDisableAuthorization.swift */; };
+		781FA8CECECC0404C7783687 /* BlockingSchedulePreviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B6C72CAC68A3D62F209418B /* BlockingSchedulePreviewTests.swift */; };
+		7904040B1998C0932D7992B9 /* RuleScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4873134BEEA102AD6B0E26DA /* RuleScheduler.swift */; };
+		799442BC9745831B9974C253 /* ShieldActionExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF6B7241F25B6E951C3F073A /* ShieldActionExtension.swift */; };
+		79A3C8B2A66CB6C0E91FAD4D /* MacTemporaryPauseStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9FF2B5604988862006C8BAB /* MacTemporaryPauseStore.swift */; };
+		7D4898EF0D9D08128A7B4FAB /* HoldfastIconVariant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1C2A6AA76370EFE2289692 /* HoldfastIconVariant.swift */; };
+		7DA7C730B8AF6B8986523EC7 /* DesktopEnforcementPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF1B605D7CF710A729C33DD7 /* DesktopEnforcementPolicy.swift */; };
+		7DF281A2F4BC76F7A3C8593E /* RuleSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B592B7D2B74DBDE0BF700B5 /* RuleSchedulerTests.swift */; };
+		7EC7623EEB7EC81800D04921 /* HoldfastPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 328F517375DE7456A3AB9DE0 /* HoldfastPresentation.swift */; };
+		8080A869EEEADB35FF01FE66 /* CloudLockdownExitPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96DF37FC054BAD27104341C1 /* CloudLockdownExitPolicy.swift */; };
+		81C3BD71FC56819B1DEE01A4 /* MacBlockStatusTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE7210530389250FE6F592C9 /* MacBlockStatusTimeline.swift */; };
+		8368557BB738C4A9314E4C21 /* TemporaryAllowanceBackoffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CB65C74DC1554FDF3C91F95 /* TemporaryAllowanceBackoffTests.swift */; };
+		83B7BD576175F6C637EF6846 /* IOSWorkspaceViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35711296F88BC3232F6251D8 /* IOSWorkspaceViews.swift */; };
+		83C5A68C49D4D976E802AB96 /* DesktopLockdownSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C06AE1B06D5577C87FB90A7 /* DesktopLockdownSessionTests.swift */; };
+		87365A69C0E96AA02056641B /* WebFilterFlowDecider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F55F53AE7D6F9AB6CAAB8FB /* WebFilterFlowDecider.swift */; };
+		8813FB150E90B0A1ACC5EB83 /* NetworkHostnameInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 599A8BD8BCFAFF1480192297 /* NetworkHostnameInspector.swift */; };
+		8999087D1184B5ED83C139FA /* Rule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BEBBF3F78368D749A9F5796 /* Rule.swift */; };
+		8B44E97655C189466FBC2DB1 /* MacFilterPreparedRetryGuards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C9648E40884A10BCE8012DE /* MacFilterPreparedRetryGuards.swift */; };
+		8B49E806800968356776AC70 /* MacActivityGroupEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C50A9E9D6E1FD48E0B5CCEA /* MacActivityGroupEditor.swift */; };
+		8C1558676E1B735806FE4FC9 /* BlockStatusCalendarLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85C15F270485EE32A975CD0D /* BlockStatusCalendarLayout.swift */; };
+		8D48F3686F291A2B9A1E2D88 /* BlockPagePauseChallenge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45B7668D8A9F7DA567C21426 /* BlockPagePauseChallenge.swift */; };
+		8EA090728A9D5D1792FE697E /* TemporaryAccessExplanation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18E10F714C4852706B34520 /* TemporaryAccessExplanation.swift */; };
+		8EF1A06DF3EBE29DBC738108 /* WebFilterDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB77B155F9D35C52D1ED6A2D /* WebFilterDiagnostics.swift */; };
+		8F0BAA936C439762BEC57963 /* IOSTimedLockdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36728D4C85538C30B05DF001 /* IOSTimedLockdownView.swift */; };
+		8F2D408A5320B66079E00D0F /* MacFilterSameBootResetSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABA9A39D47EDA933D92935BB /* MacFilterSameBootResetSafety.swift */; };
+		9040E431508B20925FA08DC6 /* HoldfastIconVariant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1C2A6AA76370EFE2289692 /* HoldfastIconVariant.swift */; };
+		9105F7BBE252CE5DCFD9FC0C /* MacFilterPreparedRetryGuards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C9648E40884A10BCE8012DE /* MacFilterPreparedRetryGuards.swift */; };
+		916B182AA436C8AA0E7FFE8B /* MacFilterInterceptionPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 529CA96CC53BBC880A3C3D63 /* MacFilterInterceptionPlan.swift */; };
+		9188BF37740DE4F5C15FB126 /* TimedLockdownSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629A0A0C544392A8270D0D24 /* TimedLockdownSession.swift */; };
+		92068D34AE633CFF587E009B /* WebFilterStreamingInspection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54B9C470331100D9E5269095 /* WebFilterStreamingInspection.swift */; };
+		9382B070825507A1CA6F124A /* ShieldConfigurationExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFC232291EA6E5BB000C8F16 /* ShieldConfigurationExtension.swift */; };
+		93BCF4D3E928CE28B71D7E56 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BC863F87F2534F035F65A92 /* ContentView.swift */; };
+		93E37ABB44A3E064E1059E2B /* ShieldTemporaryAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2828B88C7E1419933B9F1CD6 /* ShieldTemporaryAccess.swift */; };
+		95B3BDD40122EB1EAB829039 /* CloudLockdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 897495821663F1069B0D3CFA /* CloudLockdown.swift */; };
+		95FE5DBB492804CB79D069FB /* MacRuleEditUnlockSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78DFD53E23285E2D0229B9A /* MacRuleEditUnlockSheet.swift */; };
+		9634BEA400CB2BB6F7F2ACFB /* HoldfastIconVariantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 605F722019D205398698068F /* HoldfastIconVariantTests.swift */; };
+		9748050BBE8E81B7A8768E59 /* TimedLockdownSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2297B4ED7CDD06436B502718 /* TimedLockdownSessionTests.swift */; };
+		9779241EDFDFAB69E56B0CD8 /* BypassActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C98F502BAA97413981B7AFD /* BypassActivityView.swift */; };
+		9853A73B28968AB6B69AC058 /* RuleRestrictionEvaluator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B52F84BA68A56CE58C652F4 /* RuleRestrictionEvaluator.swift */; };
+		9898FCF6DDDEDA6B5FB53907 /* MacFilterStartupWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9322B2F633E5C99F18363A5B /* MacFilterStartupWatchdog.swift */; };
+		98996AB2B9ECCBF358F18E85 /* FilterEnforcementStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E453F2F15843170DBFDF0B45 /* FilterEnforcementStatus.swift */; };
+		989EC95C1C2798127588F0AD /* ActivityMonitorExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 33F1A90D8B51E7822B220D50 /* ActivityMonitorExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		99DC7C754F72D7E14260F149 /* BlockingGroupSelectionPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2182B9355A97D1BECB1B61 /* BlockingGroupSelectionPersistence.swift */; };
+		9BCA13134E4F18119AAEF687 /* BlockPageHTTP.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F1DB22D5DC44A31AC1C946 /* BlockPageHTTP.swift */; };
+		9E5E9730238B91F540638DAC /* HoldfastDiagnosticReportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3834FED69E9403B73782078 /* HoldfastDiagnosticReportTests.swift */; };
+		9E74378D05804C9DD3BBB0AD /* BypassActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C98F502BAA97413981B7AFD /* BypassActivityView.swift */; };
+		9FFAD6BBD886D73F11C6A514 /* BlockPageTypingGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D62BFF7A7A1C8E2A148E8ED1 /* BlockPageTypingGuard.swift */; };
+		A062E79CCA3E4ED0922DE058 /* CloudBlockingTargets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C81C99133339FE2257AC1D7 /* CloudBlockingTargets.swift */; };
+		A0E0DFE7E2E07FE3829912F2 /* BlockPageTypingGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D62BFF7A7A1C8E2A148E8ED1 /* BlockPageTypingGuard.swift */; };
+		A1636AF44D4D14C92D8AC767 /* TemporaryAllowanceBackoffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CB65C74DC1554FDF3C91F95 /* TemporaryAllowanceBackoffTests.swift */; };
+		A2147878990693CC673CDD4B /* LockdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92D5B57F05C4940E1F13422B /* LockdownTests.swift */; };
+		A30FD44E4D04D2693F9844A7 /* HoldfastIconVariant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1C2A6AA76370EFE2289692 /* HoldfastIconVariant.swift */; };
+		A32FC2BC4A36BB28038E4304 /* WebFilterFailOpenGovernor.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED488514D1D5216072FBA266 /* WebFilterFailOpenGovernor.swift */; };
+		A45728C211A182B036DA0161 /* HoldfastMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 307921A6167196A6B9E898CE /* HoldfastMacApp.swift */; };
+		A48DB9ADF1DF264DB1F821CB /* DesktopTemporaryPausePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE95B69C6281E3301F64987E /* DesktopTemporaryPausePolicy.swift */; };
+		A497F6B1A18796159F089AD0 /* MacFilterPreferenceTimeoutSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFDD0AD77C81F90FA9645FB3 /* MacFilterPreferenceTimeoutSafety.swift */; };
+		A4C0198C9F603D6242AAF4CC /* TemporaryAllowanceStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D9F6ACA43526F8683CE1BA1 /* TemporaryAllowanceStatusView.swift */; };
+		A58D93B8058641D12BB543A2 /* SharedConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066F156AD5B75D2110D2BAFE /* SharedConfiguration.swift */; };
+		A6DC118B5E610F5FEC8D5E57 /* MacEnforcementSafetyPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60237A9BF0CE16FA454D77A7 /* MacEnforcementSafetyPersistence.swift */; };
+		A6E953C02DEA50D55F0BAB0F /* HoldfastEnforcementIdentities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 646CE204FB7377F36F9D7AAC /* HoldfastEnforcementIdentities.swift */; };
+		A6FD765C22B261DDD0457F04 /* BlockStatusCalendarLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85C15F270485EE32A975CD0D /* BlockStatusCalendarLayout.swift */; };
+		A773077F3CFFC6F2AA51393D /* MacFilterSameBootResetSafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C5ED3F5AA6CC840731E8F3 /* MacFilterSameBootResetSafetyTests.swift */; };
+		A7C7482C18CF20EDD257B6D2 /* TemporaryAccessExplanation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18E10F714C4852706B34520 /* TemporaryAccessExplanation.swift */; };
+		A8830FDF4B22356DCEAD9FA3 /* MacTemporaryPauseStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9FF2B5604988862006C8BAB /* MacTemporaryPauseStore.swift */; };
+		A8C99BAFA2C895DDB5A9CC22 /* HoldfastPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 328F517375DE7456A3AB9DE0 /* HoldfastPresentation.swift */; };
+		AA057E4C31FD903A56115C75 /* IOSArchitectureEditors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E537CEF1CBAC374E2926898 /* IOSArchitectureEditors.swift */; };
+		AA648B4F0106A17DDB52A5A5 /* Lockdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F2CCC327D6A8E31870B7CFD /* Lockdown.swift */; };
+		AB18EC62B58378031545ADBE /* MacEnforcementSafetyPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 440147D4CDE23217284EBC48 /* MacEnforcementSafetyPersistenceTests.swift */; };
+		AB1BC65289EE3140F6A0A70C /* MacFilterLateEnableQuarantineSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08721EB373A808827A773915 /* MacFilterLateEnableQuarantineSafety.swift */; };
+		ACAFE81D7D9195F88E813703 /* MacFilterActivationAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C5DB7F2DA5314B64F3E263F /* MacFilterActivationAuthorization.swift */; };
+		AE1C0F19F6B62533C59B01F8 /* BlockPageHTTP.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F1DB22D5DC44A31AC1C946 /* BlockPageHTTP.swift */; };
+		AE80A7276AC1C24A2D9CB564 /* WebFilterFlowDecider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F55F53AE7D6F9AB6CAAB8FB /* WebFilterFlowDecider.swift */; };
+		AEB7BCCA080FA1B00EB96C62 /* RuleRestrictionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0072570AF0A6DDFE0FFC07 /* RuleRestrictionTests.swift */; };
+		AF5FB6916817A9BCDEEF9319 /* MacLockdownStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59F948D7D4DC8ED8C378EF22 /* MacLockdownStatusView.swift */; };
+		B060B463402D4CDFD72D4BF2 /* MacFilterActivationAuthorizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61F5FE9B1A277533E7B62387 /* MacFilterActivationAuthorizationTests.swift */; };
+		B0AF4DE2AB8A273B1834656B /* Rule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BEBBF3F78368D749A9F5796 /* Rule.swift */; };
+		B0DB364115D00A3FA845E8A1 /* BlockStatusCalendarLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8C18D145652DB881EF6D7CA /* BlockStatusCalendarLayoutTests.swift */; };
+		B16BC7753D7C99EB061FD3EF /* MacBlockingGroupEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0602362F348AA5A4A535AB3 /* MacBlockingGroupEditor.swift */; };
+		B2E028501CFA430F174088ED /* CloudLockdownExitPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96DF37FC054BAD27104341C1 /* CloudLockdownExitPolicy.swift */; };
+		B31D8D0B58BED5C9C02C68C8 /* HoldfastDiagnosticDocumentSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 975039DDA6C7FA535D205D32 /* HoldfastDiagnosticDocumentSections.swift */; };
+		B329A38EBAB8FE1EFD585002 /* MacEnforcementSafetyPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60237A9BF0CE16FA454D77A7 /* MacEnforcementSafetyPersistence.swift */; };
+		B3C4E434977F2B8DD3C3A3B5 /* ShieldTemporaryAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2828B88C7E1419933B9F1CD6 /* ShieldTemporaryAccess.swift */; };
+		B499B0A8FBC10B7599528BEB /* MacWebFilterProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA96FBD0DDF34755042BAD6E /* MacWebFilterProvider.swift */; };
+		B4F17996CF1F84DFB6675B97 /* MacFilterSameBootResetSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABA9A39D47EDA933D92935BB /* MacFilterSameBootResetSafety.swift */; };
+		B5C80258E5840730631181C0 /* WebFilterDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB77B155F9D35C52D1ED6A2D /* WebFilterDiagnostics.swift */; };
+		B784743A4423FAE88F88DACE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D8B62CF5610156155935D0DA /* Assets.xcassets */; };
+		B8605EAE497C4581D39A155A /* AllowanceSchedulePainterCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAD710A4223D995BF2321E0 /* AllowanceSchedulePainterCodec.swift */; };
+		B917CF646A5F5D59431CA202 /* HoldfastIconVariantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 605F722019D205398698068F /* HoldfastIconVariantTests.swift */; };
+		B9A175662E57CB68F83F15D2 /* MacFilterSettingsLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A9EAF29AC65DF900052AF50 /* MacFilterSettingsLifecycle.swift */; };
+		BC46938EEFE191856A311237 /* MacFilterStartupWatchdogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3131DF21F66D17979ED93FE6 /* MacFilterStartupWatchdogTests.swift */; };
+		BCC74171FB6496C2A586E5A4 /* SharedConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066F156AD5B75D2110D2BAFE /* SharedConfiguration.swift */; };
+		BD290A9C5A69D735BBDB6AD4 /* HoldfastEnforcementIdentities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 646CE204FB7377F36F9D7AAC /* HoldfastEnforcementIdentities.swift */; };
+		BD5C6B9D5B947CECFBFF77CE /* CloudLockdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 897495821663F1069B0D3CFA /* CloudLockdown.swift */; };
+		BDC61079C88C737241FD9E93 /* WebFilterStreamingInspection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54B9C470331100D9E5269095 /* WebFilterStreamingInspection.swift */; };
+		BDF1E10EA4E03372984CDA95 /* BlockPageTemporaryPause.swift in Sources */ = {isa = PBXBuildFile; fileRef = 697C0AA5E42A655A2CB38E54 /* BlockPageTemporaryPause.swift */; };
+		BE5AF0D0D6EA3EAB591D2A51 /* BlockPageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010841574DCAF624068064DB /* BlockPageRenderer.swift */; };
+		BE88C454A4E18CB4A3BC067D /* LockdownStatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FF66AA5ADD1F7CCF0D135E2 /* LockdownStatusBadge.swift */; };
+		BEABED4CB8710CD3DBA22D70 /* NetworkHostnameInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 599A8BD8BCFAFF1480192297 /* NetworkHostnameInspector.swift */; };
+		BEF5343F36430B9687D6C285 /* IOSBlockingTargetsEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71F47A94730E1560DFC17A7C /* IOSBlockingTargetsEditor.swift */; };
+		BEFB17986CF0A49E9E8FE24F /* Lockdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F2CCC327D6A8E31870B7CFD /* Lockdown.swift */; };
+		BFC16BF13B61A26190BE6EA3 /* TimeWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E42A80EB0CFDD94CDEBC9100 /* TimeWindowTests.swift */; };
+		BFCF911C890ACF03A523EE9F /* HoldfastEnforcementIdentities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 646CE204FB7377F36F9D7AAC /* HoldfastEnforcementIdentities.swift */; };
+		BFDECF785064DA5B151A5A4C /* MacFilterLateEnableQuarantineSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08721EB373A808827A773915 /* MacFilterLateEnableQuarantineSafety.swift */; };
+		C02FEFC54D8F5423D58A254C /* CloudBlockingTargets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C81C99133339FE2257AC1D7 /* CloudBlockingTargets.swift */; };
+		C041FB02E0DAD64BFCFA701E /* CloudPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4ABC8FA5B802FFD46E2EA1F /* CloudPreferencesTests.swift */; };
+		C045DE1F710B0216DBDCDB0A /* TemporaryAllowanceBackoffEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FB8AD43163ADB6E8538601C /* TemporaryAllowanceBackoffEditor.swift */; };
+		C0CC87D25443F2A3C8257169 /* BlockingSchedulePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8935C05CE3B5EF7CAAC8FBE8 /* BlockingSchedulePreview.swift */; };
+		C2D4820962781620F746EEEF /* BlockStatusCalendarLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85C15F270485EE32A975CD0D /* BlockStatusCalendarLayout.swift */; };
+		C2D4F71E90A7F767B86116FC /* MacConfirmationPassageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78657C1D3FDCD0CB58FEBDC5 /* MacConfirmationPassageView.swift */; };
+		C4FBB085C661F8EC903117D6 /* ActivityGroupSelectionPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE5960EA8F55B5C0416B4E8 /* ActivityGroupSelectionPersistence.swift */; };
+		C4FC386520BB0E6D5985916F /* DesktopRemovalAuthorizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93D35F96A5E8C07829D47388 /* DesktopRemovalAuthorizationTests.swift */; };
+		C57ED1D39FBD15E7F1FAEBE7 /* MacFilterActivationSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83DB865BB00ED41424754560 /* MacFilterActivationSafety.swift */; };
+		C67F0037F9F8ABFFD478A999 /* TemporaryAccessExplanation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18E10F714C4852706B34520 /* TemporaryAccessExplanation.swift */; };
+		C6EC2CBAA54F577460193A5E /* CloudPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B33F366441C2E592E9FC2C69 /* CloudPreferences.swift */; };
+		C7120B3A41E9C0B35D7A2E17 /* CloudBlockingTargets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C81C99133339FE2257AC1D7 /* CloudBlockingTargets.swift */; };
+		C79D076E8C3C3527434FD571 /* MacConfirmationPassageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78657C1D3FDCD0CB58FEBDC5 /* MacConfirmationPassageView.swift */; };
+		C895D11B3E02141CB5135B15 /* BypassHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6EB54EDADF74B88B494757C /* BypassHistory.swift */; };
+		C8B70CE8743796895D1D72A5 /* BlockPagePauseChallenge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45B7668D8A9F7DA567C21426 /* BlockPagePauseChallenge.swift */; };
+		C9BE7F8C7D5F22149D5C1A64 /* CloudPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B33F366441C2E592E9FC2C69 /* CloudPreferences.swift */; };
+		C9CFD214D6997FE001CE26CC /* MacWebFilterExtension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 084D0718CD6310B73BDE78EB /* MacWebFilterExtension.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		CA6F6A7C70245DC19D13F21C /* MacFilterStartupWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9322B2F633E5C99F18363A5B /* MacFilterStartupWatchdog.swift */; };
+		CAC4D18A600D887089596CFB /* BlockPageHostPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E1DE27C4BF4A0802CE79BD /* BlockPageHostPolicy.swift */; };
+		CAE7FB202230ABB6612DDF92 /* BypassHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07F5D1279C1E25C75ACB2074 /* BypassHistoryTests.swift */; };
+		CB9B829DC6D00938A9FF7BCF /* MacLockdownStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59F948D7D4DC8ED8C378EF22 /* MacLockdownStatusView.swift */; };
+		CD7DFA36AE72B7EEC650AA7C /* LockdownStatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FF66AA5ADD1F7CCF0D135E2 /* LockdownStatusBadge.swift */; };
+		CE1F979CF3CBB90639B99E47 /* BypassHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07F5D1279C1E25C75ACB2074 /* BypassHistoryTests.swift */; };
+		CEDD040B3B6D718963A0D124 /* FilterProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39EE776AAFC749B27E497146 /* FilterProbe.swift */; };
+		D0D30A2762BEA50BC850E4B9 /* HoldfastDiagnosticReportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3834FED69E9403B73782078 /* HoldfastDiagnosticReportTests.swift */; };
+		D1DE4D802667A3B395B704C1 /* EnforcementEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 791FF77BA0006CB01DFE277A /* EnforcementEngine.swift */; };
+		D232CDBAD172C2E72DEDA719 /* MacFilterPreparedRetryGuards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C9648E40884A10BCE8012DE /* MacFilterPreparedRetryGuards.swift */; };
+		D2A41104AE309D413DEA3541 /* HoldfastDiagnosticReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3291F0759C57985A53C772 /* HoldfastDiagnosticReport.swift */; };
+		D2D0B7E5C1C2A7965EB94F03 /* MacBlockingTargetsEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4E1E56BD996662B42013EAE /* MacBlockingTargetsEditor.swift */; };
+		D3B1A53468CC9F81164A4D72 /* AllowanceSchedulePainter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35BDC244138FD57E70BD37D2 /* AllowanceSchedulePainter.swift */; };
+		D495A6ED20ABEDF7286250E2 /* BlockPageHostPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E1DE27C4BF4A0802CE79BD /* BlockPageHostPolicy.swift */; };
+		D4A5DA515614EF702D0E93B7 /* MacFilterLateEnableQuarantineSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08721EB373A808827A773915 /* MacFilterLateEnableQuarantineSafety.swift */; };
+		D554BC59DF984D5584533CDE /* LockdownStatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FF66AA5ADD1F7CCF0D135E2 /* LockdownStatusBadge.swift */; };
+		D5F58BE0C7013651FB5D2BAF /* MacDynamicAppIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 733CD983DBE340E3EEDC6834 /* MacDynamicAppIcon.swift */; };
+		D6F0AF68396141403DEF4652 /* DesktopRemovalAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07F24204374587F47E2BF20 /* DesktopRemovalAuthorization.swift */; };
+		D7C836C4C500404EDB596A36 /* BlockingSchedulePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8935C05CE3B5EF7CAAC8FBE8 /* BlockingSchedulePreview.swift */; };
+		D849175BF0C02E895C1FA991 /* MacTemporaryPauseStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B89EBDF2F4104C994074B1AC /* MacTemporaryPauseStoreTests.swift */; };
+		DA4BC0D598D43D4A79CB3950 /* DesktopBlockingDisableAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5242EC0004666041A9C624A5 /* DesktopBlockingDisableAuthorization.swift */; };
+		DB1CE67024A3EB061966B5A7 /* CloudRuleBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C117E312EF03D9E3DCE497C /* CloudRuleBridge.swift */; };
+		DB220E8A5E10D418B3156C40 /* BlockedEndpointCorrelationCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093ADF44E328299D2B2A5253 /* BlockedEndpointCorrelationCache.swift */; };
+		DD10D586C31E30E1BFAB5048 /* ShieldActionExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0AF562FE1BBD0B2A796D1C3C /* ShieldActionExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		DDA5E28281D4B82E28F86022 /* FilterStatusPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = D86DE061491C40E4219571DA /* FilterStatusPublisher.swift */; };
+		DDDA03EAF942C40DB9D2C440 /* CloudPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B33F366441C2E592E9FC2C69 /* CloudPreferences.swift */; };
+		DFB6D07B7099ED10D5E3C27A /* DesktopNetworkExtensionRemovalAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ADD3F61807F74CEDD039514 /* DesktopNetworkExtensionRemovalAuthorization.swift */; };
+		DFEA44224C8932BA87D40DD1 /* MacPassageInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCCE65D383120D17100EE40F /* MacPassageInput.swift */; };
+		E01AB4F9F06A79E7FC2F6F4C /* ActivityMonitorCapacityPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14C26048F309D2ADC68A9E9B /* ActivityMonitorCapacityPlan.swift */; };
+		E087422FF5227DA3289A41CD /* BlockStatusCalendarLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8C18D145652DB881EF6D7CA /* BlockStatusCalendarLayoutTests.swift */; };
+		E08A290F0548EDC2652BD4B7 /* HoldfastEnforcementIdentities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 646CE204FB7377F36F9D7AAC /* HoldfastEnforcementIdentities.swift */; };
+		E0930799F0924409FBA051FB /* RuleRestrictionEvaluator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B52F84BA68A56CE58C652F4 /* RuleRestrictionEvaluator.swift */; };
+		E182A7BD2C7006211247C074 /* DesktopNetworkExtensionRemovalAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ADD3F61807F74CEDD039514 /* DesktopNetworkExtensionRemovalAuthorization.swift */; };
+		E190FEF329D84F4C0BF6BA6F /* TemporaryAllowanceStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D9F6ACA43526F8683CE1BA1 /* TemporaryAllowanceStatusView.swift */; };
+		E1D5350041A830BEE798223C /* BlockPageTemporaryPause.swift in Sources */ = {isa = PBXBuildFile; fileRef = 697C0AA5E42A655A2CB38E54 /* BlockPageTemporaryPause.swift */; };
+		E3AEEC0675170AC23A5D5065 /* CloudLockdownExitPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96DF37FC054BAD27104341C1 /* CloudLockdownExitPolicy.swift */; };
+		E52F4E481531BD9FADCC00B1 /* BypassHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6EB54EDADF74B88B494757C /* BypassHistory.swift */; };
+		E663ED0191BD822DE8C77E50 /* BlockPageTypingGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D62BFF7A7A1C8E2A148E8ED1 /* BlockPageTypingGuard.swift */; };
+		E7BC33E571D7AED473DF8870 /* WebFilterFailOpenGovernor.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED488514D1D5216072FBA266 /* WebFilterFailOpenGovernor.swift */; };
+		E88787AF52BC7D2E45013DC7 /* MacFilterSettingsLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A9EAF29AC65DF900052AF50 /* MacFilterSettingsLifecycle.swift */; };
+		E9615E9D306752A51FE90295 /* MacConfirmationPassageLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC90C613841A07C589331E8 /* MacConfirmationPassageLayoutTests.swift */; };
+		EB66E02A32588ADC5513B4EF /* IOSBlockStatusTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F313699EABA7B87C745DFF8 /* IOSBlockStatusTimeline.swift */; };
+		EB7984D832A6B60D9A5C3BB3 /* BlockPageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010841574DCAF624068064DB /* BlockPageRenderer.swift */; };
+		EC3E83233B29CA219CBE246E /* MacFilterSmokeTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6C09F91D9639B05CB2F2E25 /* MacFilterSmokeTest.swift */; };
+		ECFAE27E34D98DE2C30A955C /* MacWorkspaceViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3BEC46F1B05F95CF1510540 /* MacWorkspaceViews.swift */; };
+		ED13008E4BE3A2304C5F588F /* ShieldTemporaryAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2828B88C7E1419933B9F1CD6 /* ShieldTemporaryAccess.swift */; };
+		ED2DADC884A20629025F0A36 /* CloudLockdownExitPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96DF37FC054BAD27104341C1 /* CloudLockdownExitPolicy.swift */; };
+		ED5471299D32E708A2699BBF /* AllowanceSchedulePainter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35BDC244138FD57E70BD37D2 /* AllowanceSchedulePainter.swift */; };
+		EDE2B08B5804279DAF43F0A5 /* AllowanceSchedulePainter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35BDC244138FD57E70BD37D2 /* AllowanceSchedulePainter.swift */; };
+		EE04FD586F58163AD069660C /* MacEnforcementSafetyPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60237A9BF0CE16FA454D77A7 /* MacEnforcementSafetyPersistence.swift */; };
+		EE5EB104F9C4D9006489C5C0 /* MacWorkspaceViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3BEC46F1B05F95CF1510540 /* MacWorkspaceViews.swift */; };
+		EFA07B7161AA7BB4C31CB5AF /* FilterEnforcementStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E453F2F15843170DBFDF0B45 /* FilterEnforcementStatus.swift */; };
+		F00E14035E1DEF0B46026E1F /* WebFilterFailOpenGovernor.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED488514D1D5216072FBA266 /* WebFilterFailOpenGovernor.swift */; };
+		F015F55B78DC9A0AF3B26A08 /* MacFilterStartupWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9322B2F633E5C99F18363A5B /* MacFilterStartupWatchdog.swift */; };
+		F0943963643F8BF029BA4A14 /* BypassHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6EB54EDADF74B88B494757C /* BypassHistory.swift */; };
+		F172B21EDA6B5CD7DB7D73BA /* HoldfastDiagnosticDocumentSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 975039DDA6C7FA535D205D32 /* HoldfastDiagnosticDocumentSections.swift */; };
+		F20F3AA1FE6486FEE8EC56BD /* CloudLockdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B996FB98981A20B80949A3BB /* CloudLockdownTests.swift */; };
+		F27556A5D5B1A4D6CEB7C9DC /* NetworkPacketInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518B38A6C09A07E4D42BE53D /* NetworkPacketInspector.swift */; };
+		F3055558928D29D00252CB49 /* IOSDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B8CC483CFC4BD68A3225291 /* IOSDesignSystem.swift */; };
+		F3BD585635A8AE1CA8358052 /* DesktopRemovalAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07F24204374587F47E2BF20 /* DesktopRemovalAuthorization.swift */; };
+		F4FBA3032C7E83A25F125813 /* BlockingSchedulePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8935C05CE3B5EF7CAAC8FBE8 /* BlockingSchedulePreview.swift */; };
+		F9B25059954BFC2A5886F68A /* DesktopNetworkExtensionRemovalAuthorizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C30E25725E064BD5266AB77 /* DesktopNetworkExtensionRemovalAuthorizationTests.swift */; };
+		FA2C345C621BBF5DC079A522 /* MacDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8340D1F92468F26DA4969C4 /* MacDesignSystem.swift */; };
+		FC09724E2C3A7378039A934B /* CloudBlockingTargets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C81C99133339FE2257AC1D7 /* CloudBlockingTargets.swift */; };
+		FC39F5C17DCF659356B91434 /* DesktopRuleEditUnlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = E969142D25A82AEDC6BA4EF9 /* DesktopRuleEditUnlock.swift */; };
+		FCB6832DCE7AA8E18ECDA0ED /* MacDiagnosticsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E463C9C90C532EF807CDF60 /* MacDiagnosticsSheet.swift */; };
+		FDD26D804D43CC04E6AEBBDC /* AllowanceSchedulePainterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C5FE44F9D3CEC70B95FF107 /* AllowanceSchedulePainterTests.swift */; };
+		FFFBCE63A681D8FE0B786ED4 /* TemporaryAccessExplanation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18E10F714C4852706B34520 /* TemporaryAccessExplanation.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		08815F79A95CBB060B6D4027 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 35ADC9A49FC1FC68CD941FA5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2846B313DD4E8835FBE78101;
+			remoteInfo = Holdfast;
+		};
+		3A068A4EB0E6F50F5B38B017 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 35ADC9A49FC1FC68CD941FA5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C8446E91BCB097AEA3796238;
+			remoteInfo = MacWebFilterExtension;
+		};
+		3A310738350D9DBFC5090A1D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 35ADC9A49FC1FC68CD941FA5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2846B313DD4E8835FBE78101;
+			remoteInfo = Holdfast;
+		};
+		3EA8DDB702728F4D2842C8FE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 35ADC9A49FC1FC68CD941FA5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 728B94A799CA1A89401D6F5E;
+			remoteInfo = ShieldActionExtension;
+		};
+		BF543C571B4B8F7134DC5EB8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 35ADC9A49FC1FC68CD941FA5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BB21DAB90DBA7763316B8A38;
+			remoteInfo = ActivityMonitorExtension;
+		};
+		D6749963F155585EFE435360 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 35ADC9A49FC1FC68CD941FA5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5E8703FE43330549C9660AE2;
+			remoteInfo = BlockPageServer;
+		};
+		F067A70EB28FC655DEEEA222 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 35ADC9A49FC1FC68CD941FA5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 93AC6D74C36F3726C3911EFE;
+			remoteInfo = ShieldConfigurationExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		66DEA9E88C12CFDD8970BEE5 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				989EC95C1C2798127588F0AD /* ActivityMonitorExtension.appex in Embed Foundation Extensions */,
+				425E9F83764A67F7B876B370 /* ShieldConfigurationExtension.appex in Embed Foundation Extensions */,
+				DD10D586C31E30E1BFAB5048 /* ShieldActionExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F3FB95C8747714FC7396E1A5 /* Embed System Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(SYSTEM_EXTENSIONS_FOLDER_PATH)";
+			dstSubfolderSpec = 16;
+			files = (
+				C9CFD214D6997FE001CE26CC /* MacWebFilterExtension.systemextension in Embed System Extensions */,
+			);
+			name = "Embed System Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		010841574DCAF624068064DB /* BlockPageRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockPageRenderer.swift; sourceTree = "<group>"; };
+		02A4BB8517C1119FC9D11A76 /* MacFilterPreferenceTimeoutSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterPreferenceTimeoutSafetyTests.swift; sourceTree = "<group>"; };
+		05C24F778CE5DC18C04661B4 /* RuleEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleEditorView.swift; sourceTree = "<group>"; };
+		066F156AD5B75D2110D2BAFE /* SharedConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedConfiguration.swift; sourceTree = "<group>"; };
+		07F5D1279C1E25C75ACB2074 /* BypassHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BypassHistoryTests.swift; sourceTree = "<group>"; };
+		08273F0D99AA0843E451A081 /* HoldfastEnforcementIdentitiesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldfastEnforcementIdentitiesTests.swift; sourceTree = "<group>"; };
+		084D0718CD6310B73BDE78EB /* MacWebFilterExtension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = MacWebFilterExtension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
+		08721EB373A808827A773915 /* MacFilterLateEnableQuarantineSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterLateEnableQuarantineSafety.swift; sourceTree = "<group>"; };
+		0875ABDEDACDD84C13F9DF82 /* BlockPageServer */ = {isa = PBXFileReference; includeInIndex = 0; path = BlockPageServer; sourceTree = BUILT_PRODUCTS_DIR; };
+		093ADF44E328299D2B2A5253 /* BlockedEndpointCorrelationCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedEndpointCorrelationCache.swift; sourceTree = "<group>"; };
+		0A7E0DBE7576F5B9225B45BB /* FilterEnforcementStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterEnforcementStatusTests.swift; sourceTree = "<group>"; };
+		0AF562FE1BBD0B2A796D1C3C /* ShieldActionExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ShieldActionExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		0B6C72CAC68A3D62F209418B /* BlockingSchedulePreviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockingSchedulePreviewTests.swift; sourceTree = "<group>"; };
+		0C06AE1B06D5577C87FB90A7 /* DesktopLockdownSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopLockdownSessionTests.swift; sourceTree = "<group>"; };
+		0E463C9C90C532EF807CDF60 /* MacDiagnosticsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacDiagnosticsSheet.swift; sourceTree = "<group>"; };
+		0F96CB3499A4A90BE3C9B39F /* Holdfast.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Holdfast.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		127AFA821477A7646EBC8377 /* DomainClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainClassifier.swift; sourceTree = "<group>"; };
+		1343E1BE5D484011261E90AD /* ActivityMonitorCapacityPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMonitorCapacityPlanTests.swift; sourceTree = "<group>"; };
+		1479AFDC71CF044C265AEAC3 /* BlockPageRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockPageRendererTests.swift; sourceTree = "<group>"; };
+		14C26048F309D2ADC68A9E9B /* ActivityMonitorCapacityPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMonitorCapacityPlan.swift; sourceTree = "<group>"; };
+		150F0C654E9B712143CFEC45 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		153C09838B70D12CD83696DA /* IOSDiagnosticsReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSDiagnosticsReport.swift; sourceTree = "<group>"; };
+		1B8CC483CFC4BD68A3225291 /* IOSDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSDesignSystem.swift; sourceTree = "<group>"; };
+		1C50A9E9D6E1FD48E0B5CCEA /* MacActivityGroupEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacActivityGroupEditor.swift; sourceTree = "<group>"; };
+		1EF688022B715ED76C718E27 /* MacEnforcementController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacEnforcementController.swift; sourceTree = "<group>"; };
+		2297B4ED7CDD06436B502718 /* TimedLockdownSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedLockdownSessionTests.swift; sourceTree = "<group>"; };
+		22BC29AE24EC93BA0D438503 /* SystemExtensions.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemExtensions.framework; path = System/Library/Frameworks/SystemExtensions.framework; sourceTree = SDKROOT; };
+		2828B88C7E1419933B9F1CD6 /* ShieldTemporaryAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShieldTemporaryAccess.swift; sourceTree = "<group>"; };
+		29CB87020C3FEA9A0DFD28EA /* IOSDynamicAppIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSDynamicAppIcon.swift; sourceTree = "<group>"; };
+		2A467A39815F8200E2EA5452 /* WebFilterFlowDeciderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFilterFlowDeciderTests.swift; sourceTree = "<group>"; };
+		2D73837FE3753577BD3C2301 /* FlowSourceResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowSourceResolver.swift; sourceTree = "<group>"; };
+		307921A6167196A6B9E898CE /* HoldfastMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldfastMacApp.swift; sourceTree = "<group>"; };
+		3131DF21F66D17979ED93FE6 /* MacFilterStartupWatchdogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterStartupWatchdogTests.swift; sourceTree = "<group>"; };
+		328F517375DE7456A3AB9DE0 /* HoldfastPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldfastPresentation.swift; sourceTree = "<group>"; };
+		330624EEDB195EBC1F532740 /* DeviceActivityMonitorExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceActivityMonitorExtension.swift; sourceTree = "<group>"; };
+		33F1A90D8B51E7822B220D50 /* ActivityMonitorExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ActivityMonitorExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		35711296F88BC3232F6251D8 /* IOSWorkspaceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSWorkspaceViews.swift; sourceTree = "<group>"; };
+		35BDC244138FD57E70BD37D2 /* AllowanceSchedulePainter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllowanceSchedulePainter.swift; sourceTree = "<group>"; };
+		36728D4C85538C30B05DF001 /* IOSTimedLockdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSTimedLockdownView.swift; sourceTree = "<group>"; };
+		39EE776AAFC749B27E497146 /* FilterProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterProbe.swift; sourceTree = "<group>"; };
+		3A9EAF29AC65DF900052AF50 /* MacFilterSettingsLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterSettingsLifecycle.swift; sourceTree = "<group>"; };
+		3BC863F87F2534F035F65A92 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		3BD8D95FDCDCB5E6F4297D84 /* MacDiagnosticsReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacDiagnosticsReport.swift; sourceTree = "<group>"; };
+		3E6B9300078732CE2FCF05CC /* DesktopDiagnosticTraceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopDiagnosticTraceTests.swift; sourceTree = "<group>"; };
+		3F55F53AE7D6F9AB6CAAB8FB /* WebFilterFlowDecider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFilterFlowDecider.swift; sourceTree = "<group>"; };
+		3FB8AD43163ADB6E8538601C /* TemporaryAllowanceBackoffEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemporaryAllowanceBackoffEditor.swift; sourceTree = "<group>"; };
+		417299D70A1258BEE245F121 /* DesktopLockdownSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopLockdownSession.swift; sourceTree = "<group>"; };
+		440147D4CDE23217284EBC48 /* MacEnforcementSafetyPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacEnforcementSafetyPersistenceTests.swift; sourceTree = "<group>"; };
+		4422FEB5D847A24017688156 /* MacFilterPreparedRetryGuardsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterPreparedRetryGuardsTests.swift; sourceTree = "<group>"; };
+		45B7668D8A9F7DA567C21426 /* BlockPagePauseChallenge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockPagePauseChallenge.swift; sourceTree = "<group>"; };
+		4873134BEEA102AD6B0E26DA /* RuleScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleScheduler.swift; sourceTree = "<group>"; };
+		4ADD3F61807F74CEDD039514 /* DesktopNetworkExtensionRemovalAuthorization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopNetworkExtensionRemovalAuthorization.swift; sourceTree = "<group>"; };
+		4B52F84BA68A56CE58C652F4 /* RuleRestrictionEvaluator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleRestrictionEvaluator.swift; sourceTree = "<group>"; };
+		4C5FE44F9D3CEC70B95FF107 /* AllowanceSchedulePainterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllowanceSchedulePainterTests.swift; sourceTree = "<group>"; };
+		4C9648E40884A10BCE8012DE /* MacFilterPreparedRetryGuards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterPreparedRetryGuards.swift; sourceTree = "<group>"; };
+		4D9F6ACA43526F8683CE1BA1 /* TemporaryAllowanceStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemporaryAllowanceStatusView.swift; sourceTree = "<group>"; };
+		4F2CCC327D6A8E31870B7CFD /* Lockdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Lockdown.swift; sourceTree = "<group>"; };
+		518B38A6C09A07E4D42BE53D /* NetworkPacketInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkPacketInspector.swift; sourceTree = "<group>"; };
+		5242EC0004666041A9C624A5 /* DesktopBlockingDisableAuthorization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopBlockingDisableAuthorization.swift; sourceTree = "<group>"; };
+		529CA96CC53BBC880A3C3D63 /* MacFilterInterceptionPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterInterceptionPlan.swift; sourceTree = "<group>"; };
+		5409B7CC26DB804DB2AAF9F2 /* HoldfastDiagnosticDocumentSectionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldfastDiagnosticDocumentSectionsTests.swift; sourceTree = "<group>"; };
+		54B9C470331100D9E5269095 /* WebFilterStreamingInspection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFilterStreamingInspection.swift; sourceTree = "<group>"; };
+		55B989BA56C920ED89839565 /* TemporaryAllowanceBackoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemporaryAllowanceBackoff.swift; sourceTree = "<group>"; };
+		56A4A1DA9F65AE0A2B517B34 /* BlockingSchedulePreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockingSchedulePreviewView.swift; sourceTree = "<group>"; };
+		578DA29731ACA3FCF3830F01 /* TemporaryAccessRequestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemporaryAccessRequestView.swift; sourceTree = "<group>"; };
+		57F296DABADE49BDD18D8DAC /* DesktopEnforcementTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DesktopEnforcementTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		599A8BD8BCFAFF1480192297 /* NetworkHostnameInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkHostnameInspector.swift; sourceTree = "<group>"; };
+		59F948D7D4DC8ED8C378EF22 /* MacLockdownStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacLockdownStatusView.swift; sourceTree = "<group>"; };
+		5B1AE5565970A227456C059B /* HoldfastApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldfastApp.swift; sourceTree = "<group>"; };
+		5C98F502BAA97413981B7AFD /* BypassActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BypassActivityView.swift; sourceTree = "<group>"; };
+		5CB65C74DC1554FDF3C91F95 /* TemporaryAllowanceBackoffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemporaryAllowanceBackoffTests.swift; sourceTree = "<group>"; };
+		5E537CEF1CBAC374E2926898 /* IOSArchitectureEditors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSArchitectureEditors.swift; sourceTree = "<group>"; };
+		5F313699EABA7B87C745DFF8 /* IOSBlockStatusTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSBlockStatusTimeline.swift; sourceTree = "<group>"; };
+		60237A9BF0CE16FA454D77A7 /* MacEnforcementSafetyPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacEnforcementSafetyPersistence.swift; sourceTree = "<group>"; };
+		605F722019D205398698068F /* HoldfastIconVariantTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldfastIconVariantTests.swift; sourceTree = "<group>"; };
+		61F5FE9B1A277533E7B62387 /* MacFilterActivationAuthorizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterActivationAuthorizationTests.swift; sourceTree = "<group>"; };
+		629A0A0C544392A8270D0D24 /* TimedLockdownSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedLockdownSession.swift; sourceTree = "<group>"; };
+		62C3A25E3DCDE76839301502 /* AppModelDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelDiagnostics.swift; sourceTree = "<group>"; };
+		646CE204FB7377F36F9D7AAC /* HoldfastEnforcementIdentities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldfastEnforcementIdentities.swift; sourceTree = "<group>"; };
+		66BD3B878A1B883BB16CE97D /* ShieldConfigurationExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ShieldConfigurationExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		697C0AA5E42A655A2CB38E54 /* BlockPageTemporaryPause.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockPageTemporaryPause.swift; sourceTree = "<group>"; };
+		6D1C2A6AA76370EFE2289692 /* HoldfastIconVariant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldfastIconVariant.swift; sourceTree = "<group>"; };
+		71F47A94730E1560DFC17A7C /* IOSBlockingTargetsEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSBlockingTargetsEditor.swift; sourceTree = "<group>"; };
+		733CD983DBE340E3EEDC6834 /* MacDynamicAppIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacDynamicAppIcon.swift; sourceTree = "<group>"; };
+		73F1DB22D5DC44A31AC1C946 /* BlockPageHTTP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockPageHTTP.swift; sourceTree = "<group>"; };
+		76B6504123116B42268A8E95 /* IOSPassageInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSPassageInputTests.swift; sourceTree = "<group>"; };
+		78657C1D3FDCD0CB58FEBDC5 /* MacConfirmationPassageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacConfirmationPassageView.swift; sourceTree = "<group>"; };
+		791FF77BA0006CB01DFE277A /* EnforcementEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnforcementEngine.swift; sourceTree = "<group>"; };
+		7A2182B9355A97D1BECB1B61 /* BlockingGroupSelectionPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockingGroupSelectionPersistence.swift; sourceTree = "<group>"; };
+		7A75C8583D5246629686639B /* DesktopDiagnosticTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopDiagnosticTrace.swift; sourceTree = "<group>"; };
+		7B3291F0759C57985A53C772 /* HoldfastDiagnosticReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldfastDiagnosticReport.swift; sourceTree = "<group>"; };
+		7B592B7D2B74DBDE0BF700B5 /* RuleSchedulerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleSchedulerTests.swift; sourceTree = "<group>"; };
+		7BEBBF3F78368D749A9F5796 /* Rule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rule.swift; sourceTree = "<group>"; };
+		7C117E312EF03D9E3DCE497C /* CloudRuleBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudRuleBridge.swift; sourceTree = "<group>"; };
+		7EF8656C65902DAF66EA3056 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		7FF66AA5ADD1F7CCF0D135E2 /* LockdownStatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockdownStatusBadge.swift; sourceTree = "<group>"; };
+		83DB865BB00ED41424754560 /* MacFilterActivationSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterActivationSafety.swift; sourceTree = "<group>"; };
+		83E9FD319C72FA305BCB5021 /* HoldfastTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = HoldfastTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		85C15F270485EE32A975CD0D /* BlockStatusCalendarLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockStatusCalendarLayout.swift; sourceTree = "<group>"; };
+		88E2C1D8E0B1480261DF8406 /* RuleSchedulerShieldSweep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleSchedulerShieldSweep.swift; sourceTree = "<group>"; };
+		8935C05CE3B5EF7CAAC8FBE8 /* BlockingSchedulePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockingSchedulePreview.swift; sourceTree = "<group>"; };
+		896866D30EEB8675467D74F3 /* LockdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockdownView.swift; sourceTree = "<group>"; };
+		897495821663F1069B0D3CFA /* CloudLockdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudLockdown.swift; sourceTree = "<group>"; };
+		8B0072570AF0A6DDFE0FFC07 /* RuleRestrictionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleRestrictionTests.swift; sourceTree = "<group>"; };
+		8C30E25725E064BD5266AB77 /* DesktopNetworkExtensionRemovalAuthorizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopNetworkExtensionRemovalAuthorizationTests.swift; sourceTree = "<group>"; };
+		8C5DB7F2DA5314B64F3E263F /* MacFilterActivationAuthorization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterActivationAuthorization.swift; sourceTree = "<group>"; };
+		8C81C99133339FE2257AC1D7 /* CloudBlockingTargets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBlockingTargets.swift; sourceTree = "<group>"; };
+		92D5B57F05C4940E1F13422B /* LockdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockdownTests.swift; sourceTree = "<group>"; };
+		9322B2F633E5C99F18363A5B /* MacFilterStartupWatchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterStartupWatchdog.swift; sourceTree = "<group>"; };
+		93D35F96A5E8C07829D47388 /* DesktopRemovalAuthorizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopRemovalAuthorizationTests.swift; sourceTree = "<group>"; };
+		96DF37FC054BAD27104341C1 /* CloudLockdownExitPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudLockdownExitPolicy.swift; sourceTree = "<group>"; };
+		975039DDA6C7FA535D205D32 /* HoldfastDiagnosticDocumentSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldfastDiagnosticDocumentSections.swift; sourceTree = "<group>"; };
+		9B65BCFEC6765E7AF07BAF63 /* HoldfastWorkspaceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldfastWorkspaceUITests.swift; sourceTree = "<group>"; };
+		9BF6A031D8BECCBEBE27A01E /* MacContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacContentView.swift; sourceTree = "<group>"; };
+		9CC874C39B6FB0FCCAE13216 /* HoldfastUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = HoldfastUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A4ABC8FA5B802FFD46E2EA1F /* CloudPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudPreferencesTests.swift; sourceTree = "<group>"; };
+		A6E1DE27C4BF4A0802CE79BD /* BlockPageHostPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockPageHostPolicy.swift; sourceTree = "<group>"; };
+		A9FF2B5604988862006C8BAB /* MacTemporaryPauseStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacTemporaryPauseStore.swift; sourceTree = "<group>"; };
+		ABA9A39D47EDA933D92935BB /* MacFilterSameBootResetSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterSameBootResetSafety.swift; sourceTree = "<group>"; };
+		AE28CDF845971515661D9A18 /* IOSDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSDiagnosticsView.swift; sourceTree = "<group>"; };
+		AFDD0AD77C81F90FA9645FB3 /* MacFilterPreferenceTimeoutSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterPreferenceTimeoutSafety.swift; sourceTree = "<group>"; };
+		B33F366441C2E592E9FC2C69 /* CloudPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudPreferences.swift; sourceTree = "<group>"; };
+		B4E1E56BD996662B42013EAE /* MacBlockingTargetsEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacBlockingTargetsEditor.swift; sourceTree = "<group>"; };
+		B89EBDF2F4104C994074B1AC /* MacTemporaryPauseStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacTemporaryPauseStoreTests.swift; sourceTree = "<group>"; };
+		B996FB98981A20B80949A3BB /* CloudLockdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudLockdownTests.swift; sourceTree = "<group>"; };
+		BA96FBD0DDF34755042BAD6E /* MacWebFilterProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacWebFilterProvider.swift; sourceTree = "<group>"; };
+		BBC90C613841A07C589331E8 /* MacConfirmationPassageLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacConfirmationPassageLayoutTests.swift; sourceTree = "<group>"; };
+		BCCE65D383120D17100EE40F /* MacPassageInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPassageInput.swift; sourceTree = "<group>"; };
+		BFE5960EA8F55B5C0416B4E8 /* ActivityGroupSelectionPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityGroupSelectionPersistence.swift; sourceTree = "<group>"; };
+		C296B3A4519719D64503D389 /* DesktopEnforcementPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopEnforcementPolicyTests.swift; sourceTree = "<group>"; };
+		C3BEC46F1B05F95CF1510540 /* MacWorkspaceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacWorkspaceViews.swift; sourceTree = "<group>"; };
+		C69E411B509A36EDBAEFD2F4 /* MacFilterLateEnableQuarantineSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterLateEnableQuarantineSafetyTests.swift; sourceTree = "<group>"; };
+		C6C7B20861A1310FCC5C7C9E /* HoldfastMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HoldfastMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C6EB54EDADF74B88B494757C /* BypassHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BypassHistory.swift; sourceTree = "<group>"; };
+		CB77B155F9D35C52D1ED6A2D /* WebFilterDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFilterDiagnostics.swift; sourceTree = "<group>"; };
+		CBAD710A4223D995BF2321E0 /* AllowanceSchedulePainterCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllowanceSchedulePainterCodec.swift; sourceTree = "<group>"; };
+		CE7210530389250FE6F592C9 /* MacBlockStatusTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacBlockStatusTimeline.swift; sourceTree = "<group>"; };
+		CF6B7241F25B6E951C3F073A /* ShieldActionExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShieldActionExtension.swift; sourceTree = "<group>"; };
+		CFEC0BFE15FC1E436FA634CC /* MacFilterActivationSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterActivationSafetyTests.swift; sourceTree = "<group>"; };
+		D62BFF7A7A1C8E2A148E8ED1 /* BlockPageTypingGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockPageTypingGuard.swift; sourceTree = "<group>"; };
+		D78DFD53E23285E2D0229B9A /* MacRuleEditUnlockSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacRuleEditUnlockSheet.swift; sourceTree = "<group>"; };
+		D7FEADC34D95768A25A2A5E0 /* MacAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacAppModel.swift; sourceTree = "<group>"; };
+		D86DE061491C40E4219571DA /* FilterStatusPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterStatusPublisher.swift; sourceTree = "<group>"; };
+		D8B62CF5610156155935D0DA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		D8C18D145652DB881EF6D7CA /* BlockStatusCalendarLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockStatusCalendarLayoutTests.swift; sourceTree = "<group>"; };
+		DF1B605D7CF710A729C33DD7 /* DesktopEnforcementPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopEnforcementPolicy.swift; sourceTree = "<group>"; };
+		E07F24204374587F47E2BF20 /* DesktopRemovalAuthorization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopRemovalAuthorization.swift; sourceTree = "<group>"; };
+		E42A80EB0CFDD94CDEBC9100 /* TimeWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeWindowTests.swift; sourceTree = "<group>"; };
+		E453F2F15843170DBFDF0B45 /* FilterEnforcementStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterEnforcementStatus.swift; sourceTree = "<group>"; };
+		E6C09F91D9639B05CB2F2E25 /* MacFilterSmokeTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterSmokeTest.swift; sourceTree = "<group>"; };
+		E8340D1F92468F26DA4969C4 /* MacDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacDesignSystem.swift; sourceTree = "<group>"; };
+		E856FF9A1818DCD09E9584C6 /* MacWorkspaceLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacWorkspaceLayoutTests.swift; sourceTree = "<group>"; };
+		E969142D25A82AEDC6BA4EF9 /* DesktopRuleEditUnlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopRuleEditUnlock.swift; sourceTree = "<group>"; };
+		E9DB7BAD220260C893DC7304 /* MacEnforcementSafetyStateReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacEnforcementSafetyStateReporter.swift; sourceTree = "<group>"; };
+		ED488514D1D5216072FBA266 /* WebFilterFailOpenGovernor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFilterFailOpenGovernor.swift; sourceTree = "<group>"; };
+		EE95B69C6281E3301F64987E /* DesktopTemporaryPausePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopTemporaryPausePolicy.swift; sourceTree = "<group>"; };
+		F0602362F348AA5A4A535AB3 /* MacBlockingGroupEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacBlockingGroupEditor.swift; sourceTree = "<group>"; };
+		F0C5ED3F5AA6CC840731E8F3 /* MacFilterSameBootResetSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterSameBootResetSafetyTests.swift; sourceTree = "<group>"; };
+		F0DE6D111691CB4B11596CC7 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		F18E10F714C4852706B34520 /* TemporaryAccessExplanation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemporaryAccessExplanation.swift; sourceTree = "<group>"; };
+		F229F892462061C835E14140 /* WebFilterOutageRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFilterOutageRegressionTests.swift; sourceTree = "<group>"; };
+		F3834FED69E9403B73782078 /* HoldfastDiagnosticReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldfastDiagnosticReportTests.swift; sourceTree = "<group>"; };
+		F446292A6E9FF30D8A3D0EB0 /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
+		F55EAA2A3610FFEF954A8030 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F55EE382D8D69F8109344034 /* MacTemporaryPauseSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacTemporaryPauseSheet.swift; sourceTree = "<group>"; };
+		FCD453C3B8E6AAEA8ABFDC37 /* IOSPassageInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSPassageInput.swift; sourceTree = "<group>"; };
+		FFC232291EA6E5BB000C8F16 /* ShieldConfigurationExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShieldConfigurationExtension.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		61D415348D6639A36B62AC39 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				110D8FBE3CA8E43CBD5CDCA1 /* NetworkExtension.framework in Frameworks */,
+				57530742DEDE582451F9CC42 /* SystemExtensions.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8E815E4036F6C4D6C49EFB9D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				570E0362D9FDED623F7B3D9B /* NetworkExtension.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		10DB7ACB8D7D149B382927BD /* CloudShared */ = {
+			isa = PBXGroup;
+			children = (
+				CBAD710A4223D995BF2321E0 /* AllowanceSchedulePainterCodec.swift */,
+				8935C05CE3B5EF7CAAC8FBE8 /* BlockingSchedulePreview.swift */,
+				85C15F270485EE32A975CD0D /* BlockStatusCalendarLayout.swift */,
+				C6EB54EDADF74B88B494757C /* BypassHistory.swift */,
+				8C81C99133339FE2257AC1D7 /* CloudBlockingTargets.swift */,
+				897495821663F1069B0D3CFA /* CloudLockdown.swift */,
+				96DF37FC054BAD27104341C1 /* CloudLockdownExitPolicy.swift */,
+				B33F366441C2E592E9FC2C69 /* CloudPreferences.swift */,
+				975039DDA6C7FA535D205D32 /* HoldfastDiagnosticDocumentSections.swift */,
+				7B3291F0759C57985A53C772 /* HoldfastDiagnosticReport.swift */,
+				646CE204FB7377F36F9D7AAC /* HoldfastEnforcementIdentities.swift */,
+				6D1C2A6AA76370EFE2289692 /* HoldfastIconVariant.swift */,
+				328F517375DE7456A3AB9DE0 /* HoldfastPresentation.swift */,
+				F18E10F714C4852706B34520 /* TemporaryAccessExplanation.swift */,
+				55B989BA56C920ED89839565 /* TemporaryAllowanceBackoff.swift */,
+			);
+			path = CloudShared;
+			sourceTree = "<group>";
+		};
+		224A29BFF7626D9AA3E30A59 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				BFE5960EA8F55B5C0416B4E8 /* ActivityGroupSelectionPersistence.swift */,
+				F0DE6D111691CB4B11596CC7 /* AppModel.swift */,
+				62C3A25E3DCDE76839301502 /* AppModelDiagnostics.swift */,
+				F55EAA2A3610FFEF954A8030 /* Assets.xcassets */,
+				7A2182B9355A97D1BECB1B61 /* BlockingGroupSelectionPersistence.swift */,
+				7C117E312EF03D9E3DCE497C /* CloudRuleBridge.swift */,
+				3BC863F87F2534F035F65A92 /* ContentView.swift */,
+				127AFA821477A7646EBC8377 /* DomainClassifier.swift */,
+				5B1AE5565970A227456C059B /* HoldfastApp.swift */,
+				5E537CEF1CBAC374E2926898 /* IOSArchitectureEditors.swift */,
+				71F47A94730E1560DFC17A7C /* IOSBlockingTargetsEditor.swift */,
+				5F313699EABA7B87C745DFF8 /* IOSBlockStatusTimeline.swift */,
+				1B8CC483CFC4BD68A3225291 /* IOSDesignSystem.swift */,
+				153C09838B70D12CD83696DA /* IOSDiagnosticsReport.swift */,
+				AE28CDF845971515661D9A18 /* IOSDiagnosticsView.swift */,
+				29CB87020C3FEA9A0DFD28EA /* IOSDynamicAppIcon.swift */,
+				FCD453C3B8E6AAEA8ABFDC37 /* IOSPassageInput.swift */,
+				36728D4C85538C30B05DF001 /* IOSTimedLockdownView.swift */,
+				35711296F88BC3232F6251D8 /* IOSWorkspaceViews.swift */,
+				896866D30EEB8675467D74F3 /* LockdownView.swift */,
+				05C24F778CE5DC18C04661B4 /* RuleEditorView.swift */,
+				88E2C1D8E0B1480261DF8406 /* RuleSchedulerShieldSweep.swift */,
+				578DA29731ACA3FCF3830F01 /* TemporaryAccessRequestView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		269B3F814152FA3763966610 /* ShieldActionExtension */ = {
+			isa = PBXGroup;
+			children = (
+				CF6B7241F25B6E951C3F073A /* ShieldActionExtension.swift */,
+			);
+			path = ShieldActionExtension;
+			sourceTree = "<group>";
+		};
+		2B46A0CD04682FBBBD9F9021 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				9B65BCFEC6765E7AF07BAF63 /* HoldfastWorkspaceUITests.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		472E6D8C4A173916A16558FB = {
+			isa = PBXGroup;
+			children = (
+				5D4FAD8E9572D5FAB1DF4C60 /* Sources */,
+				920AD2CF76380184E6C6669C /* Tests */,
+				82370A354B34E3ABEA5481A2 /* Frameworks */,
+				C57A51C8A94658B93C1647B5 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		4F929FA52D0E28BD8615D7A4 /* MacApp */ = {
+			isa = PBXGroup;
+			children = (
+				D8B62CF5610156155935D0DA /* Assets.xcassets */,
+				E969142D25A82AEDC6BA4EF9 /* DesktopRuleEditUnlock.swift */,
+				307921A6167196A6B9E898CE /* HoldfastMacApp.swift */,
+				1C50A9E9D6E1FD48E0B5CCEA /* MacActivityGroupEditor.swift */,
+				D7FEADC34D95768A25A2A5E0 /* MacAppModel.swift */,
+				F0602362F348AA5A4A535AB3 /* MacBlockingGroupEditor.swift */,
+				B4E1E56BD996662B42013EAE /* MacBlockingTargetsEditor.swift */,
+				CE7210530389250FE6F592C9 /* MacBlockStatusTimeline.swift */,
+				78657C1D3FDCD0CB58FEBDC5 /* MacConfirmationPassageView.swift */,
+				9BF6A031D8BECCBEBE27A01E /* MacContentView.swift */,
+				E8340D1F92468F26DA4969C4 /* MacDesignSystem.swift */,
+				3BD8D95FDCDCB5E6F4297D84 /* MacDiagnosticsReport.swift */,
+				0E463C9C90C532EF807CDF60 /* MacDiagnosticsSheet.swift */,
+				733CD983DBE340E3EEDC6834 /* MacDynamicAppIcon.swift */,
+				1EF688022B715ED76C718E27 /* MacEnforcementController.swift */,
+				E9DB7BAD220260C893DC7304 /* MacEnforcementSafetyStateReporter.swift */,
+				59F948D7D4DC8ED8C378EF22 /* MacLockdownStatusView.swift */,
+				BCCE65D383120D17100EE40F /* MacPassageInput.swift */,
+				D78DFD53E23285E2D0229B9A /* MacRuleEditUnlockSheet.swift */,
+				F55EE382D8D69F8109344034 /* MacTemporaryPauseSheet.swift */,
+				A9FF2B5604988862006C8BAB /* MacTemporaryPauseStore.swift */,
+				C3BEC46F1B05F95CF1510540 /* MacWorkspaceViews.swift */,
+			);
+			path = MacApp;
+			sourceTree = "<group>";
+		};
+		56CAC5425BE24913525B5586 /* MacWebFilterExtension */ = {
+			isa = PBXGroup;
+			children = (
+				39EE776AAFC749B27E497146 /* FilterProbe.swift */,
+				D86DE061491C40E4219571DA /* FilterStatusPublisher.swift */,
+				2D73837FE3753577BD3C2301 /* FlowSourceResolver.swift */,
+				BA96FBD0DDF34755042BAD6E /* MacWebFilterProvider.swift */,
+				150F0C654E9B712143CFEC45 /* main.swift */,
+			);
+			path = MacWebFilterExtension;
+			sourceTree = "<group>";
+		};
+		5BA496EC243590AB0CAFDF71 /* BlockPageShared */ = {
+			isa = PBXGroup;
+			children = (
+				A6E1DE27C4BF4A0802CE79BD /* BlockPageHostPolicy.swift */,
+				73F1DB22D5DC44A31AC1C946 /* BlockPageHTTP.swift */,
+				45B7668D8A9F7DA567C21426 /* BlockPagePauseChallenge.swift */,
+				010841574DCAF624068064DB /* BlockPageRenderer.swift */,
+				697C0AA5E42A655A2CB38E54 /* BlockPageTemporaryPause.swift */,
+				D62BFF7A7A1C8E2A148E8ED1 /* BlockPageTypingGuard.swift */,
+			);
+			path = BlockPageShared;
+			sourceTree = "<group>";
+		};
+		5D4FAD8E9572D5FAB1DF4C60 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				224A29BFF7626D9AA3E30A59 /* App */,
+				F29DF46DEBCC5288DD3B88E9 /* BlockPageServer */,
+				5BA496EC243590AB0CAFDF71 /* BlockPageShared */,
+				10DB7ACB8D7D149B382927BD /* CloudShared */,
+				61932BADAAD85C4061DFE0C8 /* DesktopShared */,
+				4F929FA52D0E28BD8615D7A4 /* MacApp */,
+				56CAC5425BE24913525B5586 /* MacWebFilterExtension */,
+				AD42A3B1898EFE9591B0D7A7 /* MonitorExtension */,
+				BFE0F0B7B7E3FE7925DBB661 /* PresentationShared */,
+				744F2CD7DC452371BC516632 /* Shared */,
+				269B3F814152FA3763966610 /* ShieldActionExtension */,
+				D7D8F09B56474F92FAD784E3 /* ShieldConfigurationExtension */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		61932BADAAD85C4061DFE0C8 /* DesktopShared */ = {
+			isa = PBXGroup;
+			children = (
+				35BDC244138FD57E70BD37D2 /* AllowanceSchedulePainter.swift */,
+				093ADF44E328299D2B2A5253 /* BlockedEndpointCorrelationCache.swift */,
+				5242EC0004666041A9C624A5 /* DesktopBlockingDisableAuthorization.swift */,
+				7A75C8583D5246629686639B /* DesktopDiagnosticTrace.swift */,
+				DF1B605D7CF710A729C33DD7 /* DesktopEnforcementPolicy.swift */,
+				417299D70A1258BEE245F121 /* DesktopLockdownSession.swift */,
+				4ADD3F61807F74CEDD039514 /* DesktopNetworkExtensionRemovalAuthorization.swift */,
+				E07F24204374587F47E2BF20 /* DesktopRemovalAuthorization.swift */,
+				EE95B69C6281E3301F64987E /* DesktopTemporaryPausePolicy.swift */,
+				E453F2F15843170DBFDF0B45 /* FilterEnforcementStatus.swift */,
+				60237A9BF0CE16FA454D77A7 /* MacEnforcementSafetyPersistence.swift */,
+				8C5DB7F2DA5314B64F3E263F /* MacFilterActivationAuthorization.swift */,
+				83DB865BB00ED41424754560 /* MacFilterActivationSafety.swift */,
+				529CA96CC53BBC880A3C3D63 /* MacFilterInterceptionPlan.swift */,
+				08721EB373A808827A773915 /* MacFilterLateEnableQuarantineSafety.swift */,
+				AFDD0AD77C81F90FA9645FB3 /* MacFilterPreferenceTimeoutSafety.swift */,
+				4C9648E40884A10BCE8012DE /* MacFilterPreparedRetryGuards.swift */,
+				ABA9A39D47EDA933D92935BB /* MacFilterSameBootResetSafety.swift */,
+				3A9EAF29AC65DF900052AF50 /* MacFilterSettingsLifecycle.swift */,
+				E6C09F91D9639B05CB2F2E25 /* MacFilterSmokeTest.swift */,
+				9322B2F633E5C99F18363A5B /* MacFilterStartupWatchdog.swift */,
+				599A8BD8BCFAFF1480192297 /* NetworkHostnameInspector.swift */,
+				518B38A6C09A07E4D42BE53D /* NetworkPacketInspector.swift */,
+				CB77B155F9D35C52D1ED6A2D /* WebFilterDiagnostics.swift */,
+				ED488514D1D5216072FBA266 /* WebFilterFailOpenGovernor.swift */,
+				3F55F53AE7D6F9AB6CAAB8FB /* WebFilterFlowDecider.swift */,
+				54B9C470331100D9E5269095 /* WebFilterStreamingInspection.swift */,
+			);
+			path = DesktopShared;
+			sourceTree = "<group>";
+		};
+		744F2CD7DC452371BC516632 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				14C26048F309D2ADC68A9E9B /* ActivityMonitorCapacityPlan.swift */,
+				791FF77BA0006CB01DFE277A /* EnforcementEngine.swift */,
+				4F2CCC327D6A8E31870B7CFD /* Lockdown.swift */,
+				7BEBBF3F78368D749A9F5796 /* Rule.swift */,
+				4B52F84BA68A56CE58C652F4 /* RuleRestrictionEvaluator.swift */,
+				4873134BEEA102AD6B0E26DA /* RuleScheduler.swift */,
+				066F156AD5B75D2110D2BAFE /* SharedConfiguration.swift */,
+				2828B88C7E1419933B9F1CD6 /* ShieldTemporaryAccess.swift */,
+				629A0A0C544392A8270D0D24 /* TimedLockdownSession.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		82370A354B34E3ABEA5481A2 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F446292A6E9FF30D8A3D0EB0 /* NetworkExtension.framework */,
+				22BC29AE24EC93BA0D438503 /* SystemExtensions.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		920AD2CF76380184E6C6669C /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				1343E1BE5D484011261E90AD /* ActivityMonitorCapacityPlanTests.swift */,
+				4C5FE44F9D3CEC70B95FF107 /* AllowanceSchedulePainterTests.swift */,
+				0B6C72CAC68A3D62F209418B /* BlockingSchedulePreviewTests.swift */,
+				1479AFDC71CF044C265AEAC3 /* BlockPageRendererTests.swift */,
+				D8C18D145652DB881EF6D7CA /* BlockStatusCalendarLayoutTests.swift */,
+				07F5D1279C1E25C75ACB2074 /* BypassHistoryTests.swift */,
+				B996FB98981A20B80949A3BB /* CloudLockdownTests.swift */,
+				A4ABC8FA5B802FFD46E2EA1F /* CloudPreferencesTests.swift */,
+				3E6B9300078732CE2FCF05CC /* DesktopDiagnosticTraceTests.swift */,
+				C296B3A4519719D64503D389 /* DesktopEnforcementPolicyTests.swift */,
+				0C06AE1B06D5577C87FB90A7 /* DesktopLockdownSessionTests.swift */,
+				8C30E25725E064BD5266AB77 /* DesktopNetworkExtensionRemovalAuthorizationTests.swift */,
+				93D35F96A5E8C07829D47388 /* DesktopRemovalAuthorizationTests.swift */,
+				0A7E0DBE7576F5B9225B45BB /* FilterEnforcementStatusTests.swift */,
+				5409B7CC26DB804DB2AAF9F2 /* HoldfastDiagnosticDocumentSectionsTests.swift */,
+				F3834FED69E9403B73782078 /* HoldfastDiagnosticReportTests.swift */,
+				08273F0D99AA0843E451A081 /* HoldfastEnforcementIdentitiesTests.swift */,
+				605F722019D205398698068F /* HoldfastIconVariantTests.swift */,
+				76B6504123116B42268A8E95 /* IOSPassageInputTests.swift */,
+				92D5B57F05C4940E1F13422B /* LockdownTests.swift */,
+				BBC90C613841A07C589331E8 /* MacConfirmationPassageLayoutTests.swift */,
+				440147D4CDE23217284EBC48 /* MacEnforcementSafetyPersistenceTests.swift */,
+				61F5FE9B1A277533E7B62387 /* MacFilterActivationAuthorizationTests.swift */,
+				CFEC0BFE15FC1E436FA634CC /* MacFilterActivationSafetyTests.swift */,
+				C69E411B509A36EDBAEFD2F4 /* MacFilterLateEnableQuarantineSafetyTests.swift */,
+				02A4BB8517C1119FC9D11A76 /* MacFilterPreferenceTimeoutSafetyTests.swift */,
+				4422FEB5D847A24017688156 /* MacFilterPreparedRetryGuardsTests.swift */,
+				F0C5ED3F5AA6CC840731E8F3 /* MacFilterSameBootResetSafetyTests.swift */,
+				3131DF21F66D17979ED93FE6 /* MacFilterStartupWatchdogTests.swift */,
+				B89EBDF2F4104C994074B1AC /* MacTemporaryPauseStoreTests.swift */,
+				E856FF9A1818DCD09E9584C6 /* MacWorkspaceLayoutTests.swift */,
+				8B0072570AF0A6DDFE0FFC07 /* RuleRestrictionTests.swift */,
+				7B592B7D2B74DBDE0BF700B5 /* RuleSchedulerTests.swift */,
+				5CB65C74DC1554FDF3C91F95 /* TemporaryAllowanceBackoffTests.swift */,
+				2297B4ED7CDD06436B502718 /* TimedLockdownSessionTests.swift */,
+				E42A80EB0CFDD94CDEBC9100 /* TimeWindowTests.swift */,
+				2A467A39815F8200E2EA5452 /* WebFilterFlowDeciderTests.swift */,
+				F229F892462061C835E14140 /* WebFilterOutageRegressionTests.swift */,
+				2B46A0CD04682FBBBD9F9021 /* UI */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		AD42A3B1898EFE9591B0D7A7 /* MonitorExtension */ = {
+			isa = PBXGroup;
+			children = (
+				330624EEDB195EBC1F532740 /* DeviceActivityMonitorExtension.swift */,
+			);
+			path = MonitorExtension;
+			sourceTree = "<group>";
+		};
+		BFE0F0B7B7E3FE7925DBB661 /* PresentationShared */ = {
+			isa = PBXGroup;
+			children = (
+				56A4A1DA9F65AE0A2B517B34 /* BlockingSchedulePreviewView.swift */,
+				5C98F502BAA97413981B7AFD /* BypassActivityView.swift */,
+				7FF66AA5ADD1F7CCF0D135E2 /* LockdownStatusBadge.swift */,
+				3FB8AD43163ADB6E8538601C /* TemporaryAllowanceBackoffEditor.swift */,
+				4D9F6ACA43526F8683CE1BA1 /* TemporaryAllowanceStatusView.swift */,
+			);
+			path = PresentationShared;
+			sourceTree = "<group>";
+		};
+		C57A51C8A94658B93C1647B5 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				33F1A90D8B51E7822B220D50 /* ActivityMonitorExtension.appex */,
+				0875ABDEDACDD84C13F9DF82 /* BlockPageServer */,
+				57F296DABADE49BDD18D8DAC /* DesktopEnforcementTests.xctest */,
+				0F96CB3499A4A90BE3C9B39F /* Holdfast.app */,
+				C6C7B20861A1310FCC5C7C9E /* HoldfastMac.app */,
+				83E9FD319C72FA305BCB5021 /* HoldfastTests.xctest */,
+				9CC874C39B6FB0FCCAE13216 /* HoldfastUITests.xctest */,
+				084D0718CD6310B73BDE78EB /* MacWebFilterExtension.systemextension */,
+				0AF562FE1BBD0B2A796D1C3C /* ShieldActionExtension.appex */,
+				66BD3B878A1B883BB16CE97D /* ShieldConfigurationExtension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D7D8F09B56474F92FAD784E3 /* ShieldConfigurationExtension */ = {
+			isa = PBXGroup;
+			children = (
+				FFC232291EA6E5BB000C8F16 /* ShieldConfigurationExtension.swift */,
+			);
+			path = ShieldConfigurationExtension;
+			sourceTree = "<group>";
+		};
+		F29DF46DEBCC5288DD3B88E9 /* BlockPageServer */ = {
+			isa = PBXGroup;
+			children = (
+				7EF8656C65902DAF66EA3056 /* main.swift */,
+			);
+			path = BlockPageServer;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		051BEC78B0612AEB6D946373 /* HoldfastMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8E92514CA379885F319B21AB /* Build configuration list for PBXNativeTarget "HoldfastMac" */;
+			buildPhases = (
+				089687F57997A5A7186E3583 /* Sources */,
+				582E4120955F7BA09F9C222D /* Resources */,
+				61D415348D6639A36B62AC39 /* Frameworks */,
+				F3FB95C8747714FC7396E1A5 /* Embed System Extensions */,
+				4B1F7634B6F6737BA2546887 /* Embed block page server */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				98FEA462084F18F6EE041E5A /* PBXTargetDependency */,
+				40E14380D94FEF864716BF44 /* PBXTargetDependency */,
+			);
+			name = HoldfastMac;
+			packageProductDependencies = (
+			);
+			productName = HoldfastMac;
+			productReference = C6C7B20861A1310FCC5C7C9E /* HoldfastMac.app */;
+			productType = "com.apple.product-type.application";
+		};
+		2846B313DD4E8835FBE78101 /* Holdfast */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3F044E5816BC9E20B181FAFA /* Build configuration list for PBXNativeTarget "Holdfast" */;
+			buildPhases = (
+				8E74194E8E54A8F486EDD058 /* Sources */,
+				76E2377B7F5186C691FB37FA /* Resources */,
+				66DEA9E88C12CFDD8970BEE5 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				503D18FAE5D1E72DF9803143 /* PBXTargetDependency */,
+				62FD5889B7FE5584CFB4255A /* PBXTargetDependency */,
+				A1A352D3F6F42DCCD142A197 /* PBXTargetDependency */,
+			);
+			name = Holdfast;
+			packageProductDependencies = (
+			);
+			productName = Holdfast;
+			productReference = 0F96CB3499A4A90BE3C9B39F /* Holdfast.app */;
+			productType = "com.apple.product-type.application";
+		};
+		5E8703FE43330549C9660AE2 /* BlockPageServer */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 20F28617AB2C78913802FB27 /* Build configuration list for PBXNativeTarget "BlockPageServer" */;
+			buildPhases = (
+				CDC9EC4CA23EFCF493B730E5 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BlockPageServer;
+			packageProductDependencies = (
+			);
+			productName = BlockPageServer;
+			productReference = 0875ABDEDACDD84C13F9DF82 /* BlockPageServer */;
+			productType = "com.apple.product-type.tool";
+		};
+		728B94A799CA1A89401D6F5E /* ShieldActionExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 790F32F805DB8EF40B378683 /* Build configuration list for PBXNativeTarget "ShieldActionExtension" */;
+			buildPhases = (
+				542467D7B7F333B1EDCC22C1 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ShieldActionExtension;
+			packageProductDependencies = (
+			);
+			productName = ShieldActionExtension;
+			productReference = 0AF562FE1BBD0B2A796D1C3C /* ShieldActionExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		93AC6D74C36F3726C3911EFE /* ShieldConfigurationExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EE1F4E490CCD10759603F206 /* Build configuration list for PBXNativeTarget "ShieldConfigurationExtension" */;
+			buildPhases = (
+				D8EB1F4EB63DFDFC4D409262 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ShieldConfigurationExtension;
+			packageProductDependencies = (
+			);
+			productName = ShieldConfigurationExtension;
+			productReference = 66BD3B878A1B883BB16CE97D /* ShieldConfigurationExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		B2AB1AA10EF13F5498693F12 /* HoldfastTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B1385C30C0FF1BB3854851B3 /* Build configuration list for PBXNativeTarget "HoldfastTests" */;
+			buildPhases = (
+				B6927BCAB8DFD15C1FBDB000 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0B6CE4A18803BD647A52344D /* PBXTargetDependency */,
+			);
+			name = HoldfastTests;
+			packageProductDependencies = (
+			);
+			productName = HoldfastTests;
+			productReference = 83E9FD319C72FA305BCB5021 /* HoldfastTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		BB21DAB90DBA7763316B8A38 /* ActivityMonitorExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 65AEBC29E7EF9185305B3B00 /* Build configuration list for PBXNativeTarget "ActivityMonitorExtension" */;
+			buildPhases = (
+				5E60F8B5257547CC24A4C600 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ActivityMonitorExtension;
+			packageProductDependencies = (
+			);
+			productName = ActivityMonitorExtension;
+			productReference = 33F1A90D8B51E7822B220D50 /* ActivityMonitorExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		C8446E91BCB097AEA3796238 /* MacWebFilterExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2784A1A24F420DF327E62289 /* Build configuration list for PBXNativeTarget "MacWebFilterExtension" */;
+			buildPhases = (
+				33607AAF601689B6E2101D85 /* Sources */,
+				8E815E4036F6C4D6C49EFB9D /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MacWebFilterExtension;
+			packageProductDependencies = (
+			);
+			productName = MacWebFilterExtension;
+			productReference = 084D0718CD6310B73BDE78EB /* MacWebFilterExtension.systemextension */;
+			productType = "com.apple.product-type.system-extension";
+		};
+		DD48AE32FF7F5ABC60784BE5 /* HoldfastUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D3D9FB4EC1AD49A2CD4C657B /* Build configuration list for PBXNativeTarget "HoldfastUITests" */;
+			buildPhases = (
+				21A0993544ECCB9D4B620665 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				CC875BAF890C343BE02BD4CF /* PBXTargetDependency */,
+			);
+			name = HoldfastUITests;
+			packageProductDependencies = (
+			);
+			productName = HoldfastUITests;
+			productReference = 9CC874C39B6FB0FCCAE13216 /* HoldfastUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		DFD0A5902E91AA5D57079CE5 /* DesktopEnforcementTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C391ECB690185078B2478524 /* Build configuration list for PBXNativeTarget "DesktopEnforcementTests" */;
+			buildPhases = (
+				7EBA543D98C78664A9F68406 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DesktopEnforcementTests;
+			packageProductDependencies = (
+			);
+			productName = DesktopEnforcementTests;
+			productReference = 57F296DABADE49BDD18D8DAC /* DesktopEnforcementTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		35ADC9A49FC1FC68CD941FA5 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					051BEC78B0612AEB6D946373 = {
+						DevelopmentTeam = 7GXNZJMGPD;
+						ProvisioningStyle = Automatic;
+					};
+					2846B313DD4E8835FBE78101 = {
+						DevelopmentTeam = 7GXNZJMGPD;
+						ProvisioningStyle = Automatic;
+					};
+					5E8703FE43330549C9660AE2 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
+					728B94A799CA1A89401D6F5E = {
+						DevelopmentTeam = 7GXNZJMGPD;
+						ProvisioningStyle = Automatic;
+					};
+					93AC6D74C36F3726C3911EFE = {
+						DevelopmentTeam = 7GXNZJMGPD;
+						ProvisioningStyle = Automatic;
+					};
+					B2AB1AA10EF13F5498693F12 = {
+						DevelopmentTeam = 7GXNZJMGPD;
+						ProvisioningStyle = Automatic;
+					};
+					BB21DAB90DBA7763316B8A38 = {
+						DevelopmentTeam = 7GXNZJMGPD;
+						ProvisioningStyle = Automatic;
+					};
+					C8446E91BCB097AEA3796238 = {
+						DevelopmentTeam = 7GXNZJMGPD;
+						ProvisioningStyle = Automatic;
+					};
+					DD48AE32FF7F5ABC60784BE5 = {
+						DevelopmentTeam = 7GXNZJMGPD;
+						ProvisioningStyle = Automatic;
+						TestTargetID = 2846B313DD4E8835FBE78101;
+					};
+					DFD0A5902E91AA5D57079CE5 = {
+						DevelopmentTeam = 7GXNZJMGPD;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = A90448B9ABCFAC622F055CB0 /* Build configuration list for PBXProject "Holdfast" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 472E6D8C4A173916A16558FB;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = C57A51C8A94658B93C1647B5 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				BB21DAB90DBA7763316B8A38 /* ActivityMonitorExtension */,
+				5E8703FE43330549C9660AE2 /* BlockPageServer */,
+				DFD0A5902E91AA5D57079CE5 /* DesktopEnforcementTests */,
+				2846B313DD4E8835FBE78101 /* Holdfast */,
+				051BEC78B0612AEB6D946373 /* HoldfastMac */,
+				B2AB1AA10EF13F5498693F12 /* HoldfastTests */,
+				DD48AE32FF7F5ABC60784BE5 /* HoldfastUITests */,
+				C8446E91BCB097AEA3796238 /* MacWebFilterExtension */,
+				728B94A799CA1A89401D6F5E /* ShieldActionExtension */,
+				93AC6D74C36F3726C3911EFE /* ShieldConfigurationExtension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		582E4120955F7BA09F9C222D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B784743A4423FAE88F88DACE /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		76E2377B7F5186C691FB37FA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				04E8EA7CF1573C72EF3C3907 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		4B1F7634B6F6737BA2546887 /* Embed block page server */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/BlockPageServer",
+			);
+			name = "Embed block page server";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/BlockPageServer",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "SRC=\"$BUILT_PRODUCTS_DIR/BlockPageServer\"\nDST=\"$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/BlockPageServer\"\nif [ -f \"$SRC\" ]; then cp -f \"$SRC\" \"$DST\"; fi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		089687F57997A5A7186E3583 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EDE2B08B5804279DAF43F0A5 /* AllowanceSchedulePainter.swift in Sources */,
+				489FDE477E90B162EE41F9E8 /* AllowanceSchedulePainterCodec.swift in Sources */,
+				4BCA280FC444E2656811F67A /* BlockPageHTTP.swift in Sources */,
+				4B8AEAE20B3647D84B2038AC /* BlockPageHostPolicy.swift in Sources */,
+				C8B70CE8743796895D1D72A5 /* BlockPagePauseChallenge.swift in Sources */,
+				3E54FA82E199435D218B894B /* BlockPageRenderer.swift in Sources */,
+				6271FA32C876D583DA8D055C /* BlockPageTemporaryPause.swift in Sources */,
+				A0E0DFE7E2E07FE3829912F2 /* BlockPageTypingGuard.swift in Sources */,
+				A6FD765C22B261DDD0457F04 /* BlockStatusCalendarLayout.swift in Sources */,
+				521110237223441DB32EEE7F /* BlockedEndpointCorrelationCache.swift in Sources */,
+				F4FBA3032C7E83A25F125813 /* BlockingSchedulePreview.swift in Sources */,
+				448E19EC493F7AB1DDD03BD4 /* BlockingSchedulePreviewView.swift in Sources */,
+				9E74378D05804C9DD3BBB0AD /* BypassActivityView.swift in Sources */,
+				F0943963643F8BF029BA4A14 /* BypassHistory.swift in Sources */,
+				C7120B3A41E9C0B35D7A2E17 /* CloudBlockingTargets.swift in Sources */,
+				005ECDF54F3CAE6928AF3317 /* CloudLockdown.swift in Sources */,
+				8080A869EEEADB35FF01FE66 /* CloudLockdownExitPolicy.swift in Sources */,
+				C9BE7F8C7D5F22149D5C1A64 /* CloudPreferences.swift in Sources */,
+				76E8214610D8A22FD7DE7FFF /* DesktopBlockingDisableAuthorization.swift in Sources */,
+				158398C4E3FF6E255A865F71 /* DesktopDiagnosticTrace.swift in Sources */,
+				4F35C2F8FC40865E6DA07729 /* DesktopEnforcementPolicy.swift in Sources */,
+				2BF4FF52694FD715B56AEC15 /* DesktopLockdownSession.swift in Sources */,
+				0193A150CFB6809248B15593 /* DesktopNetworkExtensionRemovalAuthorization.swift in Sources */,
+				5DA95F683E8C2FD810FDB48A /* DesktopRemovalAuthorization.swift in Sources */,
+				FC39F5C17DCF659356B91434 /* DesktopRuleEditUnlock.swift in Sources */,
+				A48DB9ADF1DF264DB1F821CB /* DesktopTemporaryPausePolicy.swift in Sources */,
+				41901DDCBAA182E398A5E209 /* FilterEnforcementStatus.swift in Sources */,
+				F172B21EDA6B5CD7DB7D73BA /* HoldfastDiagnosticDocumentSections.swift in Sources */,
+				1E623706DB5C52B1AC5DE279 /* HoldfastDiagnosticReport.swift in Sources */,
+				BFCF911C890ACF03A523EE9F /* HoldfastEnforcementIdentities.swift in Sources */,
+				9040E431508B20925FA08DC6 /* HoldfastIconVariant.swift in Sources */,
+				A45728C211A182B036DA0161 /* HoldfastMacApp.swift in Sources */,
+				7EC7623EEB7EC81800D04921 /* HoldfastPresentation.swift in Sources */,
+				651FD00DBF1036AA5517DA4D /* Lockdown.swift in Sources */,
+				BE88C454A4E18CB4A3BC067D /* LockdownStatusBadge.swift in Sources */,
+				8B49E806800968356776AC70 /* MacActivityGroupEditor.swift in Sources */,
+				712DF9A031B2741F249EE872 /* MacAppModel.swift in Sources */,
+				6B65D2CF88424FC3E19B486F /* MacBlockStatusTimeline.swift in Sources */,
+				B16BC7753D7C99EB061FD3EF /* MacBlockingGroupEditor.swift in Sources */,
+				D2D0B7E5C1C2A7965EB94F03 /* MacBlockingTargetsEditor.swift in Sources */,
+				C79D076E8C3C3527434FD571 /* MacConfirmationPassageView.swift in Sources */,
+				7543FF6D941F240E3376E26A /* MacContentView.swift in Sources */,
+				FA2C345C621BBF5DC079A522 /* MacDesignSystem.swift in Sources */,
+				6C2E7DE7D2FCF2C7C72D180A /* MacDiagnosticsReport.swift in Sources */,
+				FCB6832DCE7AA8E18ECDA0ED /* MacDiagnosticsSheet.swift in Sources */,
+				D5F58BE0C7013651FB5D2BAF /* MacDynamicAppIcon.swift in Sources */,
+				2752198F3D34906FB2828F4C /* MacEnforcementController.swift in Sources */,
+				EE04FD586F58163AD069660C /* MacEnforcementSafetyPersistence.swift in Sources */,
+				55CEA008723BDEB06D267720 /* MacEnforcementSafetyStateReporter.swift in Sources */,
+				ACAFE81D7D9195F88E813703 /* MacFilterActivationAuthorization.swift in Sources */,
+				0807D4ECC398DF0CFB89D030 /* MacFilterActivationSafety.swift in Sources */,
+				1B3A625730269280BE1C1306 /* MacFilterInterceptionPlan.swift in Sources */,
+				AB1BC65289EE3140F6A0A70C /* MacFilterLateEnableQuarantineSafety.swift in Sources */,
+				A497F6B1A18796159F089AD0 /* MacFilterPreferenceTimeoutSafety.swift in Sources */,
+				9105F7BBE252CE5DCFD9FC0C /* MacFilterPreparedRetryGuards.swift in Sources */,
+				8F2D408A5320B66079E00D0F /* MacFilterSameBootResetSafety.swift in Sources */,
+				04A797E5F952DAC7E8900964 /* MacFilterSettingsLifecycle.swift in Sources */,
+				EC3E83233B29CA219CBE246E /* MacFilterSmokeTest.swift in Sources */,
+				9898FCF6DDDEDA6B5FB53907 /* MacFilterStartupWatchdog.swift in Sources */,
+				AF5FB6916817A9BCDEEF9319 /* MacLockdownStatusView.swift in Sources */,
+				DFEA44224C8932BA87D40DD1 /* MacPassageInput.swift in Sources */,
+				95FE5DBB492804CB79D069FB /* MacRuleEditUnlockSheet.swift in Sources */,
+				3F1E36A513B7B6972937FD99 /* MacTemporaryPauseSheet.swift in Sources */,
+				79A3C8B2A66CB6C0E91FAD4D /* MacTemporaryPauseStore.swift in Sources */,
+				EE5EB104F9C4D9006489C5C0 /* MacWorkspaceViews.swift in Sources */,
+				BEABED4CB8710CD3DBA22D70 /* NetworkHostnameInspector.swift in Sources */,
+				F27556A5D5B1A4D6CEB7C9DC /* NetworkPacketInspector.swift in Sources */,
+				A7C7482C18CF20EDD257B6D2 /* TemporaryAccessExplanation.swift in Sources */,
+				36DD4FD8B16E03619262D48A /* TemporaryAllowanceBackoff.swift in Sources */,
+				13D1D292250B7F04010E38FC /* TemporaryAllowanceBackoffEditor.swift in Sources */,
+				67178A89131549501E049841 /* TemporaryAllowanceStatusView.swift in Sources */,
+				B5C80258E5840730631181C0 /* WebFilterDiagnostics.swift in Sources */,
+				A32FC2BC4A36BB28038E4304 /* WebFilterFailOpenGovernor.swift in Sources */,
+				87365A69C0E96AA02056641B /* WebFilterFlowDecider.swift in Sources */,
+				27FA4FDE8AD34E3F240ACCB5 /* WebFilterStreamingInspection.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		21A0993544ECCB9D4B620665 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1190A9E26F8338186764FB28 /* HoldfastWorkspaceUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		33607AAF601689B6E2101D85 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D3B1A53468CC9F81164A4D72 /* AllowanceSchedulePainter.swift in Sources */,
+				09CDDFDCBE6DCE8ACDACCFA5 /* AllowanceSchedulePainterCodec.swift in Sources */,
+				4A194C2234667DBEFEE51B62 /* BlockPageHTTP.swift in Sources */,
+				6FEC34770716C1EE340F10DD /* BlockPageHostPolicy.swift in Sources */,
+				8D48F3686F291A2B9A1E2D88 /* BlockPagePauseChallenge.swift in Sources */,
+				540528F5B7D1ADA4B5E42861 /* BlockPageRenderer.swift in Sources */,
+				E1D5350041A830BEE798223C /* BlockPageTemporaryPause.swift in Sources */,
+				9FFAD6BBD886D73F11C6A514 /* BlockPageTypingGuard.swift in Sources */,
+				C2D4820962781620F746EEEF /* BlockStatusCalendarLayout.swift in Sources */,
+				DB220E8A5E10D418B3156C40 /* BlockedEndpointCorrelationCache.swift in Sources */,
+				D7C836C4C500404EDB596A36 /* BlockingSchedulePreview.swift in Sources */,
+				E52F4E481531BD9FADCC00B1 /* BypassHistory.swift in Sources */,
+				FC09724E2C3A7378039A934B /* CloudBlockingTargets.swift in Sources */,
+				30EA39608D8299A1564AA364 /* CloudLockdown.swift in Sources */,
+				ED2DADC884A20629025F0A36 /* CloudLockdownExitPolicy.swift in Sources */,
+				085294192B60689841C93E52 /* CloudPreferences.swift in Sources */,
+				DA4BC0D598D43D4A79CB3950 /* DesktopBlockingDisableAuthorization.swift in Sources */,
+				347C9D2A40B2AC737D9DE888 /* DesktopDiagnosticTrace.swift in Sources */,
+				7DA7C730B8AF6B8986523EC7 /* DesktopEnforcementPolicy.swift in Sources */,
+				1B3E30DC0BA3C6CF43F9998D /* DesktopLockdownSession.swift in Sources */,
+				DFB6D07B7099ED10D5E3C27A /* DesktopNetworkExtensionRemovalAuthorization.swift in Sources */,
+				F3BD585635A8AE1CA8358052 /* DesktopRemovalAuthorization.swift in Sources */,
+				54B9E25DF48468C151D1EF03 /* DesktopTemporaryPausePolicy.swift in Sources */,
+				EFA07B7161AA7BB4C31CB5AF /* FilterEnforcementStatus.swift in Sources */,
+				CEDD040B3B6D718963A0D124 /* FilterProbe.swift in Sources */,
+				DDA5E28281D4B82E28F86022 /* FilterStatusPublisher.swift in Sources */,
+				3F15A856FCBB4B17056CCD68 /* FlowSourceResolver.swift in Sources */,
+				6DE23E5C8ECD94C6841A4C06 /* HoldfastDiagnosticDocumentSections.swift in Sources */,
+				5AAFA153EEC560F02AC9880D /* HoldfastDiagnosticReport.swift in Sources */,
+				E08A290F0548EDC2652BD4B7 /* HoldfastEnforcementIdentities.swift in Sources */,
+				0549F0FBDDB9F3DEDD48A2AF /* HoldfastIconVariant.swift in Sources */,
+				A8C99BAFA2C895DDB5A9CC22 /* HoldfastPresentation.swift in Sources */,
+				A6DC118B5E610F5FEC8D5E57 /* MacEnforcementSafetyPersistence.swift in Sources */,
+				45D50D2B5F8DF72C1785BE99 /* MacFilterActivationAuthorization.swift in Sources */,
+				37906C12C6CECEFC990453D1 /* MacFilterActivationSafety.swift in Sources */,
+				916B182AA436C8AA0E7FFE8B /* MacFilterInterceptionPlan.swift in Sources */,
+				BFDECF785064DA5B151A5A4C /* MacFilterLateEnableQuarantineSafety.swift in Sources */,
+				3ADA1EFA2843045D6D6B82D3 /* MacFilterPreferenceTimeoutSafety.swift in Sources */,
+				8B44E97655C189466FBC2DB1 /* MacFilterPreparedRetryGuards.swift in Sources */,
+				B4F17996CF1F84DFB6675B97 /* MacFilterSameBootResetSafety.swift in Sources */,
+				E88787AF52BC7D2E45013DC7 /* MacFilterSettingsLifecycle.swift in Sources */,
+				12E18FB7AE87C92464067894 /* MacFilterSmokeTest.swift in Sources */,
+				F015F55B78DC9A0AF3B26A08 /* MacFilterStartupWatchdog.swift in Sources */,
+				B499B0A8FBC10B7599528BEB /* MacWebFilterProvider.swift in Sources */,
+				8813FB150E90B0A1ACC5EB83 /* NetworkHostnameInspector.swift in Sources */,
+				3EEED5094A0D08BD987D9628 /* NetworkPacketInspector.swift in Sources */,
+				FFFBCE63A681D8FE0B786ED4 /* TemporaryAccessExplanation.swift in Sources */,
+				2F74847CEBD9FD441D9A8EF8 /* TemporaryAllowanceBackoff.swift in Sources */,
+				3D7DA268FC3BEE5015EE5F37 /* WebFilterDiagnostics.swift in Sources */,
+				F00E14035E1DEF0B46026E1F /* WebFilterFailOpenGovernor.swift in Sources */,
+				AE80A7276AC1C24A2D9CB564 /* WebFilterFlowDecider.swift in Sources */,
+				BDC61079C88C737241FD9E93 /* WebFilterStreamingInspection.swift in Sources */,
+				3E8B16E4998C76A6BB41B2B8 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		542467D7B7F333B1EDCC22C1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				25945741304123CC439F2ED4 /* Lockdown.swift in Sources */,
+				765D2FDA34301D4CC69908F6 /* Rule.swift in Sources */,
+				799442BC9745831B9974C253 /* ShieldActionExtension.swift in Sources */,
+				ED13008E4BE3A2304C5F588F /* ShieldTemporaryAccess.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E60F8B5257547CC24A4C600 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2AD25036A9B1137B2936E515 /* ActivityMonitorCapacityPlan.swift in Sources */,
+				462B0F2426889EB8365502AE /* CloudLockdownExitPolicy.swift in Sources */,
+				514668DF2A0B052BF5A5D035 /* DeviceActivityMonitorExtension.swift in Sources */,
+				D1DE4D802667A3B395B704C1 /* EnforcementEngine.swift in Sources */,
+				BEFB17986CF0A49E9E8FE24F /* Lockdown.swift in Sources */,
+				16F94A9663D5D4EA9D4EAF15 /* Rule.swift in Sources */,
+				E0930799F0924409FBA051FB /* RuleRestrictionEvaluator.swift in Sources */,
+				7904040B1998C0932D7992B9 /* RuleScheduler.swift in Sources */,
+				BCC74171FB6496C2A586E5A4 /* SharedConfiguration.swift in Sources */,
+				B3C4E434977F2B8DD3C3A3B5 /* ShieldTemporaryAccess.swift in Sources */,
+				0698D62B7D7D5E4EBEA29AA8 /* TemporaryAllowanceBackoff.swift in Sources */,
+				9188BF37740DE4F5C15FB126 /* TimedLockdownSession.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7EBA543D98C78664A9F68406 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E01AB4F9F06A79E7FC2F6F4C /* ActivityMonitorCapacityPlan.swift in Sources */,
+				557660028636613B604D6F9C /* ActivityMonitorCapacityPlanTests.swift in Sources */,
+				ED5471299D32E708A2699BBF /* AllowanceSchedulePainter.swift in Sources */,
+				B8605EAE497C4581D39A155A /* AllowanceSchedulePainterCodec.swift in Sources */,
+				FDD26D804D43CC04E6AEBBDC /* AllowanceSchedulePainterTests.swift in Sources */,
+				AE1C0F19F6B62533C59B01F8 /* BlockPageHTTP.swift in Sources */,
+				CAC4D18A600D887089596CFB /* BlockPageHostPolicy.swift in Sources */,
+				154144434ED8F84E7B052A94 /* BlockPagePauseChallenge.swift in Sources */,
+				BE5AF0D0D6EA3EAB591D2A51 /* BlockPageRenderer.swift in Sources */,
+				74DA1EC7A23AB6B26B16E710 /* BlockPageRendererTests.swift in Sources */,
+				3B51C2428F6A3007D81F1DE8 /* BlockPageTemporaryPause.swift in Sources */,
+				26E05F6BC3CEAFEA2D2A26C4 /* BlockPageTypingGuard.swift in Sources */,
+				8C1558676E1B735806FE4FC9 /* BlockStatusCalendarLayout.swift in Sources */,
+				E087422FF5227DA3289A41CD /* BlockStatusCalendarLayoutTests.swift in Sources */,
+				01BD4E470E87B929168C9393 /* BlockedEndpointCorrelationCache.swift in Sources */,
+				C0CC87D25443F2A3C8257169 /* BlockingSchedulePreview.swift in Sources */,
+				781FA8CECECC0404C7783687 /* BlockingSchedulePreviewTests.swift in Sources */,
+				4E2A318AA4BA43EE37DCAB9C /* BlockingSchedulePreviewView.swift in Sources */,
+				9779241EDFDFAB69E56B0CD8 /* BypassActivityView.swift in Sources */,
+				C895D11B3E02141CB5135B15 /* BypassHistory.swift in Sources */,
+				CAE7FB202230ABB6612DDF92 /* BypassHistoryTests.swift in Sources */,
+				C02FEFC54D8F5423D58A254C /* CloudBlockingTargets.swift in Sources */,
+				BD5C6B9D5B947CECFBFF77CE /* CloudLockdown.swift in Sources */,
+				B2E028501CFA430F174088ED /* CloudLockdownExitPolicy.swift in Sources */,
+				1250C6A68FE101A8EAC8769A /* CloudLockdownTests.swift in Sources */,
+				DDDA03EAF942C40DB9D2C440 /* CloudPreferences.swift in Sources */,
+				C041FB02E0DAD64BFCFA701E /* CloudPreferencesTests.swift in Sources */,
+				5663529AC9FF018FC0A104DC /* DesktopBlockingDisableAuthorization.swift in Sources */,
+				2A331F15E39457B57D86BA54 /* DesktopDiagnosticTrace.swift in Sources */,
+				5669D4370FAFCD91224D3119 /* DesktopDiagnosticTraceTests.swift in Sources */,
+				50062A16EBFF98814EC9B1DC /* DesktopEnforcementPolicy.swift in Sources */,
+				5AD8E5BA0BF37E35FECFFF76 /* DesktopEnforcementPolicyTests.swift in Sources */,
+				12CA45097C12F6FD2FD2BDD6 /* DesktopLockdownSession.swift in Sources */,
+				83C5A68C49D4D976E802AB96 /* DesktopLockdownSessionTests.swift in Sources */,
+				E182A7BD2C7006211247C074 /* DesktopNetworkExtensionRemovalAuthorization.swift in Sources */,
+				F9B25059954BFC2A5886F68A /* DesktopNetworkExtensionRemovalAuthorizationTests.swift in Sources */,
+				D6F0AF68396141403DEF4652 /* DesktopRemovalAuthorization.swift in Sources */,
+				C4FC386520BB0E6D5985916F /* DesktopRemovalAuthorizationTests.swift in Sources */,
+				24AAC5A33C64BB298640C6CB /* DesktopRuleEditUnlock.swift in Sources */,
+				3AE48B4CD1EB0A9BC241C860 /* DesktopTemporaryPausePolicy.swift in Sources */,
+				98996AB2B9ECCBF358F18E85 /* FilterEnforcementStatus.swift in Sources */,
+				1CC76DF88FEF269E61A85448 /* FilterEnforcementStatusTests.swift in Sources */,
+				723F76B18CFCA7AB247E61DF /* FilterStatusPublisher.swift in Sources */,
+				B31D8D0B58BED5C9C02C68C8 /* HoldfastDiagnosticDocumentSections.swift in Sources */,
+				488E7A0BF6AD6ECC13DE25CC /* HoldfastDiagnosticDocumentSectionsTests.swift in Sources */,
+				4244961350E84232B7F887A4 /* HoldfastDiagnosticReport.swift in Sources */,
+				9E5E9730238B91F540638DAC /* HoldfastDiagnosticReportTests.swift in Sources */,
+				A6E953C02DEA50D55F0BAB0F /* HoldfastEnforcementIdentities.swift in Sources */,
+				221978AAF6E0484648485ED7 /* HoldfastEnforcementIdentitiesTests.swift in Sources */,
+				7D4898EF0D9D08128A7B4FAB /* HoldfastIconVariant.swift in Sources */,
+				9634BEA400CB2BB6F7F2ACFB /* HoldfastIconVariantTests.swift in Sources */,
+				4674319DFEED7200107A7CE0 /* HoldfastPresentation.swift in Sources */,
+				3C6C73A0E64575C7728FE87D /* Lockdown.swift in Sources */,
+				CD7DFA36AE72B7EEC650AA7C /* LockdownStatusBadge.swift in Sources */,
+				81C3BD71FC56819B1DEE01A4 /* MacBlockStatusTimeline.swift in Sources */,
+				3B7552869FA26CE4BD4EB0A4 /* MacBlockingTargetsEditor.swift in Sources */,
+				E9615E9D306752A51FE90295 /* MacConfirmationPassageLayoutTests.swift in Sources */,
+				C2D4F71E90A7F767B86116FC /* MacConfirmationPassageView.swift in Sources */,
+				2087B294D4FF14DC52314DAA /* MacDesignSystem.swift in Sources */,
+				B329A38EBAB8FE1EFD585002 /* MacEnforcementSafetyPersistence.swift in Sources */,
+				AB18EC62B58378031545ADBE /* MacEnforcementSafetyPersistenceTests.swift in Sources */,
+				0D2261ABA25AB9E8019399CE /* MacFilterActivationAuthorization.swift in Sources */,
+				B060B463402D4CDFD72D4BF2 /* MacFilterActivationAuthorizationTests.swift in Sources */,
+				C57ED1D39FBD15E7F1FAEBE7 /* MacFilterActivationSafety.swift in Sources */,
+				196D6124F0548D34ECAD3451 /* MacFilterActivationSafetyTests.swift in Sources */,
+				61E07F932116C45443E3601C /* MacFilterInterceptionPlan.swift in Sources */,
+				D4A5DA515614EF702D0E93B7 /* MacFilterLateEnableQuarantineSafety.swift in Sources */,
+				3A5DC5ECFDA770605FD78E1A /* MacFilterLateEnableQuarantineSafetyTests.swift in Sources */,
+				2EEC3CD310712E44428258D0 /* MacFilterPreferenceTimeoutSafety.swift in Sources */,
+				2D3B88236F5F155B98CC5D0B /* MacFilterPreferenceTimeoutSafetyTests.swift in Sources */,
+				D232CDBAD172C2E72DEDA719 /* MacFilterPreparedRetryGuards.swift in Sources */,
+				01F524823D30802AE376DA64 /* MacFilterPreparedRetryGuardsTests.swift in Sources */,
+				40859350C9852A67BD1CC5C3 /* MacFilterSameBootResetSafety.swift in Sources */,
+				A773077F3CFFC6F2AA51393D /* MacFilterSameBootResetSafetyTests.swift in Sources */,
+				B9A175662E57CB68F83F15D2 /* MacFilterSettingsLifecycle.swift in Sources */,
+				24954E9E325F5552DEFB000E /* MacFilterSmokeTest.swift in Sources */,
+				CA6F6A7C70245DC19D13F21C /* MacFilterStartupWatchdog.swift in Sources */,
+				BC46938EEFE191856A311237 /* MacFilterStartupWatchdogTests.swift in Sources */,
+				CB9B829DC6D00938A9FF7BCF /* MacLockdownStatusView.swift in Sources */,
+				1BEF2DBF83A6892CA28236CC /* MacPassageInput.swift in Sources */,
+				A8830FDF4B22356DCEAD9FA3 /* MacTemporaryPauseStore.swift in Sources */,
+				D849175BF0C02E895C1FA991 /* MacTemporaryPauseStoreTests.swift in Sources */,
+				25DA572AFD05BFD3F662B837 /* MacWorkspaceLayoutTests.swift in Sources */,
+				ECFAE27E34D98DE2C30A955C /* MacWorkspaceViews.swift in Sources */,
+				039A59EFA8C4F47194F8CFAB /* NetworkHostnameInspector.swift in Sources */,
+				4DD60A1D63C9920BED123363 /* NetworkPacketInspector.swift in Sources */,
+				C67F0037F9F8ABFFD478A999 /* TemporaryAccessExplanation.swift in Sources */,
+				6ECA5AACC3E236CECE7A3720 /* TemporaryAllowanceBackoff.swift in Sources */,
+				5FD95D25C71659C9BF5FFC1A /* TemporaryAllowanceBackoffEditor.swift in Sources */,
+				A1636AF44D4D14C92D8AC767 /* TemporaryAllowanceBackoffTests.swift in Sources */,
+				A4C0198C9F603D6242AAF4CC /* TemporaryAllowanceStatusView.swift in Sources */,
+				8EF1A06DF3EBE29DBC738108 /* WebFilterDiagnostics.swift in Sources */,
+				E7BC33E571D7AED473DF8870 /* WebFilterFailOpenGovernor.swift in Sources */,
+				129679D6B03DDD5C10F32F57 /* WebFilterFlowDecider.swift in Sources */,
+				45559F27880BC4BF145BFA4B /* WebFilterFlowDeciderTests.swift in Sources */,
+				3FD3CC6D0AD41F27141C38B9 /* WebFilterOutageRegressionTests.swift in Sources */,
+				92068D34AE633CFF587E009B /* WebFilterStreamingInspection.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8E74194E8E54A8F486EDD058 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C4FBB085C661F8EC903117D6 /* ActivityGroupSelectionPersistence.swift in Sources */,
+				47EE1C512F10E38890B80AD3 /* ActivityMonitorCapacityPlan.swift in Sources */,
+				1077C22EE588D843D154C644 /* AllowanceSchedulePainterCodec.swift in Sources */,
+				00ECC0128B12BFA6A09034ED /* AppModel.swift in Sources */,
+				5CBD2449F9147FFE4033AB88 /* AppModelDiagnostics.swift in Sources */,
+				380292B79E925CCFE87B628F /* BlockStatusCalendarLayout.swift in Sources */,
+				99DC7C754F72D7E14260F149 /* BlockingGroupSelectionPersistence.swift in Sources */,
+				176CF3319BF1B9768945A8FF /* BlockingSchedulePreview.swift in Sources */,
+				69FEF8817AF75B874721ED64 /* BlockingSchedulePreviewView.swift in Sources */,
+				43924E72117665A6BF91BBD7 /* BypassActivityView.swift in Sources */,
+				44B8539B28B6BB8C0BB9BD20 /* BypassHistory.swift in Sources */,
+				A062E79CCA3E4ED0922DE058 /* CloudBlockingTargets.swift in Sources */,
+				95B3BDD40122EB1EAB829039 /* CloudLockdown.swift in Sources */,
+				E3AEEC0675170AC23A5D5065 /* CloudLockdownExitPolicy.swift in Sources */,
+				C6EC2CBAA54F577460193A5E /* CloudPreferences.swift in Sources */,
+				DB1CE67024A3EB061966B5A7 /* CloudRuleBridge.swift in Sources */,
+				93BCF4D3E928CE28B71D7E56 /* ContentView.swift in Sources */,
+				533F6C2F0F4E2BEF226C65DA /* DomainClassifier.swift in Sources */,
+				5ACAF2A8562DA8C967EC090A /* EnforcementEngine.swift in Sources */,
+				3E3A6678DDF3A5EC1133DAC5 /* HoldfastApp.swift in Sources */,
+				527056778F71CB3CAEF5CA9F /* HoldfastDiagnosticDocumentSections.swift in Sources */,
+				D2A41104AE309D413DEA3541 /* HoldfastDiagnosticReport.swift in Sources */,
+				BD290A9C5A69D735BBDB6AD4 /* HoldfastEnforcementIdentities.swift in Sources */,
+				A30FD44E4D04D2693F9844A7 /* HoldfastIconVariant.swift in Sources */,
+				65519227A57BFC010C2D2B31 /* HoldfastPresentation.swift in Sources */,
+				AA057E4C31FD903A56115C75 /* IOSArchitectureEditors.swift in Sources */,
+				EB66E02A32588ADC5513B4EF /* IOSBlockStatusTimeline.swift in Sources */,
+				BEF5343F36430B9687D6C285 /* IOSBlockingTargetsEditor.swift in Sources */,
+				F3055558928D29D00252CB49 /* IOSDesignSystem.swift in Sources */,
+				288E3A7F070D9E60D3E877E5 /* IOSDiagnosticsReport.swift in Sources */,
+				48542A73C04C40FE7F897C27 /* IOSDiagnosticsView.swift in Sources */,
+				2EFAC2210AC648F28C345CEB /* IOSDynamicAppIcon.swift in Sources */,
+				5C8D899E3802C970CE07A5B1 /* IOSPassageInput.swift in Sources */,
+				8F0BAA936C439762BEC57963 /* IOSTimedLockdownView.swift in Sources */,
+				83B7BD576175F6C637EF6846 /* IOSWorkspaceViews.swift in Sources */,
+				728F0FEB97AFBD1FC791CCC5 /* Lockdown.swift in Sources */,
+				D554BC59DF984D5584533CDE /* LockdownStatusBadge.swift in Sources */,
+				1D8079EAB07A6C753C97A3D9 /* LockdownView.swift in Sources */,
+				B0AF4DE2AB8A273B1834656B /* Rule.swift in Sources */,
+				36A123F61508E8FA59E633FC /* RuleEditorView.swift in Sources */,
+				9853A73B28968AB6B69AC058 /* RuleRestrictionEvaluator.swift in Sources */,
+				48BC5A63803F34C524E98CA4 /* RuleScheduler.swift in Sources */,
+				6C0DBE023CC60C4A75BAE2A7 /* RuleSchedulerShieldSweep.swift in Sources */,
+				A58D93B8058641D12BB543A2 /* SharedConfiguration.swift in Sources */,
+				93E37ABB44A3E064E1059E2B /* ShieldTemporaryAccess.swift in Sources */,
+				8EA090728A9D5D1792FE697E /* TemporaryAccessExplanation.swift in Sources */,
+				5173FFBA4FB36A1BFED66ADE /* TemporaryAccessRequestView.swift in Sources */,
+				0821FB29FFF3F7D1BB8D514A /* TemporaryAllowanceBackoff.swift in Sources */,
+				C045DE1F710B0216DBDCDB0A /* TemporaryAllowanceBackoffEditor.swift in Sources */,
+				E190FEF329D84F4C0BF6BA6F /* TemporaryAllowanceStatusView.swift in Sources */,
+				221AE9482BD131E24C20EAFA /* TimedLockdownSession.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B6927BCAB8DFD15C1FBDB000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2FA3B0CFAFA0AFFDC4B3E3E5 /* ActivityMonitorCapacityPlanTests.swift in Sources */,
+				B0DB364115D00A3FA845E8A1 /* BlockStatusCalendarLayoutTests.swift in Sources */,
+				3B8AFFED733B74B357529AF4 /* BlockingSchedulePreviewTests.swift in Sources */,
+				CE1F979CF3CBB90639B99E47 /* BypassHistoryTests.swift in Sources */,
+				F20F3AA1FE6486FEE8EC56BD /* CloudLockdownTests.swift in Sources */,
+				6A7D7B104F03270AD769E4B3 /* CloudPreferencesTests.swift in Sources */,
+				4BB1A74A366A65583AAADFD0 /* HoldfastDiagnosticDocumentSectionsTests.swift in Sources */,
+				D0D30A2762BEA50BC850E4B9 /* HoldfastDiagnosticReportTests.swift in Sources */,
+				040D062E1FA0F0DB08017F19 /* HoldfastEnforcementIdentitiesTests.swift in Sources */,
+				B917CF646A5F5D59431CA202 /* HoldfastIconVariantTests.swift in Sources */,
+				475FE77A232420BC5B59CDA4 /* IOSPassageInputTests.swift in Sources */,
+				A2147878990693CC673CDD4B /* LockdownTests.swift in Sources */,
+				66254C12DE2982B05AC52D71 /* MacConfirmationPassageLayoutTests.swift in Sources */,
+				5D86D47CAD792D5AF1CE7C4C /* MacWorkspaceLayoutTests.swift in Sources */,
+				AEB7BCCA080FA1B00EB96C62 /* RuleRestrictionTests.swift in Sources */,
+				7DF281A2F4BC76F7A3C8593E /* RuleSchedulerTests.swift in Sources */,
+				8368557BB738C4A9314E4C21 /* TemporaryAllowanceBackoffTests.swift in Sources */,
+				BFC16BF13B61A26190BE6EA3 /* TimeWindowTests.swift in Sources */,
+				9748050BBE8E81B7A8768E59 /* TimedLockdownSessionTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CDC9EC4CA23EFCF493B730E5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9BCA13134E4F18119AAEF687 /* BlockPageHTTP.swift in Sources */,
+				D495A6ED20ABEDF7286250E2 /* BlockPageHostPolicy.swift in Sources */,
+				6D2424AF3D0AE412B7E71F84 /* BlockPagePauseChallenge.swift in Sources */,
+				EB7984D832A6B60D9A5C3BB3 /* BlockPageRenderer.swift in Sources */,
+				BDF1E10EA4E03372984CDA95 /* BlockPageTemporaryPause.swift in Sources */,
+				E663ED0191BD822DE8C77E50 /* BlockPageTypingGuard.swift in Sources */,
+				6DDB4965DD340B20E4880FCB /* BypassHistory.swift in Sources */,
+				1FC8CD6D55A7BD43FF0A5F34 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D8EB1F4EB63DFDFC4D409262 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA648B4F0106A17DDB52A5A5 /* Lockdown.swift in Sources */,
+				8999087D1184B5ED83C139FA /* Rule.swift in Sources */,
+				9382B070825507A1CA6F124A /* ShieldConfigurationExtension.swift in Sources */,
+				044B2B14216A21CADE1C6505 /* ShieldTemporaryAccess.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0B6CE4A18803BD647A52344D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2846B313DD4E8835FBE78101 /* Holdfast */;
+			targetProxy = 08815F79A95CBB060B6D4027 /* PBXContainerItemProxy */;
+		};
+		40E14380D94FEF864716BF44 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5E8703FE43330549C9660AE2 /* BlockPageServer */;
+			targetProxy = D6749963F155585EFE435360 /* PBXContainerItemProxy */;
+		};
+		503D18FAE5D1E72DF9803143 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BB21DAB90DBA7763316B8A38 /* ActivityMonitorExtension */;
+			targetProxy = BF543C571B4B8F7134DC5EB8 /* PBXContainerItemProxy */;
+		};
+		62FD5889B7FE5584CFB4255A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 93AC6D74C36F3726C3911EFE /* ShieldConfigurationExtension */;
+			targetProxy = F067A70EB28FC655DEEEA222 /* PBXContainerItemProxy */;
+		};
+		98FEA462084F18F6EE041E5A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C8446E91BCB097AEA3796238 /* MacWebFilterExtension */;
+			targetProxy = 3A068A4EB0E6F50F5B38B017 /* PBXContainerItemProxy */;
+		};
+		A1A352D3F6F42DCCD142A197 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 728B94A799CA1A89401D6F5E /* ShieldActionExtension */;
+			targetProxy = 3EA8DDB702728F4D2842C8FE /* PBXContainerItemProxy */;
+		};
+		CC875BAF890C343BE02BD4CF /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2846B313DD4E8835FBE78101 /* Holdfast */;
+			targetProxy = 3A310738350D9DBFC5090A1D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		001C6D7B2D5708226BD99688 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/ActivityMonitor.entitlements;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/ActivityMonitor-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.ExecutiveDysfunction.ActivityMonitor;
+				PRODUCT_MODULE_NAME = ActivityMonitorExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		0757E6F6371F53A14323EC6D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 94;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 7GXNZJMGPD;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		0A47951F72EB9F99B780EB17 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/ActivityMonitor.entitlements;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/ActivityMonitor-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.ExecutiveDysfunction.ActivityMonitor;
+				PRODUCT_MODULE_NAME = ActivityMonitorExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		148EB6F3CD7A023DADE0B448 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Config/Mac.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Holdfast Preferences";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.ExecutiveDysfunction;
+				PRODUCT_MODULE_NAME = HoldfastMac;
+				PRODUCT_NAME = Holdfast;
+				SDKROOT = macosx;
+				TARGETED_DEVICE_FAMILY = "";
+			};
+			name = Release;
+		};
+		18E864AE22DF4F5725822FFD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.HoldfastUITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Holdfast;
+			};
+			name = Debug;
+		};
+		1DB210E90971ACD03D2C852C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.ExecutiveDysfunction.BlockPageServer;
+				PRODUCT_NAME = BlockPageServer;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		2411C3DFA1D056BED9F0A059 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "HoldfastIconLightThemeDefault HoldfastIconDarkThemeDefault HoldfastIconLightSignalYellow HoldfastIconDarkSignalYellow HoldfastIconLightPhosphorGreen HoldfastIconDarkPhosphorGreen HoldfastIconLightElectricBlue HoldfastIconDarkElectricBlue HoldfastIconLightWarningOrange HoldfastIconDarkWarningOrange HoldfastIconLightHotMagenta HoldfastIconDarkHotMagenta HoldfastIconLightTerminalViolet HoldfastIconDarkTerminalViolet";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/App.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/App-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.ExecutiveDysfunction;
+				PRODUCT_MODULE_NAME = Holdfast;
+				PRODUCT_NAME = Holdfast;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		246B975A4EC3A6FD93DF565E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.HoldfastDesktopTests;
+				PRODUCT_MODULE_NAME = DesktopEnforcementTests;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DESKTOP_HOSTLESS_TESTS";
+				TEST_HOST = "";
+			};
+			name = Debug;
+		};
+		2BD530A88FA7D6B23F2B38E1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.HoldfastDesktopTests;
+				PRODUCT_MODULE_NAME = DesktopEnforcementTests;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DESKTOP_HOSTLESS_TESTS";
+				TEST_HOST = "";
+			};
+			name = Release;
+		};
+		38E2526B3DBBC85C954AF013 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/ShieldAction.entitlements;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/ShieldAction-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.ExecutiveDysfunction.ShieldAction;
+				PRODUCT_MODULE_NAME = ShieldActionExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		43A2495759F4E477C3B0DC92 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Config/MacDevelopment.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Holdfast Preferences";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.ExecutiveDysfunction;
+				PRODUCT_MODULE_NAME = HoldfastMac;
+				PRODUCT_NAME = Holdfast;
+				SDKROOT = macosx;
+				TARGETED_DEVICE_FAMILY = "";
+			};
+			name = Debug;
+		};
+		45E5320651D6F831BF28B743 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/MacWebFilterExtensionDevelopment.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/MacWebFilterExtension-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.ExecutiveDysfunction.WebFilter;
+				PRODUCT_MODULE_NAME = MacWebFilterExtension;
+				PRODUCT_NAME = com.GabrielPrice.ExecutiveDysfunction.WebFilter;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		4FAD6A2907983EF81B9D5D6C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "HoldfastIconLightThemeDefault HoldfastIconDarkThemeDefault HoldfastIconLightSignalYellow HoldfastIconDarkSignalYellow HoldfastIconLightPhosphorGreen HoldfastIconDarkPhosphorGreen HoldfastIconLightElectricBlue HoldfastIconDarkElectricBlue HoldfastIconLightWarningOrange HoldfastIconDarkWarningOrange HoldfastIconLightHotMagenta HoldfastIconDarkHotMagenta HoldfastIconLightTerminalViolet HoldfastIconDarkTerminalViolet";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/App.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/App-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.ExecutiveDysfunction;
+				PRODUCT_MODULE_NAME = Holdfast;
+				PRODUCT_NAME = Holdfast;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		6636302DE9E6963708101D1F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/ShieldConfiguration.entitlements;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/ShieldConfiguration-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.ExecutiveDysfunction.ShieldConfiguration;
+				PRODUCT_MODULE_NAME = ShieldConfigurationExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		689B5435418F0E7B3C7AA269 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.ExecutiveDysfunction.BlockPageServer;
+				PRODUCT_NAME = BlockPageServer;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		74E64407F6DDA4756828B92B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.HoldfastTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Holdfast.app/Holdfast";
+			};
+			name = Release;
+		};
+		80CF303D93209D3E916A1377 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 94;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 7GXNZJMGPD;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		B0D16AF271A5FFE07CE8DC4C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/MacWebFilterExtension.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/MacWebFilterExtension-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.ExecutiveDysfunction.WebFilter;
+				PRODUCT_MODULE_NAME = MacWebFilterExtension;
+				PRODUCT_NAME = com.GabrielPrice.ExecutiveDysfunction.WebFilter;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		BCEE01A96DBA027FDCEAAE2E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.HoldfastTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Holdfast.app/Holdfast";
+			};
+			name = Debug;
+		};
+		C5BF52086187C31AC3E6AF13 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.HoldfastUITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Holdfast;
+			};
+			name = Release;
+		};
+		CAD074E6F3C887D4880E2F26 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/ShieldAction.entitlements;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/ShieldAction-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.ExecutiveDysfunction.ShieldAction;
+				PRODUCT_MODULE_NAME = ShieldActionExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		F3CF3799422E68A577C93C2F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/ShieldConfiguration.entitlements;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/ShieldConfiguration-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.GabrielPrice.ExecutiveDysfunction.ShieldConfiguration;
+				PRODUCT_MODULE_NAME = ShieldConfigurationExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		20F28617AB2C78913802FB27 /* Build configuration list for PBXNativeTarget "BlockPageServer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				689B5435418F0E7B3C7AA269 /* Debug */,
+				1DB210E90971ACD03D2C852C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		2784A1A24F420DF327E62289 /* Build configuration list for PBXNativeTarget "MacWebFilterExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				45E5320651D6F831BF28B743 /* Debug */,
+				B0D16AF271A5FFE07CE8DC4C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		3F044E5816BC9E20B181FAFA /* Build configuration list for PBXNativeTarget "Holdfast" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2411C3DFA1D056BED9F0A059 /* Debug */,
+				4FAD6A2907983EF81B9D5D6C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		65AEBC29E7EF9185305B3B00 /* Build configuration list for PBXNativeTarget "ActivityMonitorExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0A47951F72EB9F99B780EB17 /* Debug */,
+				001C6D7B2D5708226BD99688 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		790F32F805DB8EF40B378683 /* Build configuration list for PBXNativeTarget "ShieldActionExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				38E2526B3DBBC85C954AF013 /* Debug */,
+				CAD074E6F3C887D4880E2F26 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8E92514CA379885F319B21AB /* Build configuration list for PBXNativeTarget "HoldfastMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				43A2495759F4E477C3B0DC92 /* Debug */,
+				148EB6F3CD7A023DADE0B448 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A90448B9ABCFAC622F055CB0 /* Build configuration list for PBXProject "Holdfast" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0757E6F6371F53A14323EC6D /* Debug */,
+				80CF303D93209D3E916A1377 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B1385C30C0FF1BB3854851B3 /* Build configuration list for PBXNativeTarget "HoldfastTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BCEE01A96DBA027FDCEAAE2E /* Debug */,
+				74E64407F6DDA4756828B92B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C391ECB690185078B2478524 /* Build configuration list for PBXNativeTarget "DesktopEnforcementTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				246B975A4EC3A6FD93DF565E /* Debug */,
+				2BD530A88FA7D6B23F2B38E1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D3D9FB4EC1AD49A2CD4C657B /* Build configuration list for PBXNativeTarget "HoldfastUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				18E864AE22DF4F5725822FFD /* Debug */,
+				C5BF52086187C31AC3E6AF13 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		EE1F4E490CCD10759603F206 /* Build configuration list for PBXNativeTarget "ShieldConfigurationExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6636302DE9E6963708101D1F /* Debug */,
+				F3CF3799422E68A577C93C2F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 35ADC9A49FC1FC68CD941FA5 /* Project object */;
+}

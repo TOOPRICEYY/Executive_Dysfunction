@@ -112,6 +112,51 @@ struct TimeWindow: Codable, Equatable, Identifiable, Hashable {
             || (weekday == endWeekday(for: startWeekday) && minute < endMinutes)
     }
 
+    /// The next instant at which this window changes state, searching forward
+    /// from `date`. Diagnostics report it so "the block should have lifted by
+    /// now" becomes a checkable claim rather than an impression.
+    func nextTransition(after date: Date, calendar: Calendar = .current) -> Date? {
+        guard !weekdays.isEmpty else { return nil }
+        let active = isActive(at: date, calendar: calendar)
+        let boundaries = [startMinutes, endMinutes]
+        var candidates: [Date] = []
+
+        for dayOffset in 0...8 {
+            guard let day = calendar.date(byAdding: .day, value: dayOffset, to: date),
+                  let dayInterval = calendar.dateInterval(of: .day, for: day)
+            else { continue }
+            for minutes in boundaries {
+                let normalized = max(0, min(1_440, minutes))
+                if normalized == 1_440 {
+                    if dayInterval.end > date { candidates.append(dayInterval.end) }
+                    continue
+                }
+                // These are clock labels, not elapsed minutes after midnight.
+                // Include both occurrences of repeated fall-back hours.
+                for repeated in [Calendar.RepeatedTimePolicy.first, .last] {
+                    if let candidate = calendar.nextDate(
+                        after: dayInterval.start.addingTimeInterval(-1),
+                        matching: DateComponents(hour: normalized / 60, minute: normalized % 60, second: 0),
+                        matchingPolicy: .nextTime,
+                        repeatedTimePolicy: repeated
+                    ), candidate > date, candidate < dayInterval.end {
+                        candidates.append(candidate)
+                    }
+                }
+            }
+        }
+
+        // A clock jump can itself cross a boundary, including returning from
+        // 01:59 to 01:00 during fall-back before the repeated start time.
+        if let change = calendar.timeZone.nextDaylightSavingTimeTransition(after: date) {
+            candidates.append(change)
+        }
+
+        return candidates
+            .sorted()
+            .first { isActive(at: $0, calendar: calendar) != active }
+    }
+
     func endWeekday(for startWeekday: Int) -> Int {
         guard endMinutes <= startMinutes else { return startWeekday }
         return startWeekday == 7 ? 1 : startWeekday + 1
@@ -190,6 +235,13 @@ struct BlockingRule: Codable, Equatable, Identifiable {
             return decoded
         }
         set {
+            // FamilyActivitySelection contains sets. Re-encoding an unchanged
+            // selection can reorder JSON and manufacture an unrelated edit.
+            // Preserve the accepted bytes, but never equate corrupt data with
+            // the getter's empty fallback.
+            if selectionData.isEmpty && newValue == FamilyActivitySelection() { return }
+            if let decoded = try? JSONDecoder().decode(FamilyActivitySelection.self, from: selectionData),
+               decoded == newValue { return }
             selectionData = (try? JSONEncoder().encode(newValue)) ?? Data()
         }
     }

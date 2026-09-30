@@ -3,3 +3,6 @@ xcuserdata/
 *.xcuserstate
 DerivedData/
 build/
+.build/
+Diagnostics/
+*.xcresult

@@ -7,12 +7,12 @@ explicit recovery/uninstall path.
 
 ## Enforcement layers
 
-1. `ExecutiveDysfunctionService` runs as LocalSystem, watches the ACL-protected
-   `%ProgramData%\ExecutiveDysfunction\policy.bin`, and sends only monotonic
+1. `HoldfastService` runs as LocalSystem, watches the ACL-protected
+   `%ProgramData%\Holdfast\policy.bin`, and sends only monotonic
    policy revisions to the driver. Its accepted revision is retained under
-   `HKLM\SOFTWARE\ExecutiveDysfunction`; equal-revision driver writes are
-   idempotent so a crash between driver, WFP, and registry commits is retryable.
-2. `ExecutiveDysfunctionGuard.sys` registers a process-creation callback and
+   `HKLM\SOFTWARE\Holdfast`; equal-revision active snapshots remain
+   writable so schedule transitions and crash recovery can be reconciled.
+2. `HoldfastGuard.sys` registers a process-creation callback and
    denies configured executable paths before their first instruction executes.
    The driver device ACL permits policy writes only from SYSTEM or an
    administrator, and rejects policy rollback.
@@ -28,6 +28,22 @@ explicit recovery/uninstall path.
 5. For managed/business deployments, prefer signed App Control for Business
    policies for publisher-based rules. AppLocker is a compatible fallback, but
    Microsoft describes it as defense-in-depth rather than a security boundary.
+
+## Diagnostics and the intermittent all-traffic symptom
+
+The service writes privacy-safe operational records to
+`%ProgramData%\Holdfast\enforcement.log`, rotating at 1 MiB to
+`enforcement.previous.log`. Records contain revisions, rule/filter counts,
+component success flags, the WFP transaction stage, and Windows error codes;
+they never contain application paths or destinations.
+
+An equal policy revision can represent a different active schedule snapshot.
+The previous service refreshed the process driver but skipped WFP replacement
+whenever the revision was unchanged. Persistent ALE filters from an earlier
+active window therefore survived indefinitely. If the configured application
+was a VPN, proxy, browser broker, or shared networking process, that looked like
+all internet traffic being blocked. Every accepted snapshot now atomically
+reconciles the owned WFP filters, including equal-revision snapshots.
 
 ## Required production work
 

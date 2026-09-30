@@ -38,7 +38,10 @@ struct SystemClockReading: Codable, Equatable, Sendable {
         guard sysctlbyname("kern.bootsessionuuid", &buffer, &size, nil, 0) == 0 else {
             return ""
         }
-        return String(cString: buffer)
+        return String(
+            decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) },
+            as: UTF8.self
+        )
     }
 
     /// `ProcessInfo.systemUptime` stops while the machine is asleep, which on a
@@ -166,12 +169,16 @@ enum DesktopRemovalGate {
     /// Compared on words rather than characters so that stray whitespace, case,
     /// and line breaks do not turn a deliberate act into a frustrating one.
     static func passageMatches(_ typed: String, request: DesktopRemovalRequest) -> Bool {
+        passageMatches(typed, requiredPassage: request.requiredPassage)
+    }
+
+    static func passageMatches(_ typed: String, requiredPassage: String) -> Bool {
         func words(_ value: String) -> [String] {
             value.lowercased()
                 .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
                 .map(String.init)
         }
-        let required = words(request.requiredPassage)
+        let required = words(requiredPassage)
         guard !required.isEmpty else { return true }
         return words(typed) == required
     }

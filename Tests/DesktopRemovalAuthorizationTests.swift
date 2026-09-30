@@ -1,7 +1,17 @@
 import XCTest
-@testable import ExecutiveDysfunctionMac
+// The desktop decision layer is compiled directly into this hostless test
+// bundle; see project.yml. Importing the app module would drag in
+// NetworkExtension and a live filter configuration.
 
 final class DesktopRemovalAuthorizationTests: XCTestCase {
+    func testEmptyDisableChallengeCannotAuthorizeRecovery() {
+        let now = Date()
+        var challenge = DesktopBlockingDisableGate.makeChallenge(for: .empty, at: now)
+        challenge.requiredPassage = " \n "
+        XCTAssertEqual(DesktopBlockingDisableGate.validate(
+            typedPassage: "anything", challenge: challenge, currentPolicy: .empty, at: now
+        ), .passageMismatch)
+    }
     private let boot = "BOOT-SESSION-A"
 
     private func clock(_ uptime: TimeInterval, boot: String? = nil) -> SystemClockReading {
@@ -187,6 +197,102 @@ final class DesktopRemovalAuthorizationTests: XCTestCase {
         XCTAssertFalse(
             DesktopRemovalGate.passageMatches(correct.split(separator: " ").dropLast().joined(separator: " "), request: request),
             "A truncated passage must not pass"
+        )
+    }
+
+    // MARK: - Ordinary blocking disable
+
+    func testBlockingDisableChallengeUsesStrictestEnabledLockAndSafeDefault() {
+        var combined = policy(passageWords: 60)
+        var shorter = policy(passageWords: 20).rules[0]
+        shorter.id = UUID()
+        combined.rules.append(shorter)
+
+        var disabled = policy(passageWords: 200, isEnabled: false).rules[0]
+        disabled.id = UUID()
+        combined.rules.append(disabled)
+
+        var unlocked = policy(severity: "none", passageWords: 250).rules[0]
+        unlocked.id = UUID()
+        combined.rules.append(unlocked)
+
+        let issuedAt = Date(timeIntervalSince1970: 2_000_000)
+        let id = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
+        let challenge = DesktopBlockingDisableGate.makeChallenge(
+            for: combined,
+            at: issuedAt,
+            id: id
+        )
+
+        XCTAssertEqual(challenge.policyRevision, combined.revision)
+        XCTAssertEqual(challenge.requiredPassage.split(separator: " ").count, 60)
+        XCTAssertEqual(
+            challenge.expiresAt,
+            issuedAt.addingTimeInterval(DesktopBlockingDisableGate.challengeLifetime)
+        )
+        XCTAssertEqual(
+            DesktopBlockingDisableGate.passageWordCount(for: .empty),
+            DesktopBlockingDisableGate.defaultPassageWordCount,
+            "Even a policy with no locked rules must require a deliberate passage"
+        )
+    }
+
+    func testBlockingDisableChallengeRejectsRetryAfterExpiryOrPolicyChange() {
+        let current = policy(passageWords: 20)
+        let issuedAt = Date(timeIntervalSince1970: 2_000_000)
+        let challenge = DesktopBlockingDisableGate.makeChallenge(
+            for: current,
+            at: issuedAt,
+            id: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
+        )
+
+        XCTAssertEqual(
+            DesktopBlockingDisableGate.validate(
+                typedPassage: "  \(challenge.requiredPassage.uppercased())\n",
+                challenge: challenge,
+                currentPolicy: current,
+                at: issuedAt.addingTimeInterval(1)
+            ),
+            .authorized
+        )
+        XCTAssertEqual(
+            DesktopBlockingDisableGate.validate(
+                typedPassage: "wrong passage",
+                challenge: challenge,
+                currentPolicy: current,
+                at: issuedAt.addingTimeInterval(1)
+            ),
+            .passageMismatch
+        )
+        XCTAssertEqual(
+            DesktopBlockingDisableGate.validate(
+                typedPassage: challenge.requiredPassage,
+                challenge: challenge,
+                currentPolicy: current,
+                at: challenge.expiresAt
+            ),
+            .expired
+        )
+
+        var changed = current
+        changed.revision &+= 1
+        XCTAssertEqual(
+            DesktopBlockingDisableGate.validate(
+                typedPassage: challenge.requiredPassage,
+                challenge: challenge,
+                currentPolicy: changed,
+                at: issuedAt.addingTimeInterval(1)
+            ),
+            .policyChanged
+        )
+        XCTAssertEqual(
+            DesktopBlockingDisableGate.validate(
+                typedPassage: challenge.requiredPassage,
+                challenge: challenge,
+                currentPolicy: current,
+                at: issuedAt.addingTimeInterval(-1)
+            ),
+            .notYetValid
         )
     }
 

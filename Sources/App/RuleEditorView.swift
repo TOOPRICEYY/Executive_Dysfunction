@@ -98,14 +98,14 @@ struct RuleEditorView: View {
                 )
             }
 
-            Toggle("Allow passage-gated extra time", isOn: $rule.lockdownPolicy.allowsTimeExtensions)
+            Toggle("Allow temporary pause from block page", isOn: $rule.lockdownPolicy.allowsTimeExtensions)
             if rule.lockdownPolicy.allowsTimeExtensions {
                 Stepper(
                     "Maximum extra time: \(rule.lockdownPolicy.maximumTimeExtensionHours) hour(s)",
                     value: $rule.lockdownPolicy.maximumTimeExtensionHours,
                     in: TimeAllowancePolicy.maximumHoursRange
                 )
-                Text("Each request suspends this rule for one hour. The first request uses the rule's passage length; each consecutive hour doubles it. The escalation resets only after the accumulated allowance expires.")
+                Text("The block screen can offer 10, 30, or 60 minutes after the rule's confirmation passage is typed. Consecutive requests use progressively longer passages and cannot exceed this cumulative limit.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

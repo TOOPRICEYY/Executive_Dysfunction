@@ -1,4 +1,4 @@
-name: ExecutiveDysfunction
+name: Holdfast
 
 options:
   bundleIdPrefix: com.GabrielPrice
@@ -13,26 +13,27 @@ settings:
     DEVELOPMENT_TEAM: 7GXNZJMGPD
     CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1,2"
-    CURRENT_PROJECT_VERSION: 25
+    CURRENT_PROJECT_VERSION: 94
     MARKETING_VERSION: 0.1.0
 
 schemes:
-  ExecutiveDysfunction:
+  Holdfast:
     build:
       targets:
-        ExecutiveDysfunction: all
+        Holdfast: all
     run:
       config: Debug
     test:
       config: Debug
       targets:
-        - ExecutiveDysfunctionTests
+        - HoldfastTests
+        - HoldfastUITests
     archive:
       config: Release
-  ExecutiveDysfunctionMac:
+  HoldfastMac:
     build:
       targets:
-        ExecutiveDysfunctionMac: all
+        HoldfastMac: all
     run:
       config: Debug
     test:
@@ -42,27 +43,44 @@ schemes:
     archive:
       config: Release
 
+  # Use this scheme to run the desktop suite. It never builds, links, or launches
+  # the containing app, so nothing in a test run can reach NetworkExtension.
+  DesktopEnforcementTests:
+    build:
+      targets:
+        DesktopEnforcementTests: all
+    test:
+      config: Debug
+      targets:
+        - DesktopEnforcementTests
+
 targets:
-  ExecutiveDysfunction:
+  Holdfast:
     type: application
     platform: iOS
     sources:
       - path: Sources/App
+      - path: Sources/PresentationShared
       - path: Sources/Shared
       - path: Sources/CloudShared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunction
-        PRODUCT_NAME: ExecutiveDysfunction
-        PRODUCT_MODULE_NAME: ExecutiveDysfunction
+        PRODUCT_NAME: Holdfast
+        PRODUCT_MODULE_NAME: Holdfast
         CODE_SIGN_ENTITLEMENTS: Config/App.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "HoldfastIconLightThemeDefault HoldfastIconDarkThemeDefault HoldfastIconLightSignalYellow HoldfastIconDarkSignalYellow HoldfastIconLightPhosphorGreen HoldfastIconDarkPhosphorGreen HoldfastIconLightElectricBlue HoldfastIconDarkElectricBlue HoldfastIconLightWarningOrange HoldfastIconDarkWarningOrange HoldfastIconLightHotMagenta HoldfastIconDarkHotMagenta HoldfastIconLightTerminalViolet HoldfastIconDarkTerminalViolet"
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
         GENERATE_INFOPLIST_FILE: NO
         SUPPORTS_MACCATALYST: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
     info:
       path: Config/App-Info.plist
       properties:
-        CFBundleDisplayName: Executive Dysfunction
+        CFBundleDisplayName: Holdfast
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -79,21 +97,25 @@ targets:
       - target: ShieldActionExtension
         embed: true
 
-  ExecutiveDysfunctionMac:
+  HoldfastMac:
     type: application
     platform: macOS
     sources:
       - path: Sources/MacApp
+      - path: Sources/PresentationShared
       - path: Sources/CloudShared
       - path: Sources/DesktopShared
+      - path: Sources/BlockPageShared
+      - path: Sources/Shared/Lockdown.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunction
-        PRODUCT_NAME: ExecutiveDysfunctionMac
-        PRODUCT_MODULE_NAME: ExecutiveDysfunctionMac
+        PRODUCT_NAME: Holdfast
+        PRODUCT_MODULE_NAME: HoldfastMac
         CODE_SIGN_ENTITLEMENTS: Config/Mac.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Executive Dysfunction Preferences
+        INFOPLIST_KEY_CFBundleDisplayName: Holdfast Preferences
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         TARGETED_DEVICE_FAMILY: ""
       configs:
@@ -110,6 +132,10 @@ targets:
       - sdk: SystemExtensions.framework
     postBuildScripts:
       - name: Embed block page server
+        inputFiles:
+          - "$(BUILT_PRODUCTS_DIR)/BlockPageServer"
+        outputFiles:
+          - "$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/BlockPageServer"
         script: |
           SRC="$BUILT_PRODUCTS_DIR/BlockPageServer"
           DST="$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/BlockPageServer"
@@ -122,6 +148,7 @@ targets:
       - path: Sources/MacWebFilterExtension
       - path: Sources/DesktopShared
       - path: Sources/CloudShared
+      - path: Sources/BlockPageShared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunction.WebFilter
@@ -139,6 +166,7 @@ targets:
       path: Config/MacWebFilterExtension-Info.plist
       properties:
         CFBundlePackageType: SYSX
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NetworkExtension:
           NEProviderClasses:
@@ -153,6 +181,8 @@ targets:
     platform: macOS
     sources:
       - path: Sources/BlockPageServer
+      - path: Sources/BlockPageShared
+      - path: Sources/CloudShared/BypassHistory.swift
     settings:
       base:
         PRODUCT_NAME: BlockPageServer
@@ -170,6 +200,8 @@ targets:
     sources:
       - path: Sources/MonitorExtension
       - path: Sources/Shared
+      - path: Sources/CloudShared/TemporaryAllowanceBackoff.swift
+      - path: Sources/CloudShared/CloudLockdownExitPolicy.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunction.ActivityMonitor
@@ -181,6 +213,8 @@ targets:
       path: Config/ActivityMonitor-Info.plist
       properties:
         CFBundleDisplayName: Activity Monitor
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.deviceactivity.monitor-extension
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).DeviceActivityMonitorExtension
@@ -190,6 +224,9 @@ targets:
     platform: iOS
     sources:
       - path: Sources/ShieldConfigurationExtension
+      - path: Sources/Shared/Rule.swift
+      - path: Sources/Shared/Lockdown.swift
+      - path: Sources/Shared/ShieldTemporaryAccess.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunction.ShieldConfiguration
@@ -201,6 +238,8 @@ targets:
       path: Config/ShieldConfiguration-Info.plist
       properties:
         CFBundleDisplayName: Shield Configuration
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.ManagedSettingsUI.shield-configuration-service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldConfigurationExtension
@@ -210,6 +249,9 @@ targets:
     platform: iOS
     sources:
       - path: Sources/ShieldActionExtension
+      - path: Sources/Shared/Rule.swift
+      - path: Sources/Shared/Lockdown.swift
+      - path: Sources/Shared/ShieldTemporaryAccess.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunction.ShieldAction
@@ -221,40 +263,127 @@ targets:
       path: Config/ShieldAction-Info.plist
       properties:
         CFBundleDisplayName: Shield Action
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.ManagedSettings.shield-action-service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldActionExtension
 
-  ExecutiveDysfunctionTests:
+  HoldfastTests:
     type: bundle.unit-test
     platform: iOS
     sources:
       - path: Tests
         excludes:
+          - UI
           - DesktopEnforcementPolicyTests.swift
           - WebFilterFlowDeciderTests.swift
           - FilterEnforcementStatusTests.swift
           - DesktopRemovalAuthorizationTests.swift
+          - DesktopNetworkExtensionRemovalAuthorizationTests.swift
           - DesktopLockdownSessionTests.swift
+          - WebFilterOutageRegressionTests.swift
+          - BlockPageRendererTests.swift
+          - MacFilterStartupWatchdogTests.swift
+          - MacFilterPreparedRetryGuardsTests.swift
+          - MacFilterPreferenceTimeoutSafetyTests.swift
+          - MacFilterLateEnableQuarantineSafetyTests.swift
+          - MacFilterActivationSafetyTests.swift
+          - MacFilterActivationAuthorizationTests.swift
+          - MacFilterSameBootResetSafetyTests.swift
+          - MacEnforcementSafetyPersistenceTests.swift
+          - AllowanceSchedulePainterTests.swift
+          - DesktopDiagnosticTraceTests.swift
+          - MacTemporaryPauseStoreTests.swift
     dependencies:
-      - target: ExecutiveDysfunction
+      - target: Holdfast
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunctionTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.HoldfastTests
         GENERATE_INFOPLIST_FILE: YES
 
+  # Simulator smoke coverage for the iOS workspace shell. Screen Time APIs cannot
+  # be exercised in a simulator, so these tests assert navigation, presentation,
+  # and layout invariants only -- the failures that a unit test cannot see.
+  HoldfastUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests/UI
+    dependencies:
+      - target: Holdfast
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.HoldfastUITests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Holdfast
+
+  # Deliberately hostless. Hosting these in HoldfastMac launched the
+  # real app for every run, which constructs MacAppModel -> MacEnforcementController
+  # -> configureNetworkFilter() -> NEFilterManager.saveToPreferences. A test run
+  # therefore rewrote the live Network Extension configuration and restarted the
+  # content filter on the developer's own machine; one run logged
+  # NEFilterErrorDomain Code=3 "configuration is stale". The decision layer under
+  # test is pure Foundation/Security/CryptoKit, so it is compiled straight into
+  # the test bundle and no NetworkExtension code is ever loaded.
   DesktopEnforcementTests:
     type: bundle.unit-test
     platform: macOS
     sources:
+      - path: Tests/MacConfirmationPassageLayoutTests.swift
+      - path: Tests/MacWorkspaceLayoutTests.swift
+      - path: Tests/BypassHistoryTests.swift
+      - path: Tests/CloudLockdownTests.swift
+      - path: Tests/TemporaryAllowanceBackoffTests.swift
+      - path: Tests/BlockingSchedulePreviewTests.swift
+      - path: Sources/PresentationShared
+      - path: Sources/MacApp/MacWorkspaceViews.swift
+      - path: Sources/MacApp/MacBlockStatusTimeline.swift
+      - path: Sources/MacApp/MacBlockingTargetsEditor.swift
+      - path: Sources/MacApp/MacConfirmationPassageView.swift
+      - path: Sources/MacApp/MacPassageInput.swift
+      - path: Sources/MacApp/MacLockdownStatusView.swift
+      - path: Sources/MacApp/DesktopRuleEditUnlock.swift
+      - path: Sources/MacApp/MacDesignSystem.swift
       - path: Tests/DesktopEnforcementPolicyTests.swift
       - path: Tests/WebFilterFlowDeciderTests.swift
       - path: Tests/FilterEnforcementStatusTests.swift
       - path: Tests/DesktopRemovalAuthorizationTests.swift
+      - path: Tests/DesktopNetworkExtensionRemovalAuthorizationTests.swift
       - path: Tests/DesktopLockdownSessionTests.swift
-    dependencies:
-      - target: ExecutiveDysfunctionMac
+      - path: Tests/WebFilterOutageRegressionTests.swift
+      - path: Tests/BlockPageRendererTests.swift
+      - path: Tests/MacFilterStartupWatchdogTests.swift
+      - path: Tests/MacFilterPreparedRetryGuardsTests.swift
+      - path: Tests/MacFilterPreferenceTimeoutSafetyTests.swift
+      - path: Tests/MacFilterLateEnableQuarantineSafetyTests.swift
+      - path: Tests/MacFilterActivationSafetyTests.swift
+      - path: Tests/MacFilterActivationAuthorizationTests.swift
+      - path: Tests/MacFilterSameBootResetSafetyTests.swift
+      - path: Tests/MacEnforcementSafetyPersistenceTests.swift
+      - path: Tests/HoldfastIconVariantTests.swift
+      - path: Tests/BlockStatusCalendarLayoutTests.swift
+      - path: Tests/ActivityMonitorCapacityPlanTests.swift
+      - path: Sources/Shared/ActivityMonitorCapacityPlan.swift
+      - path: Tests/AllowanceSchedulePainterTests.swift
+      - path: Tests/CloudPreferencesTests.swift
+      - path: Tests/DesktopDiagnosticTraceTests.swift
+      - path: Tests/HoldfastDiagnosticReportTests.swift
+      - path: Tests/HoldfastDiagnosticDocumentSectionsTests.swift
+      - path: Tests/HoldfastEnforcementIdentitiesTests.swift
+      - path: Tests/MacTemporaryPauseStoreTests.swift
+      - path: Sources/MacApp/MacTemporaryPauseStore.swift
+      - path: Sources/Shared/Lockdown.swift
+      - path: Sources/CloudShared/HoldfastEnforcementIdentities.swift
+      - path: Sources/MacWebFilterExtension/FilterStatusPublisher.swift
+      - path: Sources/DesktopShared
+      - path: Sources/CloudShared
+      - path: Sources/BlockPageShared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunctionDesktopTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.HoldfastDesktopTests
+        PRODUCT_MODULE_NAME: DesktopEnforcementTests
         GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: ""
+        BUNDLE_LOADER: ""
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) DESKTOP_HOSTLESS_TESTS"

@@ -14,6 +14,7 @@ enum SharedConfiguration {
     private static var defaults: UserDefaults {
         UserDefaults(suiteName: appGroupIdentifier) ?? .standard
     }
+    static var bypassHistoryDefaults: UserDefaults { defaults }
 
     static func loadRules() -> [BlockingRule] {
         guard let data = defaults.data(forKey: rulesKey),
@@ -35,7 +36,26 @@ enum SharedConfiguration {
     static let lockdownConfigurationKey = "lockdown.configuration.v1"
     static let unlockProcessKey = "lockdown.unlock.v1"
     static let ruleUnlockProcessesKey = "lockdown.rule-unlocks.v1"
+    static let retreatUnlockProcessesKey = "lockdown.retreat-unlocks.v1"
     static let ruleTimeAllowancesKey = "lockdown.rule-time-allowances.v1"
+    private static let timedLockdownsKey = "enforcement.timed-lockdowns.v1"
+
+    static func loadTimedLockdowns() -> [TimedLockdownSession] {
+        guard let data = defaults.data(forKey: timedLockdownsKey) else { return [] }
+        return (try? JSONDecoder().decode([TimedLockdownSession].self, from: data)) ?? []
+    }
+
+    static func saveTimedLockdowns(_ sessions: [TimedLockdownSession]) throws {
+        defaults.set(try JSONEncoder().encode(sessions), forKey: timedLockdownsKey)
+    }
+
+    static func allowanceBackoffHistory(for ruleID: UUID) -> TemporaryAllowanceBackoff.History? {
+        TemporaryAllowanceBackoff.history(for: ruleID, defaults: defaults)
+    }
+
+    static func recordAllowanceBackoff(for ruleID: UUID, resetDays: Int, at now: Date) {
+        TemporaryAllowanceBackoff.recordGrant(for: ruleID, resetDays: resetDays, at: now, defaults: defaults)
+    }
 
     static func loadLockdownConfiguration() -> LockdownConfiguration {
         guard let data = defaults.data(forKey: lockdownConfigurationKey),
@@ -76,6 +96,21 @@ enum SharedConfiguration {
         }
     }
 
+    static func loadRetreatUnlockProcesses() -> [UUID: UnlockProcess] {
+        guard let data = defaults.data(forKey: retreatUnlockProcessesKey),
+              let processes = try? JSONDecoder().decode([UUID: UnlockProcess].self, from: data)
+        else { return [:] }
+        return processes
+    }
+
+    static func saveRetreatUnlockProcesses(_ processes: [UUID: UnlockProcess]) {
+        if processes.isEmpty {
+            defaults.removeObject(forKey: retreatUnlockProcessesKey)
+        } else {
+            defaults.set(try? JSONEncoder().encode(processes), forKey: retreatUnlockProcessesKey)
+        }
+    }
+
     static func loadRuleTimeAllowances() -> [UUID: RuleTimeAllowance] {
         guard let data = defaults.data(forKey: ruleTimeAllowancesKey),
               let allowances = try? JSONDecoder().decode([UUID: RuleTimeAllowance].self, from: data)
@@ -98,6 +133,28 @@ enum SharedConfiguration {
         return allowance
     }
 
+    static let shieldedWindowStoreNamesKey = "enforcement.shielded-window-stores.v1"
+
+    /// The store names a time block shield was last written to. A shield is
+    /// lifted by its monitor's `intervalDidEnd`, so any store that outlives its
+    /// monitor -- a window Screen Time had no capacity for, a recomputed window
+    /// identity, a deleted rule -- would otherwise stay shielded forever with
+    /// nothing left to release it.
+    static var shieldedWindowStoreNames: Set<String> {
+        get { Set(defaults.stringArray(forKey: shieldedWindowStoreNamesKey) ?? []) }
+        set {
+            if newValue.isEmpty {
+                defaults.removeObject(forKey: shieldedWindowStoreNamesKey)
+            } else {
+                defaults.set(Array(newValue).sorted(), forKey: shieldedWindowStoreNamesKey)
+            }
+        }
+    }
+
+    static func recordShieldedWindowStore(_ descriptor: MonitorDescriptor) {
+        shieldedWindowStoreNames.insert(descriptor.activityName.rawValue)
+    }
+
     static func markUsageShieldForRestore(ruleID: UUID) {
         var allowances = loadRuleTimeAllowances()
         guard var allowance = allowances[ruleID], allowance.isActive(at: Date()) else { return }
@@ -109,6 +166,7 @@ enum SharedConfiguration {
 }
 
 enum MonitorDescriptor: Equatable {
+    case lockdown(sessionID: UUID)
     case window(ruleID: UUID, windowID: UUID)
     case usage(ruleID: UUID)
     case allowance(ruleID: UUID)
@@ -116,6 +174,8 @@ enum MonitorDescriptor: Equatable {
 
     var activityName: DeviceActivityName {
         switch self {
+        case let .lockdown(sessionID):
+            DeviceActivityName("ed.l.\(sessionID.uuidString)")
         case let .window(ruleID, windowID):
             DeviceActivityName("ed.w.\(ruleID.uuidString).\(windowID.uuidString)")
         case let .usage(ruleID):
@@ -134,7 +194,7 @@ enum MonitorDescriptor: Equatable {
     var ruleID: UUID? {
         switch self {
         case let .window(ruleID, _), let .usage(ruleID), let .allowance(ruleID): ruleID
-        case .usageBatch: nil
+        case .usageBatch, .lockdown: nil
         }
     }
 
@@ -148,6 +208,9 @@ enum MonitorDescriptor: Equatable {
         guard parts.count >= 2, parts[0] == "ed" else { return nil }
 
         if parts.count == 2, parts[1] == "ub" { return .usageBatch }
+        if parts.count == 3, parts[1] == "l", let id = UUID(uuidString: parts[2]) {
+            return .lockdown(sessionID: id)
+        }
 
         if parts.count == 3, parts[1] == "u", let ruleID = UUID(uuidString: parts[2]) {
             return .usage(ruleID: ruleID)

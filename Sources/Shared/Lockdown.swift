@@ -87,10 +87,17 @@ struct RuleLockdownPolicy: Codable, Equatable {
     var passageWordCount = 40
     var confirmationWindowHours = 24
     var editWindowHours = 24
-    /// Allows a typed passage to suspend this rule in one-hour increments.
+    /// Allows a typed passage to suspend this rule for one of the fixed,
+    /// short-duration temporary-access choices.
     var allowsTimeExtensions = false
     /// Bounds an allowance session so exponential passages cannot grow forever.
     var maximumTimeExtensionHours = 3
+    var temporaryAllowanceResetDays: Int? = nil
+    var temporaryAccessPassageWordCount: Int? = nil
+
+    var effectiveTemporaryAccessPassageWordCount: Int {
+        min(300, max(20, temporaryAccessPassageWordCount ?? passageWordCount))
+    }
 
     func configuration(appDefault: LockdownConfiguration) -> LockdownConfiguration {
         guard severity != .appDefault else { return appDefault }
@@ -111,6 +118,8 @@ extension RuleLockdownPolicy {
         case severity, unlockDelayDays, passageWordCount
         case confirmationWindowHours, editWindowHours
         case allowsTimeExtensions, maximumTimeExtensionHours
+        case temporaryAllowanceResetDays
+        case temporaryAccessPassageWordCount
     }
 
     init(from decoder: Decoder) throws {
@@ -122,23 +131,106 @@ extension RuleLockdownPolicy {
         editWindowHours = try values.decodeIfPresent(Int.self, forKey: .editWindowHours) ?? 24
         allowsTimeExtensions = try values.decodeIfPresent(Bool.self, forKey: .allowsTimeExtensions) ?? false
         maximumTimeExtensionHours = try values.decodeIfPresent(Int.self, forKey: .maximumTimeExtensionHours) ?? 3
+        temporaryAllowanceResetDays = try values.decodeIfPresent(Int.self, forKey: .temporaryAllowanceResetDays).map { min(365, max(1, $0)) }
+        temporaryAccessPassageWordCount = try values.decodeIfPresent(Int.self, forKey: .temporaryAccessPassageWordCount).map { min(300, max(20, $0)) }
+    }
+}
+
+enum TemporaryAccessDuration: Int, Codable, CaseIterable, Identifiable, Sendable {
+    case tenMinutes = 10
+    case thirtyMinutes = 30
+    case sixtyMinutes = 60
+
+    var id: Int { rawValue }
+    var minutes: Int { rawValue }
+    var seconds: TimeInterval { TimeInterval(rawValue * 60) }
+
+    var title: String {
+        "\(rawValue) minutes"
     }
 }
 
 struct RuleTimeAllowance: Codable, Equatable {
     var ruleID: UUID
     var expiresAt: Date
+    /// Legacy builds counted one-hour increments. Keep writing this field so a
+    /// device that has not updated yet can still read a conservative grant
+    /// count, while new builds use `grantCount` and `totalMinutesGranted`.
     var incrementsGranted: Int
+    /// Cumulative access granted during this contiguous allowance session.
+    /// It resets only after the allowance expires and is removed.
+    var totalMinutesGranted: Int
+    /// Number of passages accepted in this contiguous allowance session. This,
+    /// rather than the chosen duration, drives exponential passage escalation.
+    var grantCount: Int
     /// A usage-threshold shield was active when the allowance began or fired
     /// during it, and must be restored when the allowance expires.
     var restoreUsageShield: Bool
 
+    init(
+        ruleID: UUID,
+        expiresAt: Date,
+        incrementsGranted: Int,
+        restoreUsageShield: Bool
+    ) {
+        let count = max(0, incrementsGranted)
+        self.ruleID = ruleID
+        self.expiresAt = expiresAt
+        self.incrementsGranted = count
+        totalMinutesGranted = count * 60
+        grantCount = count
+        self.restoreUsageShield = restoreUsageShield
+    }
+
+    init(
+        ruleID: UUID,
+        expiresAt: Date,
+        totalMinutesGranted: Int,
+        grantCount: Int,
+        restoreUsageShield: Bool
+    ) {
+        let count = max(0, grantCount)
+        self.ruleID = ruleID
+        self.expiresAt = expiresAt
+        incrementsGranted = count
+        self.totalMinutesGranted = max(0, totalMinutesGranted)
+        self.grantCount = count
+        self.restoreUsageShield = restoreUsageShield
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case ruleID, expiresAt, incrementsGranted
+        case totalMinutesGranted, grantCount, restoreUsageShield
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        ruleID = try values.decode(UUID.self, forKey: .ruleID)
+        expiresAt = try values.decode(Date.self, forKey: .expiresAt)
+        let legacyCount = max(0, try values.decodeIfPresent(Int.self, forKey: .incrementsGranted) ?? 0)
+        grantCount = max(0, try values.decodeIfPresent(Int.self, forKey: .grantCount) ?? legacyCount)
+        incrementsGranted = grantCount
+        totalMinutesGranted = max(
+            0,
+            try values.decodeIfPresent(Int.self, forKey: .totalMinutesGranted)
+                ?? (legacyCount * 60)
+        )
+        restoreUsageShield = try values.decodeIfPresent(Bool.self, forKey: .restoreUsageShield) ?? false
+    }
+
     func isActive(at date: Date) -> Bool { date < expiresAt }
+
+    /// DeviceActivity stores calendar boundaries at whole-second precision.
+    /// Accept that boundary even when the persisted expiry has a fraction,
+    /// while refusing a delayed callback belonging to an earlier grant.
+    func isDueForMonitorEnd(at date: Date) -> Bool {
+        date.timeIntervalSince1970 >= expiresAt.timeIntervalSince1970.rounded(.down)
+    }
 
     func nextPassageWordCount(base: Int) -> Int {
         TimeAllowancePolicy.passageWordCount(
             base: base,
-            incrementsAlreadyGranted: incrementsGranted
+            incrementsAlreadyGranted: grantCount
         )
     }
 }
@@ -147,7 +239,16 @@ enum TimeAllowancePolicy {
     static let hour: TimeInterval = 60 * 60
     static let maximumHoursRange = 1...8
 
-    /// The first hour uses the base passage. Every consecutive hour doubles it.
+    static func canGrant(
+        _ duration: TemporaryAccessDuration,
+        afterMinutes alreadyGranted: Int,
+        maximumHours: Int
+    ) -> Bool {
+        let maximumMinutes = max(0, maximumHours) * 60
+        return max(0, alreadyGranted) + duration.minutes <= maximumMinutes
+    }
+
+    /// The first grant uses the base passage. Every consecutive grant doubles it.
     static func passageWordCount(base: Int, incrementsAlreadyGranted: Int) -> Int {
         let multiplier = 1 << max(0, min(7, incrementsAlreadyGranted))
         return max(1, base) * multiplier

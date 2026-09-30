@@ -1,4 +1,4 @@
-# Executive Dysfunction
+# Holdfast
 
 An iPhone Screen Time controller with native macOS and Windows enforcement work, built with Apple's `FamilyControls`, `ManagedSettings`, `DeviceActivity`, Network Extension, and on-device `FoundationModels` frameworks, plus Windows process-notify and Windows Filtering Platform components.
 
@@ -45,8 +45,20 @@ An iPhone Screen Time controller with native macOS and Windows enforcement work,
    xcodegen generate
    ```
 
+### One-click local macOS deployment
+
+Double-click [Deploy Holdfast.command](<Deploy Holdfast.command>) in Finder, or
+run `./Deploy\ Holdfast.command` from Terminal. It regenerates the Xcode
+project, builds a signed Debug app, installs it at `/Applications/Holdfast.app`,
+and verifies its signature. It does not launch Holdfast or change web
+enforcement state.
+
 6. For macOS enforcement, enable the standard **Network Extensions** capability for the containing Mac app ID and `com.GabrielPrice.ExecutiveDysfunction.WebFilter`, then regenerate their profiles. Debug uses the development-profile value `content-filter-provider`; Release keeps `content-filter-provider-systemextension` for Developer ID distribution. Sign both targets with the same team and notarize Developer ID releases. No Endpoint Security capability request is used by this edition. An unsigned build can compile the code but cannot activate the filter.
-7. Open `ExecutiveDysfunction.xcodeproj` and run the `ExecutiveDysfunction` scheme only on a physical iPhone. Run `ExecutiveDysfunctionMac` on a Mac signed into the same iCloud account; its installed name is **Executive Dysfunction Preferences**. The iOS target explicitly opts out of “Designed for iPhone/iPad on Mac” because Screen Time authorization cannot communicate with its iOS helper there. The signing team is stored in `project.yml`, so `xcodegen generate` preserves it.
+
+### Compatibility identifiers retained after the Holdfast rename
+
+Holdfast intentionally retains the original Apple bundle IDs, App Group, Keychain access groups, Network Extension identifier, launch-daemon label, and `/Library/Application Support/ExecutiveDysfunction` support directory. These identifiers are installation and security boundaries rather than displayed branding. Changing them in place would orphan existing preferences, credentials, the installed system extension, and recovery state; new installations and upgrades therefore continue to use them while presenting Holdfast everywhere users see the product.
+7. Open `Holdfast.xcodeproj` and run the `Holdfast` scheme only on a physical iPhone. Run `HoldfastMac` on a Mac signed into the same iCloud account; its installed name is **Holdfast Preferences**. The iOS target explicitly opts out of “Designed for iPhone/iPad on Mac” because Screen Time authorization cannot communicate with its iOS helper there. The signing team is stored in `project.yml`, so `xcodegen generate` preserves it.
 8. Grant Screen Time access on the iPhone before creating rules. On Mac, click **Install Web Enforcement**, approve the system extension/content filter locally in System Settings, and restart if macOS requests it. **Recovery / Remove** is the deliberate administrator recovery path.
 
 If bundle IDs or the Apple team change, update the constants in `Sources/DesktopShared/DesktopEnforcementPolicy.swift` as well as `project.yml` and the entitlement files. The shared Keychain access-group prefix is intentionally explicit; the current signing team remains `7GXNZJMGPD`.

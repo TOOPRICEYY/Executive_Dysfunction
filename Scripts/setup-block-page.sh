@@ -21,13 +21,15 @@ set -euo pipefail
 
 SUPPORT="/Library/Application Support/ExecutiveDysfunction"
 DIR="$SUPPORT/blockpage"
-STATUS="$SUPPORT/filter-status.json"
+STATUS="${BLOCKPAGE_STATUS:-$SUPPORT/filter-status.json}"
 DAEMON_PLIST="/Library/LaunchDaemons/com.GabrielPrice.ExecutiveDysfunction.blockpage.plist"
 DAEMON_LABEL="com.GabrielPrice.ExecutiveDysfunction.blockpage"
 SERVER_BIN="$DIR/BlockPageServer"
 HOSTS="/etc/hosts"
-MARK_BEGIN="# BEGIN ExecutiveDysfunction block page"
-MARK_END="# END ExecutiveDysfunction block page"
+MARK_BEGIN="# BEGIN Holdfast block page"
+MARK_END="# END Holdfast block page"
+LEGACY_MARK_BEGIN="# BEGIN ExecutiveDysfunction block page"
+LEGACY_MARK_END="# END ExecutiveDysfunction block page"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "This must run as root:  sudo $0" >&2
@@ -35,11 +37,15 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 remove_hosts_block() {
-  if grep -qF "$MARK_BEGIN" "$HOSTS" 2>/dev/null; then
-    # Keep a copy the first time we ever touch it.
-    [ -f "$HOSTS.ExecutiveDysfunction.bak" ] || cp "$HOSTS" "$HOSTS.ExecutiveDysfunction.bak"
-    /usr/bin/sed -i '' "/^${MARK_BEGIN}$/,/^${MARK_END}$/d" "$HOSTS"
-  fi
+  for marker_pair in "$MARK_BEGIN|$MARK_END" "$LEGACY_MARK_BEGIN|$LEGACY_MARK_END"; do
+    pair_begin=${marker_pair%%|*}
+    pair_end=${marker_pair#*|}
+    if grep -qF "$pair_begin" "$HOSTS" 2>/dev/null; then
+      # Keep a copy the first time Holdfast ever touches it.
+      [ -f "$HOSTS.Holdfast.bak" ] || cp "$HOSTS" "$HOSTS.Holdfast.bak"
+      /usr/bin/sed -i '' "/^${pair_begin}$/,/^${pair_end}$/d" "$HOSTS"
+    fi
+  done
 }
 
 if [ "${1:-}" = "--uninstall" ]; then
@@ -58,26 +64,8 @@ if [ "${1:-}" = "--uninstall" ]; then
   exit 0
 fi
 
-mkdir -p "$DIR"
-chmod 755 "$SUPPORT"
-chmod 700 "$DIR"
-
-# ---------------------------------------------------------------- CA
-if [ ! -f "$DIR/ca.pem" ]; then
-  echo "Generating root CA…"
-  openssl ecparam -name prime256v1 -genkey -noout -out "$DIR/ca.key" 2>/dev/null
-  openssl req -x509 -new -key "$DIR/ca.key" -sha256 -days 3650 \
-    -subj "/CN=Executive Dysfunction Block Page CA/O=Executive Dysfunction" \
-    -out "$DIR/ca.pem" 2>/dev/null
-  chmod 600 "$DIR/ca.key"
-  echo "Trusting the CA (this is the part that lets the page answer as a blocked site)…"
-  security add-trusted-cert -d -r trustRoot \
-    -k /Library/Keychains/System.keychain "$DIR/ca.pem"
-else
-  echo "Reusing existing CA."
-fi
-
-# ------------------------------------------------- domains to answer for
+# Validate every input before creating or trusting certificate material. A
+# failed preflight must leave the System keychain and /etc/hosts untouched.
 DOMAINS=$(/usr/bin/python3 - "$STATUS" <<'PY'
 import json, sys
 try:
@@ -91,11 +79,11 @@ for name in names:
     name = name.strip().lower().lstrip(".")
     if not name:
         continue
-    if name not in out:
-        out.append(name)
-    www = "www." + name
-    if www not in out:
-        out.append(www)
+    if name.startswith("www."):
+        name = name[4:]
+    for candidate in (name, "www." + name):
+        if candidate not in out:
+            out.append(candidate)
 print("\n".join(out))
 PY
 )
@@ -103,8 +91,50 @@ PY
 if [ -z "$DOMAINS" ]; then
   echo
   echo "No blocked domains found in $STATUS."
-  echo "Start the app and make sure a block-list rule is active, then re-run this."
+  echo "Run a guarded blocking test so the provider publishes the policy, then re-run this."
   exit 1
+fi
+
+BUNDLED="${BLOCKPAGE_BINARY:-/Applications/Holdfast.app/Contents/MacOS/BlockPageServer}"
+if [ ! -f "$BUNDLED" ]; then
+  echo "Block page server not found at $BUNDLED" >&2
+  echo "Install the app first, or set BLOCKPAGE_BINARY to the built binary." >&2
+  exit 1
+fi
+
+mkdir -p "$DIR"
+chmod 755 "$SUPPORT"
+chmod 700 "$DIR"
+
+CREATED_CA=0
+rollback_new_ca() {
+  CODE=$?
+  if [ "$CODE" -ne 0 ] && [ "$CREATED_CA" -eq 1 ]; then
+    echo "Installation failed; removing the newly trusted block-page CA." >&2
+    if [ -f "$DIR/ca.pem" ]; then
+      FP=$(openssl x509 -in "$DIR/ca.pem" -noout -fingerprint -sha1 2>/dev/null | cut -d= -f2 | tr -d ':')
+      [ -z "$FP" ] || security delete-certificate -Z "$FP" /Library/Keychains/System.keychain >/dev/null 2>&1 || true
+    fi
+    rm -rf "$DIR"
+  fi
+  exit "$CODE"
+}
+trap rollback_new_ca ERR
+
+# ---------------------------------------------------------------- CA
+if [ ! -f "$DIR/ca.pem" ]; then
+  CREATED_CA=1
+  echo "Generating root CA…"
+  openssl ecparam -name prime256v1 -genkey -noout -out "$DIR/ca.key" 2>/dev/null
+  openssl req -x509 -new -key "$DIR/ca.key" -sha256 -days 3650 \
+    -subj "/CN=Holdfast Block Page CA/O=Holdfast" \
+    -out "$DIR/ca.pem" 2>/dev/null
+  chmod 600 "$DIR/ca.key"
+  echo "Trusting the CA (this is the part that lets the page answer as a blocked site)…"
+  security add-trusted-cert -d -r trustRoot \
+    -k /Library/Keychains/System.keychain "$DIR/ca.pem"
+else
+  echo "Reusing existing CA."
 fi
 
 COUNT=$(printf '%s\n' "$DOMAINS" | wc -l | tr -d ' ')
@@ -123,7 +153,7 @@ subjectAltName=$SAN
 EOF
 
 openssl ecparam -name prime256v1 -genkey -noout -out "$DIR/leaf.key" 2>/dev/null
-openssl req -new -key "$DIR/leaf.key" -subj "/CN=Blocked by Executive Dysfunction" \
+openssl req -new -key "$DIR/leaf.key" -subj "/CN=Blocked by Holdfast" \
   -out "$DIR/leaf.csr" 2>/dev/null
 # Apple requires <=825 days for server certificates to be trusted.
 openssl x509 -req -in "$DIR/leaf.csr" -CA "$DIR/ca.pem" -CAkey "$DIR/ca.key" \
@@ -140,16 +170,12 @@ chmod 600 "$DIR/identity.p12" "$DIR/leaf.key" "$DIR/ca.key"
 # ------------------------------------------------------------- server
 # Shipped inside the app bundle, so a refresh always installs the server that
 # matches the installed app rather than whatever was copied here once.
-BUNDLED="${BLOCKPAGE_BINARY:-/Applications/ExecutiveDysfunctionMac.app/Contents/MacOS/BlockPageServer}"
-if [ -f "$BUNDLED" ]; then
-  cp -f "$BUNDLED" "$SERVER_BIN"
-elif [ ! -f "$SERVER_BIN" ]; then
-  echo "Block page server not found at $BUNDLED" >&2
-  echo "Install the app first, or set BLOCKPAGE_BINARY to the built binary." >&2
-  exit 1
-fi
+cp -f "$BUNDLED" "$SERVER_BIN"
 chown root:wheel "$SERVER_BIN"
 chmod 755 "$SERVER_BIN"
+printf '%s\n' "$DOMAINS" > "$DIR/configured-domains.txt"
+chown root:wheel "$DIR/configured-domains.txt"
+chmod 644 "$DIR/configured-domains.txt"
 
 cat > "$DAEMON_PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -166,23 +192,18 @@ chown root:wheel "$DAEMON_PLIST"
 chmod 644 "$DAEMON_PLIST"
 
 launchctl bootout system/"$DAEMON_LABEL" 2>/dev/null || true
-launchctl bootstrap system "$DAEMON_PLIST"
-
-# -------------------------------------------------------- loopback redirect
-echo "Pointing blocked domains at loopback…"
+# Keep a pristine recovery copy before the daemon ever gains authority to edit
+# the hosts file. This is intentionally not overwritten by later refreshes.
+[ -f "$HOSTS.Holdfast.bak" ] || cp "$HOSTS" "$HOSTS.Holdfast.bak"
 remove_hosts_block
-{
-  echo "$MARK_BEGIN"
-  printf '%s\n' "$DOMAINS" | while IFS= read -r name; do
-    [ -n "$name" ] && echo "127.0.0.1 $name"
-  done
-  echo "$MARK_END"
-} >> "$HOSTS"
+launchctl bootstrap system "$DAEMON_PLIST"
 
 dscacheutil -flushcache 2>/dev/null || true
 killall -HUP mDNSResponder 2>/dev/null || true
+trap - ERR
 
 echo
-echo "Done. $COUNT name(s) now show the block page."
+echo "Done. $COUNT name(s) are ready to show the block page while blocking is active."
+echo "Mappings are removed automatically when the provider heartbeat stops or says blocking is inactive."
 echo "Verify:  curl -sS https://$(printf '%s\n' "$DOMAINS" | head -1) | head -5"
 echo "Undo:    sudo $0 --uninstall"

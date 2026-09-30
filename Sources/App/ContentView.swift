@@ -3,19 +3,27 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var pendingTemporaryAccessRequest: PendingTemporaryAccessRequest?
 
     var body: some View {
-        TabView {
-            RulesHomeView()
-                .tabItem { Label("Rules", systemImage: "shield.fill") }
-
-            SettingsView()
-                .tabItem { Label("Settings", systemImage: "gearshape.fill") }
-        }
+        IOSWorkspaceRoot()
         .alert("Action needed", isPresented: errorBinding) {
             Button("OK", role: .cancel) { model.errorMessage = nil }
         } message: {
             Text(model.errorMessage ?? "Unknown error")
+        }
+        .sheet(item: $pendingTemporaryAccessRequest) { request in
+            TemporaryAccessRequestView(request: request) {
+                pendingTemporaryAccessRequest = nil
+            }
+            .environmentObject(model)
+            .interactiveDismissDisabled()
+        }
+        .onAppear(perform: refreshPendingTemporaryAccessRequest)
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            refreshPendingTemporaryAccessRequest()
         }
     }
 
@@ -24,6 +32,24 @@ struct ContentView: View {
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
         )
+    }
+
+    private func refreshPendingTemporaryAccessRequest() {
+        model.refreshPendingTemporaryAccessRequest()
+        guard let request = model.pendingTemporaryAccessRequest else {
+            pendingTemporaryAccessRequest = nil
+            return
+        }
+
+        let allowedRuleIDs = Set(model.rules.lazy.filter {
+            $0.isEnabled && $0.lockdownPolicy.allowsTimeExtensions
+        }.map(\.id))
+        guard !allowedRuleIDs.isDisjoint(with: request.eligibleRuleIDs) else {
+            model.clearPendingTemporaryAccessRequest(id: request.id)
+            pendingTemporaryAccessRequest = nil
+            return
+        }
+        pendingTemporaryAccessRequest = request
     }
 }
 
@@ -55,13 +81,8 @@ private struct RulesHomeView: View {
                 }
             }
             .sheet(item: $requestingTimeRule) { rule in
-                PassageEntryView(
-                    title: "One More Hour",
-                    explanation: allowanceExplanation(for: rule),
-                    wordCount: model.timeAllowancePassageWordCount(for: rule.id)
-                ) {
-                    model.grantTimeAllowance(for: rule.id)
-                }
+                RuleTemporaryAccessRequestView(ruleID: rule.id)
+                    .environmentObject(model)
             }
             .onAppear { model.refreshTimeAllowances() }
             .onReceive(allowanceRefreshTimer) { _ in model.refreshTimeAllowances() }
@@ -141,19 +162,15 @@ private struct RulesHomeView: View {
     private func canRequestMoreTime(for rule: BlockingRule) -> Bool {
         rule.isEnabled
             && rule.lockdownPolicy.allowsTimeExtensions
-            && model.nextTimeAllowanceIncrement(for: rule.id) <= rule.lockdownPolicy.maximumTimeExtensionHours
-    }
-
-    private func allowanceExplanation(for rule: BlockingRule) -> String {
-        let increment = model.nextTimeAllowanceIncrement(for: rule.id)
-        let words = model.timeAllowancePassageWordCount(for: rule.id)
-        return "Type the passage to suspend only \(rule.name) for one additional hour. This is hour \(increment) of \(rule.lockdownPolicy.maximumTimeExtensionHours) in the current session and requires \(words) words. Each consecutive hour doubles the passage length."
+            && !model.availableTemporaryAccessDurations(for: rule.id).isEmpty
     }
 }
 
-private struct SettingsView: View {
+struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
     @State private var showAntiUninstallConfirmation = false
+    @State private var diagnosticsSummary = "…"
 
     var body: some View {
         NavigationStack {
@@ -162,9 +179,16 @@ private struct SettingsView: View {
                 cloudSection
                 hardeningSection
                 lockdownSection
+                diagnosticsSection
                 limitationsSection
             }
             .navigationTitle("Settings")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .iosModelErrorAlert()
             .confirmationDialog(
                 "Prevent all app deletion?",
                 isPresented: $showAntiUninstallConfirmation,
@@ -236,11 +260,12 @@ private struct SettingsView: View {
     }
 
     private var lockdownSection: some View {
-        Section("Lockdown") {
+        Section("Lockdown & change protection") {
+            NavigationLink("Timed enforcement lockdown") { IOSTimedLockdownView().environmentObject(model) }
             NavigationLink {
                 LockdownView()
             } label: {
-                LabeledContent("App-wide Lockdown", value: lockdownStatus)
+                LabeledContent("App-wide change protection", value: lockdownStatus)
             }
         }
     }
@@ -252,6 +277,32 @@ private struct SettingsView: View {
         case .waiting: return "Unlock in progress"
         case .confirmationDue: return "Confirmation due"
         case .unlocked: return "Unlocked"
+        }
+    }
+
+    private var diagnosticsSection: some View {
+        Section("Diagnostics") {
+            NavigationLink {
+                IOSDiagnosticsView()
+            } label: {
+                LabeledContent("Device Report", value: diagnosticsSummary)
+            }
+        }
+        // Computed once when the section appears rather than in `body`. Building
+        // the report reads the live monitor list and every shield store, which is
+        // far too much work to repeat on each view update.
+        .onAppear(perform: refreshDiagnosticsSummary)
+    }
+
+    /// Surfaced on the settings row itself so a problem is visible without
+    /// having to go looking for it.
+    private func refreshDiagnosticsSummary() {
+        let report = model.makeDiagnosticReport(redaction: .standard)
+        let critical = report.criticalWarnings.count
+        if critical > 0 {
+            diagnosticsSummary = "\(critical) critical"
+        } else {
+            diagnosticsSummary = report.warnings.isEmpty ? "OK" : "\(report.warnings.count) notes"
         }
     }
 

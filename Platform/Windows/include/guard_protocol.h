@@ -2,7 +2,7 @@
 
 #include <winioctl.h>
 
-#define ED_GUARD_DEVICE_PATH L"\\\\.\\ExecutiveDysfunctionGuard"
+#define ED_GUARD_DEVICE_PATH L"\\\\.\\HoldfastGuard"
 #define ED_GUARD_MAX_RULES 256
 #define ED_GUARD_MAX_PATH_CHARS 520
 

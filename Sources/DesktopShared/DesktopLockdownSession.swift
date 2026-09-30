@@ -1,5 +1,17 @@
 import Foundation
 
+struct DesktopLockdownCancellationAuthorization: Codable, Equatable {
+    var sessionIDs: Set<UUID>
+    var expiresAt: Date
+
+    private enum CodingKeys: String, CodingKey { case sessionIDs, expiresAt }
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(sessionIDs.sorted { $0.uuidString < $1.uuidString }, forKey: .sessionIDs)
+        try values.encode(expiresAt, forKey: .expiresAt)
+    }
+}
+
 /// A time-boxed commitment that forces existing block lists on.
 ///
 /// The normal rule model is schedule-driven: a rule blocks inside its weekly
@@ -23,6 +35,8 @@ struct DesktopLockdownSession: Codable, Equatable, Identifiable, Sendable {
     var lockdown: DesktopLockdownPolicy
     /// Fixed at creation so it cannot be re-rolled for a shorter one later.
     var earlyExitPassage: String
+    /// Preserve selected targets if a group is edited, deleted, or its retreat ends.
+    var ruleSnapshots: [DesktopEnforcementRule]? = nil
 
     func isActive(at date: Date) -> Bool {
         date >= startedAt && date < endsAt
@@ -30,6 +44,36 @@ struct DesktopLockdownSession: Codable, Equatable, Identifiable, Sendable {
 
     func remaining(at date: Date) -> TimeInterval {
         max(0, endsAt.timeIntervalSince(date))
+    }
+
+    func cloudSession(currentRules: [CloudRulePreference]) -> CloudLockdownSession {
+        let portable = ruleIDs.sorted { $0.uuidString < $1.uuidString }.compactMap { id -> CloudRulePreference? in
+            guard let snapshot = ruleSnapshots?.first(where: { $0.id == id }) else {
+                return currentRules.first { $0.id == id }
+            }
+            var rule = currentRules.first { $0.id == id } ?? CloudRulePreference(id: id, name: snapshot.name)
+            rule.enforcementMode = snapshot.enforcementMode.rawValue
+            rule.domains = snapshot.domains.sorted().map { CloudDomainPreference(domain: $0, category: "other", source: "user") }
+            // Snapshot domains already include category expansion at creation.
+            rule.websiteCategories = []
+            rule.macApplicationIdentifiers = snapshot.macApplicationIdentifiers
+            return rule
+        }
+        return CloudLockdownSession(id: id, rules: portable, startedAt: startedAt, endsAt: endsAt,
+            exitPolicy: CloudLockdownExitPolicy(severity: lockdown.severity,
+                unlockDelayDays: lockdown.unlockDelayDays, passageWordCount: lockdown.passageWordCount,
+                confirmationWindowHours: lockdown.confirmationWindowHours, editWindowHours: lockdown.editWindowHours),
+            earlyExitPassage: earlyExitPassage)
+    }
+
+    static func fromCloud(_ session: CloudLockdownSession) -> Self {
+        let policy = session.exitPolicy
+        return Self(id: session.id, ruleIDs: session.ruleIDs, startedAt: session.startedAt, endsAt: session.endsAt,
+            lockdown: DesktopLockdownPolicy(severity: policy.severity, unlockDelayDays: policy.unlockDelayDays,
+                passageWordCount: policy.passageWordCount, confirmationWindowHours: policy.confirmationWindowHours,
+                editWindowHours: policy.editWindowHours, allowsTimeExtensions: false, maximumTimeExtensionHours: 1),
+            earlyExitPassage: session.earlyExitPassage,
+            ruleSnapshots: DesktopBlockProfile(cloudRules: session.rules).rules)
     }
 }
 
@@ -75,16 +119,24 @@ extension DesktopEnforcementPolicy {
         )
 
         for original in previousActive {
+            if let authorization = lockdownCancellationAuthorization,
+               now < authorization.expiresAt, authorization.sessionIDs.contains(original.id) { continue }
             if let proposed = proposedByID[original.id] {
                 // Present, but its end may have been pulled in. Only a later
                 // end is accepted without authorization; extending a commitment
                 // is always allowed.
-                if proposed.endsAt < original.endsAt,
-                   let index = sessions.firstIndex(where: { $0.id == original.id }) {
-                    sessions[index].endsAt = original.endsAt
+                if let index = sessions.firstIndex(where: { $0.id == original.id }) {
+                    sessions[index].endsAt = max(proposed.endsAt, original.endsAt)
+                    sessions[index].startedAt = min(proposed.startedAt, original.startedAt)
+                    sessions[index].ruleIDs.formUnion(original.ruleIDs)
+                    sessions[index].lockdown = original.lockdown
+                    sessions[index].earlyExitPassage = original.earlyExitPassage
+                    sessions[index].ruleSnapshots = original.ruleSnapshots ?? previous.rules.filter { original.ruleIDs.contains($0.id) }
                 }
             } else {
-                sessions.append(original)
+                var retained = original
+                retained.ruleSnapshots = original.ruleSnapshots ?? previous.rules.filter { original.ruleIDs.contains($0.id) }
+                sessions.append(retained)
             }
         }
         result.lockdownSessions = sessions
@@ -110,7 +162,7 @@ enum DesktopLockdownSessionGate {
     static let offeredDurations: [(label: String, seconds: TimeInterval)] = [
         ("1 hour", 3_600),
         ("4 hours", 4 * 3_600),
-        ("Rest of today", 12 * 3_600),
+        ("12 hours", 12 * 3_600),
         ("24 hours", 86_400),
         ("3 days", 3 * 86_400),
         ("7 days", 7 * 86_400),

@@ -10,6 +10,94 @@ enum WebFilterFlowDecision: Equatable {
     case inspect(peekBytes: Int)
 }
 
+/// A decision plus why a drop was reached.
+///
+/// The kind is not used to decide anything; it feeds `WebFilterFailOpenGovernor`,
+/// which must be able to tell a drop the user asked for from a drop this filter
+/// guessed at. Without that distinction the safety valve would switch
+/// enforcement off for anyone who reloads a blocked page enough times.
+struct WebFilterFlowOutcome: Equatable {
+    var decision: WebFilterFlowDecision
+    var dropKind: WebFilterDropKind?
+    /// Stable, fixed-cardinality branch identifier used by diagnostics.
+    ///
+    /// This deliberately carries no hostname, address, URL, application
+    /// identifier or rule identifier. Future outage reports need to say which
+    /// branch made a decision without turning the status file into browsing
+    /// history.
+    var reason: WebFilterDecisionReason
+
+    static func allow(_ reason: WebFilterDecisionReason) -> WebFilterFlowOutcome {
+        WebFilterFlowOutcome(decision: .allow, dropKind: nil, reason: reason)
+    }
+    static func inspect(_ peekBytes: Int, reason: WebFilterDecisionReason) -> WebFilterFlowOutcome {
+        WebFilterFlowOutcome(decision: .inspect(peekBytes: peekBytes), dropKind: nil, reason: reason)
+    }
+    static func drop(_ kind: WebFilterDropKind, reason: WebFilterDecisionReason) -> WebFilterFlowOutcome {
+        WebFilterFlowOutcome(decision: .drop, dropKind: kind, reason: reason)
+    }
+}
+
+/// Why the decision tree reached a verdict.
+///
+/// Raw values are persisted in the redacted diagnostics snapshot, so keep them
+/// stable. The set is intentionally finite: logging arbitrary values here
+/// would create both a privacy leak and unbounded telemetry cardinality.
+enum WebFilterDecisionReason: String, Codable, Equatable, CaseIterable {
+    case policyInactive = "policy_inactive"
+    case failOpenBypass = "fail_open_bypass"
+    case enforcementStackExempt = "enforcement_stack_exempt"
+    case localScopeExempt = "local_scope_exempt"
+    case captivePortalProbeAllowed = "captive_portal_probe_allowed"
+    case captivePortalAssistantAllowed = "captive_portal_assistant_allowed"
+    case sourceApplicationBlocked = "source_application_blocked"
+    case knownHostRecoveryExempt = "known_host_recovery_exempt"
+    case knownHostAllowed = "known_host_allowed"
+    case knownHostDeferredBlock = "known_host_deferred_block"
+    case knownHostBlocked = "known_host_blocked"
+    case encryptedDNSBlocked = "encrypted_dns_blocked"
+    case unnamedQUICBlocked = "unnamed_quic_blocked"
+    /// Retained so an older persisted diagnostics snapshot still decodes.
+    case unnamedQUICAllowed = "unnamed_quic_allowed"
+    case unnamedQUICFortressBlocked = "unnamed_quic_fortress_blocked"
+    case unnamedInspectable = "unnamed_inspectable"
+    case unnamedPreconnectAllowed = "unnamed_preconnect_allowed"
+    case correlatedBlockedEndpoint = "correlated_blocked_endpoint"
+    case unidentifiedAllowed = "unidentified_allowed"
+    case unidentifiedFortressBlocked = "unidentified_fortress_blocked"
+    case completionKnownHostBlocked = "completion_known_host_blocked"
+    case completionUnclassifiedAllowed = "completion_unclassified_allowed"
+    case completionUnclassifiedFortressBlocked = "completion_unclassified_fortress_blocked"
+    case tlsServerNameRecoveryExempt = "tls_server_name_recovery_exempt"
+    case tlsServerNameAllowed = "tls_server_name_allowed"
+    case tlsServerNameBlocked = "tls_server_name_blocked"
+    case tlsAddressLiteralBlocked = "tls_address_literal_blocked"
+    case tlsEncryptedClientHelloBlocked = "tls_ech_blocked"
+    /// Retained so an older persisted diagnostics snapshot still decodes.
+    case tlsEncryptedClientHelloAllowed = "tls_ech_allowed"
+    case tlsEncryptedClientHelloFortressBlocked = "tls_ech_fortress_blocked"
+    case tlsMissingServerNameAllowed = "tls_missing_sni_allowed"
+    case tlsMissingServerNameFortressBlocked = "tls_missing_sni_fortress_blocked"
+    case tlsMalformedAllowed = "tls_malformed_allowed"
+    case tlsMalformedFortressBlocked = "tls_malformed_fortress_blocked"
+    case tlsIncomplete = "tls_incomplete"
+    case httpIncomplete = "http_incomplete"
+    case httpHostRecoveryExempt = "http_host_recovery_exempt"
+    case httpHostAllowed = "http_host_allowed"
+    case httpHostBlocked = "http_host_blocked"
+    case httpMissingHostAllowed = "http_missing_host_allowed"
+    case httpMissingHostFortressBlocked = "http_missing_host_fortress_blocked"
+    case httpMalformedAllowed = "http_malformed_allowed"
+    case httpMalformedFortressBlocked = "http_malformed_fortress_blocked"
+    case payloadHostnameRecoveryExempt = "payload_hostname_recovery_exempt"
+    case payloadHostnameAllowed = "payload_hostname_allowed"
+    case payloadHostnameBlocked = "payload_hostname_blocked"
+    case payloadUnidentifiedAllowed = "payload_unidentified_allowed"
+    case payloadUnidentifiedFortressBlocked = "payload_unidentified_fortress_blocked"
+    case streamMissingStateAllowed = "stream_missing_state_allowed"
+    case streamInvalidSequenceAllowed = "stream_invalid_sequence_allowed"
+}
+
 /// Describes one new flow using only values the provider can obtain cheaply.
 /// Keeping this a plain struct lets the whole decision tree be exercised by
 /// unit tests without a live Network Extension.
@@ -21,6 +109,10 @@ struct WebFilterFlowDescriptor: Equatable {
     var isTCP: Bool
     var sourceSigningIdentifier: String?
     var sourceExecutablePath: String
+    /// Set only after validating the audit-token owner against Apple's signing
+    /// requirement AND an exact protected-system captive-portal executable.
+    /// A bundle identifier or a User-Agent is not sufficient evidence.
+    var sourceIsVerifiedCaptivePortalComponent: Bool
 
     init(
         hostname: String? = nil,
@@ -28,7 +120,8 @@ struct WebFilterFlowDescriptor: Equatable {
         remotePort: Int? = nil,
         isTCP: Bool = true,
         sourceSigningIdentifier: String? = nil,
-        sourceExecutablePath: String = ""
+        sourceExecutablePath: String = "",
+        sourceIsVerifiedCaptivePortalComponent: Bool = false
     ) {
         self.hostname = hostname
         self.remoteAddress = remoteAddress
@@ -36,6 +129,7 @@ struct WebFilterFlowDescriptor: Equatable {
         self.isTCP = isTCP
         self.sourceSigningIdentifier = sourceSigningIdentifier
         self.sourceExecutablePath = sourceExecutablePath
+        self.sourceIsVerifiedCaptivePortalComponent = sourceIsVerifiedCaptivePortalComponent
     }
 }
 
@@ -47,23 +141,12 @@ enum WebFilterFlowDecider {
     /// UDP ports that carry QUIC/HTTP3 web traffic.
     static let quicWebPorts: Set<Int> = [80, 443]
 
-    /// Large enough for a complete TLS record, because a ClientHello does *not*
-    /// put the server name near the front.
-    ///
-    /// Chrome shuffles its extension order per connection, and its
-    /// post-quantum key share pushes the ClientHello past 1700 bytes. Measured
-    /// on a live machine, the server name landed at offsets 1691, 1426, 1722,
-    /// 1760, 1419, 429, 1748 and 1798 across eight connections to a single
-    /// host: seven of eight sat beyond a 1024-byte window. A short peek blocked
-    /// that site roughly one attempt in eight and released it otherwise, which
-    /// presents as a site that fails and then re-routes itself.
-    ///
-    /// Asking for this much is safe. `peekOutboundBytes` is an upper bound, not
-    /// a threshold: a 39-byte write was verified to arrive immediately under a
-    /// 1024-byte peek, so requesting more than the client sends does not hold
-    /// the flow. Re-peeking after a short first look was tried and did not
-    /// deliver, so the whole record is requested up front.
-    static let plaintextPeekBytes = 16_640
+    /// Network Extension waits for the requested initial count during ordinary
+    /// request/response traffic. A 16,640-byte request consequently wedged every
+    /// inspected browser flow on the live Mac. Start with one byte; the provider
+    /// then streams a declared TLS record in bounded pieces while retaining the
+    /// full prefix locally for late-SNI classification.
+    static let initialTCPPeekBytes = WebFilterStreamingInspection.initialPeekBytes
 
     /// Infrastructure the enforcement stack itself depends on. Blocking these
     /// under a Fortress rule would stop the Mac from ever receiving the policy
@@ -90,63 +173,153 @@ enum WebFilterFlowDecider {
         at date: Date = Date(),
         inspectsDNS: Bool = inspectsDNSQueries
     ) -> WebFilterFlowDecision {
+        outcome(for: flow, policy: policy, at: date, inspectsDNS: inspectsDNS).decision
+    }
+
+    static func outcome(
+        for flow: WebFilterFlowDescriptor,
+        policy: DesktopEnforcementPolicy,
+        at date: Date = Date(),
+        inspectsDNS: Bool = inspectsDNSQueries,
+        matchesRecentlyBlockedEndpoint: Bool = false
+    ) -> WebFilterFlowOutcome {
         // 1. Idle is free. With no active web rule the filter is a pass-through,
         //    so a scheduling bug or a stale policy can never cost connectivity.
-        guard policy.hasActiveWebRestrictions(at: date) else { return .allow }
+        //
+        //    Note that a block-list rule naming no domains is not an active web
+        //    restriction: it has nothing to block, so it must not switch on any
+        //    fail-closed handling. See `hasActiveWebRestrictions`.
+        guard policy.hasActiveWebRestrictions(at: date) else { return .allow(.policyInactive) }
 
         // 2. The controlling app and its extension must always reach the network.
-        if isEnforcementStack(flow.sourceSigningIdentifier) { return .allow }
+        if isEnforcementStack(flow.sourceSigningIdentifier) { return .allow(.enforcementStackExempt) }
 
         // 3. Local-scope destinations are not websites. Blocking them breaks
         //    printing, Continuity and local development for no enforcement gain.
-        if let address = flow.remoteAddress, isLocalScope(address) { return .allow }
+        if let address = flow.remoteAddress, isLocalScope(address) { return .allow(.localScopeExempt) }
+
+        if let reason = captivePortalAllowance(for: flow, policy: policy, at: date) {
+            return .allow(reason)
+        }
 
         let fortress = policy.hasActiveFortress(at: date)
+
+        // macOS asks for the new-flow verdict before a BSD socket reports a
+        // successful connect. Live testing proved that returning a data-filter
+        // verdict here can deadlock: curl waits for connect before writing its
+        // ClientHello, while Network Extension waits for that ClientHello
+        // before completing connect. A recently *named* blocked flow gives us a
+        // bounded alternative for Chrome retries that lose their hostname.
+        if matchesRecentlyBlockedEndpoint,
+           flow.hostname?.isEmpty != false,
+           flow.remoteAddress?.isEmpty == false {
+            // This is not an arbitrary fail-closed guess: the endpoint was
+            // positively correlated with a domain named by the active policy.
+            // Treat it as an intentional drop so repeated browser retries
+            // cannot trip the outage circuit breaker and fail enforcement open.
+            return .drop(.named, reason: .correlatedBlockedEndpoint)
+        }
 
         // 4. Application rules are enforced at the socket only for block-list
         //    rules. A Fortress rule's application allow-list is not applied
         //    here: cutting a browser off entirely would make that same rule's
         //    website exceptions unreachable, which is never what was asked for.
-        if blocksSourceApplication(flow, policy: policy, at: date) { return .drop }
+        if blocksSourceApplication(flow, policy: policy, at: date) {
+            return .drop(.named, reason: .sourceApplicationBlocked)
+        }
 
         // 5. A name we already have is the cheapest and most reliable signal.
         if let hostname = flow.hostname, !hostname.isEmpty, !isAddressLiteral(hostname) {
             if fortress, isRecoveryCritical(hostname), !policy.blocksDomainExplicitly(hostname, at: date) {
-                return .allow
+                return .allow(.knownHostRecoveryExempt)
             }
-            guard policy.blocksNetworkHostname(hostname, at: date) else { return .allow }
+            guard policy.blocksNetworkHostname(hostname, at: date) else {
+                return .allow(.knownHostAllowed)
+            }
 
-            // Dropping a TCP web flow before it connects makes the client wait
-            // for its own connect timeout, and a browser that hangs for twelve
-            // seconds reads as "the internet is down" rather than "this site is
-            // blocked". Letting the handshake complete and refusing the first
-            // write instead fails in milliseconds. The name is re-checked in
-            // the data phase, so this costs no enforcement: nothing is ever
-            // carried on the flow.
-            if let port = flow.remotePort, flow.isTCP, isInspectablePort(port, isTCP: true) {
-                return .inspect(peekBytes: plaintextPeekBytes)
-            }
-            return .drop
+            // The framework-provided name is already authoritative. Deferring
+            // this intentional block to the data phase creates held state for
+            // no classification benefit and was part of the machine-wide
+            // outage path. Refuse it directly on every port.
+            return .drop(.named, reason: .knownHostBlocked)
         }
 
-        if let port = flow.remotePort, dedicatedEncryptedDNSPorts.contains(port) { return .drop }
+        if let port = flow.remotePort, dedicatedEncryptedDNSPorts.contains(port) {
+            return .drop(.unidentified, reason: .encryptedDNSBlocked)
+        }
 
-        // QUIC hides its handshake, so an unnamed UDP web flow is the one path
-        // that reaches a site with no inspectable name anywhere. Refusing it
-        // costs nothing permanent: every browser races QUIC against TCP and
-        // falls back, and the TCP attempt carries a readable ClientHello.
-        // Named QUIC flows were already decided above and are untouched.
-        if !flow.isTCP, let port = flow.remotePort, quicWebPorts.contains(port) { return .drop }
+        // QUIC hides its handshake, so an unnamed UDP web flow has no later SNI
+        // callback where a domain rule could be applied. Refuse it and let web
+        // clients retry over inspectable TCP. This is an unidentified drop and
+        // therefore feeds the provider's fail-open safety valve.
+        if !flow.isTCP, let port = flow.remotePort, quicWebPorts.contains(port) {
+            return .drop(.unidentified, reason: .unnamedQUICBlocked)
+        }
 
-        // 6. No name yet. Peek only where a name is actually recoverable from
-        //    the first write: DNS questions, HTTP requests and TLS ClientHellos.
+        // 6. No name yet. Do not request outbound payload at new-flow time.
+        //    Some socket clients cannot produce it until connect completes, so
+        //    even a one-byte peek held every HTTPS connection on the live Mac.
+        //    Fortress is intentionally default-deny; a block list must release
+        //    traffic it cannot identify.
         if let port = flow.remotePort, isInspectablePort(port, isTCP: flow.isTCP, inspectsDNS: inspectsDNS) {
-            return .inspect(peekBytes: plaintextPeekBytes)
+            return fortress
+                ? .drop(.unidentified, reason: .unidentifiedFortressBlocked)
+                : .allow(.unnamedPreconnectAllowed)
         }
 
         // 7. Anything else is unidentified. Fortress fails closed; a block-list
         //    rule has nothing to match on and must not turn into an outage.
-        return fortress ? .drop : .allow
+        return fortress
+            ? .drop(.unidentified, reason: .unidentifiedFortressBlocked)
+            : .allow(.unidentifiedAllowed)
+    }
+
+    /// The verdict for a flow whose outbound data has ended without ever being
+    /// classified.
+    ///
+    /// The provider previously re-ran the *new flow* decision here, which
+    /// returns `.inspect` for any unnamed web flow, and mapped `.inspect` to
+    /// `.drop()`. So a stream that ended without a readable ClientHello was
+    /// killed. This was an earlier outage path, separate from the later live
+    /// incident where a 16,640-byte initial peek held every inspected flow.
+    ///
+    /// Nothing is lost by releasing here. The flow never revealed a name, so
+    /// dropping it was never enforcement — it was a guess, and the guess was
+    /// wrong far more often than it was right. A flow that *did* reveal a
+    /// blocked name was already dropped in the data phase and never reaches
+    /// this path.
+    static func decisionAtOutboundCompletion(
+        for flow: WebFilterFlowDescriptor,
+        policy: DesktopEnforcementPolicy,
+        at date: Date = Date()
+    ) -> WebFilterFlowOutcome {
+        guard policy.hasActiveWebRestrictions(at: date) else { return .allow(.policyInactive) }
+        if isEnforcementStack(flow.sourceSigningIdentifier) { return .allow(.enforcementStackExempt) }
+        if let address = flow.remoteAddress, isLocalScope(address) { return .allow(.localScopeExempt) }
+
+        if let reason = captivePortalAllowance(for: flow, policy: policy, at: date) {
+            return .allow(reason)
+        }
+
+        if blocksSourceApplication(flow, policy: policy, at: date) {
+            return .drop(.named, reason: .sourceApplicationBlocked)
+        }
+
+        // A name established at flow setup is authoritative, so a flow held back
+        // for fast failure cannot escape simply by writing nothing.
+        let fortress = policy.hasActiveFortress(at: date)
+        if let known = flow.hostname, !known.isEmpty, !isAddressLiteral(known),
+           policy.blocksNetworkHostname(known, at: date),
+           !(fortress && isRecoveryCritical(known) && !policy.blocksDomainExplicitly(known, at: date)) {
+            return .drop(.named, reason: .completionKnownHostBlocked)
+        }
+
+        // Unidentified. Fortress is default-deny and still refuses; a block-list
+        // rule has no name to match and must release rather than take the
+        // machine offline.
+        return fortress
+            ? .drop(.unidentified, reason: .completionUnclassifiedFortressBlocked)
+            : .allow(.completionUnclassifiedAllowed)
     }
 
     /// Block-list application rules only. Returns false whenever the source is
@@ -178,11 +351,26 @@ enum WebFilterFlowDecider {
         policy: DesktopEnforcementPolicy,
         at date: Date = Date()
     ) -> WebFilterFlowDecision {
-        guard policy.hasActiveWebRestrictions(at: date) else { return .allow }
-        if isEnforcementStack(flow.sourceSigningIdentifier) { return .allow }
+        outcome(forOutboundBytes: bytes, flow: flow, policy: policy, at: date).decision
+    }
+
+    static func outcome(
+        forOutboundBytes bytes: Data,
+        flow: WebFilterFlowDescriptor,
+        policy: DesktopEnforcementPolicy,
+        at date: Date = Date()
+    ) -> WebFilterFlowOutcome {
+        guard policy.hasActiveWebRestrictions(at: date) else { return .allow(.policyInactive) }
+        if isEnforcementStack(flow.sourceSigningIdentifier) { return .allow(.enforcementStackExempt) }
+
+        if let reason = captivePortalAllowance(for: flow, policy: policy, at: date) {
+            return .allow(reason)
+        }
 
         let fortress = policy.hasActiveFortress(at: date)
-        if blocksSourceApplication(flow, policy: policy, at: date) { return .drop }
+        if blocksSourceApplication(flow, policy: policy, at: date) {
+            return .drop(.named, reason: .sourceApplicationBlocked)
+        }
 
         // A name established at flow setup is authoritative and is re-applied
         // here, so a flow held back for fast failure cannot escape by sending
@@ -190,37 +378,87 @@ enum WebFilterFlowDecider {
         if let known = flow.hostname, !known.isEmpty, !isAddressLiteral(known),
            policy.blocksNetworkHostname(known, at: date),
            !(fortress && isRecoveryCritical(known) && !policy.blocksDomainExplicitly(known, at: date)) {
-            return .drop
+            return .drop(.named, reason: .knownHostBlocked)
         }
 
         if flow.isTCP, flow.remotePort == 443 || flow.remotePort == 8443 {
             switch NetworkHostnameInspector.tlsClientHello(in: bytes) {
             case let .serverName(hostname):
-                guard !isAddressLiteral(hostname) else { return .drop }
-                if fortress, isRecoveryCritical(hostname), !policy.blocksDomainExplicitly(hostname, at: date) {
-                    return .allow
+                guard !isAddressLiteral(hostname) else {
+                    return .drop(.unidentified, reason: .tlsAddressLiteralBlocked)
                 }
-                return policy.blocksNetworkHostname(hostname, at: date) ? .drop : .allow
-            case .encryptedClientHello, .missingServerName, .malformed:
-                // A TLS connection with no trustworthy visible identity cannot
-                // safely pass a hostname block. Normal browser TLS uses SNI;
-                // refusing only these concealed/invalid hellos preserves named
-                // browsing while closing the retry bypass.
-                return .drop
+                if fortress, isRecoveryCritical(hostname), !policy.blocksDomainExplicitly(hostname, at: date) {
+                    return .allow(.tlsServerNameRecoveryExempt)
+                }
+                return policy.blocksNetworkHostname(hostname, at: date)
+                    ? .drop(.named, reason: .tlsServerNameBlocked)
+                    : .allow(.tlsServerNameAllowed)
+            case .encryptedClientHello:
+                // A visible SNI wins inside the parser, including Chrome's ECH
+                // GREASE. This branch means the complete hello exposed no name,
+                // so allowing it would be a deterministic hostname bypass.
+                return .drop(.unidentified, reason: .tlsEncryptedClientHelloBlocked)
+            case .missingServerName:
+                return fortress
+                    ? .drop(.unidentified, reason: .tlsMissingServerNameFortressBlocked)
+                    : .allow(.tlsMissingServerNameAllowed)
+            case .malformed:
+                return fortress
+                    ? .drop(.unidentified, reason: .tlsMalformedFortressBlocked)
+                    : .allow(.tlsMalformedAllowed)
             case let .incomplete(requiredBytes):
-                return .inspect(peekBytes: requiredBytes)
+                return .inspect(requiredBytes, reason: .tlsIncomplete)
             case .notTLS:
                 break
             }
         }
 
+        if flow.isTCP,
+           let port = flow.remotePort,
+           port == 80 || port == 443 || port == 8080 || port == 8443 {
+            switch NetworkHostnameInspector.httpRequest(in: bytes) {
+            case let .incomplete(requiredBytes):
+                // HTTP has no length field. Ask for a bounded window instead
+                // of one byte at a time; the streamer still passes only bytes
+                // already received and retains a bounded prefix.
+                return .inspect(
+                    min(
+                        NetworkHostnameInspector.maximumHTTPHeaderBytes,
+                        max(requiredBytes, bytes.count + WebFilterStreamingInspection.maximumPeekBytes)
+                    ),
+                    reason: .httpIncomplete
+                )
+            case let .host(hostname):
+                if fortress, isRecoveryCritical(hostname), !policy.blocksDomainExplicitly(hostname, at: date) {
+                    return .allow(.httpHostRecoveryExempt)
+                }
+                return policy.blocksNetworkHostname(hostname, at: date)
+                    ? .drop(.named, reason: .httpHostBlocked)
+                    : .allow(.httpHostAllowed)
+            case .missingHost:
+                return fortress
+                    ? .drop(.unidentified, reason: .httpMissingHostFortressBlocked)
+                    : .allow(.httpMissingHostAllowed)
+            case .malformed:
+                return fortress
+                    ? .drop(.unidentified, reason: .httpMalformedFortressBlocked)
+                    : .allow(.httpMalformedAllowed)
+            case .notHTTP:
+                break
+            }
+        }
+
         guard let hostname = NetworkHostnameInspector.hostname(in: bytes) else {
-            return fortress ? .drop : .allow
+            return fortress
+                ? .drop(.unidentified, reason: .payloadUnidentifiedFortressBlocked)
+                : .allow(.payloadUnidentifiedAllowed)
         }
         if fortress, isRecoveryCritical(hostname), !policy.blocksDomainExplicitly(hostname, at: date) {
-            return .allow
+            return .allow(.payloadHostnameRecoveryExempt)
         }
-        return policy.blocksNetworkHostname(hostname, at: date) ? .drop : .allow
+        return policy.blocksNetworkHostname(hostname, at: date)
+            ? .drop(.named, reason: .payloadHostnameBlocked)
+            : .allow(.payloadHostnameAllowed)
     }
 
     /// Dropping DNS questions is deliberately off.
@@ -240,7 +478,10 @@ enum WebFilterFlowDecider {
     static let inspectsDNSQueries = false
 
     static func isInspectablePort(_ port: Int, isTCP: Bool, inspectsDNS: Bool = inspectsDNSQueries) -> Bool {
-        if port == 53 { return inspectsDNS }
+        // DNS is datagram/framed traffic and cannot use the TCP partial-pass
+        // streamer safely. The feature remains deliberately off; a future DNS
+        // implementation needs a separate whole-message verdict path.
+        if port == 53 { return false }
         guard isTCP else { return false }
         return port == 80 || port == 443 || port == 8080 || port == 8443
     }
@@ -256,8 +497,36 @@ enum WebFilterFlowDecider {
         return recoveryCriticalSuffixes.contains { host == $0 || host.hasSuffix("." + $0) }
     }
 
-    /// Loopback, link-local, and RFC1918/ULA space. These never identify a
-    /// website, so they stay reachable even when a rule fails closed.
+    /// Loopback, link-local, RFC1918/ULA and RFC6598 shared address space. These
+    /// never identify a website, so they stay reachable even when a rule fails
+    /// closed.
+    ///
+    /// 100.64.0.0/10 is included deliberately. It is carrier-grade NAT space and
+    /// is what VPN and mesh clients hand out for their internal endpoints — this
+    /// machine's only DNS resolver lives at 100.64.0.2, behind a full-tunnel
+    /// VPN. Nothing reachable there is a public website, and refusing it can cut
+    /// off name resolution for the entire system, which presents as a total
+    /// outage rather than as a blocked site.
+    /// Login is infrastructure, not an all-browser pause. Only the exact Apple
+    /// probe and the verified OS login components get this exception. Explicit
+    /// user domain blocks still win, including a redirect to a blocked website.
+    static func captivePortalAllowance(
+        for flow: WebFilterFlowDescriptor,
+        policy: DesktopEnforcementPolicy,
+        at date: Date
+    ) -> WebFilterDecisionReason? {
+        guard MacCaptivePortalPolicy.isAuthenticationTransport(flow),
+              !policy.blocksDomainExplicitly(flow.hostname ?? "", at: date) else { return nil }
+        if flow.sourceIsVerifiedCaptivePortalComponent {
+            return .captivePortalAssistantAllowed
+        }
+        if MacCaptivePortalPolicy.isProbeHostname(flow.hostname),
+           !blocksSourceApplication(flow, policy: policy, at: date) {
+            return .captivePortalProbeAllowed
+        }
+        return nil
+    }
+
     static func isLocalScope(_ rawAddress: String) -> Bool {
         var address = rawAddress.lowercased()
         if let percent = address.firstIndex(of: "%") { address = String(address[address.startIndex..<percent]) }
@@ -283,6 +552,7 @@ enum WebFilterFlowDecider {
         case (0, _), (127, _), (10, _), (169, 254): return true
         case (172, 16...31): return true
         case (192, 168): return true
+        case (100, 64...127): return true
         default: return false
         }
     }
@@ -296,6 +566,42 @@ enum WebFilterFlowDecider {
         guard octets.count == 4 else { return false }
         return octets.allSatisfy { part in
             !part.isEmpty && part.allSatisfy(\.isNumber) && (Int(part).map { (0...255).contains($0) } ?? false)
+        }
+    }
+}
+
+/// No arbitrary process names, all-Apple exemption, portal-address allowlist,
+/// User-Agent matching, or global timer can grant this recovery path.
+enum MacCaptivePortalPolicy {
+    static let probeHostname = "captive.apple.com"
+
+    static func isProbeHostname(_ hostname: String?) -> Bool {
+        guard var hostname = hostname?.lowercased() else { return false }
+        while hostname.hasSuffix(".") { hostname.removeLast() }
+        return hostname == probeHostname
+    }
+
+    static func isAuthenticationTransport(_ flow: WebFilterFlowDescriptor) -> Bool {
+        flow.isTCP && (flow.remotePort == 80 || flow.remotePort == 443)
+    }
+
+    static func webPort(for url: URL?) -> Int? {
+        guard let url else { return nil }
+        switch url.scheme?.lowercased() {
+        case "http": return url.port ?? 80
+        case "https": return url.port ?? 443
+        default: return nil
+        }
+    }
+
+    static func isSystemComponent(signingIdentifier: String?, executablePath: String) -> Bool {
+        switch (signingIdentifier, executablePath) {
+        case ("com.apple.CaptiveNetworkAssistant",
+              "/System/Library/CoreServices/Captive Network Assistant.app/Contents/MacOS/Captive Network Assistant"),
+             ("com.apple.captiveagent", "/usr/libexec/captiveagent"):
+            return true
+        default:
+            return false
         }
     }
 }

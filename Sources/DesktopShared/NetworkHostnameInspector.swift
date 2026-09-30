@@ -10,13 +10,92 @@ enum NetworkHostnameInspector {
         case malformed
     }
 
+    enum HTTPRequestResult: Equatable {
+        case notHTTP
+        /// Absolute prefix length needed for the next deterministic byte. HTTP
+        /// has no length header, so this advances one byte at a time and can
+        /// never wait for more than the client has chosen to write.
+        case incomplete(requiredBytes: Int)
+        case host(String)
+        case missingHost
+        case malformed
+    }
+
     /// TLS records are limited to 16 KiB of plaintext, but a ClientHello can
     /// span records. This cap comfortably covers current browser hellos while
     /// preventing a peer from making the filter retain an unbounded prefix.
     static let maximumClientHelloBytes = 64 * 1_024
 
+    /// RFC 9112 recommends recipients support request lines of at least 8 KiB;
+    /// 16 KiB is also the pre-existing HTTP inspection ceiling. This bounds
+    /// both retained memory and a peer that writes a header forever.
+    static let maximumHTTPHeaderBytes = 16 * 1_024
+
+    private static let maximumHTTPMethodBytes = 32
+
     static func hostname(in data: Data) -> String? {
         httpHost(in: data) ?? tlsServerName(in: data) ?? dnsQueryName(in: data)
+    }
+
+    /// Parses an HTTP/1 request only after complete CRLF-delimited lines arrive.
+    /// In particular, `Host: coinba` is incomplete rather than the authoritative
+    /// hostname `coinba`; accepting that partial value was a streaming bypass.
+    static func httpRequest(in data: Data) -> HTTPRequestResult {
+        let bytes = [UInt8](data)
+        guard !bytes.isEmpty else { return .incomplete(requiredBytes: 1) }
+        guard bytes.count <= maximumHTTPHeaderBytes else { return .malformed }
+
+        guard let methodEnd = bytes.firstIndex(of: 0x20) else {
+            guard bytes.count <= maximumHTTPMethodBytes,
+                  bytes.allSatisfy(isHTTPTokenByte) else { return .notHTTP }
+            return incompleteHTTPRequest(after: bytes.count)
+        }
+        guard methodEnd > 0,
+              methodEnd <= maximumHTTPMethodBytes,
+              bytes[..<methodEnd].allSatisfy(isHTTPTokenByte) else { return .notHTTP }
+
+        guard let requestLineEnd = firstCRLF(in: bytes, from: methodEnd + 1) else {
+            if bytes.contains(0x0A) { return .malformed }
+            return incompleteHTTPRequest(after: bytes.count)
+        }
+        let requestLine = bytes[..<requestLineEnd]
+        let requestParts = requestLine.split(separator: 0x20, omittingEmptySubsequences: true)
+        guard requestParts.count == 3,
+              requestParts[2].starts(with: Array("HTTP/".utf8)) else { return .notHTTP }
+
+        var host: String?
+        var lineStart = requestLineEnd + 2
+        while true {
+            guard lineStart <= bytes.count else { return .malformed }
+            if lineStart + 1 < bytes.count,
+               bytes[lineStart] == 0x0D,
+               bytes[lineStart + 1] == 0x0A {
+                return host.map(HTTPRequestResult.host) ?? .missingHost
+            }
+            guard let lineEnd = firstCRLF(in: bytes, from: lineStart) else {
+                return incompleteHTTPRequest(after: bytes.count)
+            }
+            guard lineEnd > lineStart else { return .malformed }
+
+            let line = bytes[lineStart..<lineEnd]
+            // Obsolete folded headers and colon-less fields are ambiguous. A
+            // block-list releases malformed traffic; Fortress still refuses it.
+            guard line.first != 0x20, line.first != 0x09,
+                  let colon = line.firstIndex(of: 0x3A), colon > line.startIndex else {
+                return .malformed
+            }
+            let rawName = line[..<colon]
+            guard rawName.allSatisfy(isHTTPTokenByte) else { return .malformed }
+            let fieldName = String(decoding: rawName, as: UTF8.self).lowercased()
+            if fieldName == "host" {
+                guard let parsed = httpAuthority(in: line[line.index(after: colon)...]) else {
+                    return .malformed
+                }
+                if let host, host != parsed { return .malformed }
+                host = parsed
+            }
+            lineStart = lineEnd + 2
+        }
     }
 
     /// True when a TLS ClientHello carries the `encrypted_client_hello`
@@ -95,14 +174,63 @@ enum NetworkHostnameInspector {
     }
 
     private static func httpHost(in data: Data) -> String? {
-        guard let text = String(data: data.prefix(16_384), encoding: .utf8) else { return nil }
-        for line in text.components(separatedBy: "\r\n") {
-            guard line.count >= 5, line.prefix(5).caseInsensitiveCompare("host:") == .orderedSame else { continue }
-            let value = line.dropFirst(5).trimmingCharacters(in: .whitespacesAndNewlines)
-            let host = value.split(separator: ":", maxSplits: 1).first.map(String.init) ?? ""
-            return host.isEmpty ? nil : host.lowercased()
+        guard case let .host(host) = httpRequest(in: data) else { return nil }
+        return host
+    }
+
+    private static func incompleteHTTPRequest(after byteCount: Int) -> HTTPRequestResult {
+        guard byteCount < maximumHTTPHeaderBytes else { return .malformed }
+        return .incomplete(requiredBytes: byteCount + 1)
+    }
+
+    private static func firstCRLF(in bytes: [UInt8], from start: Int) -> Int? {
+        guard start >= 0, start + 1 < bytes.count else { return nil }
+        for index in start..<(bytes.count - 1) where bytes[index] == 0x0D && bytes[index + 1] == 0x0A {
+            return index
         }
         return nil
+    }
+
+    private static func isHTTPTokenByte(_ byte: UInt8) -> Bool {
+        switch byte {
+        case 0x21, 0x23...0x27, 0x2A...0x2B, 0x2D...0x2E,
+             0x30...0x39, 0x41...0x5A, 0x5E...0x7A, 0x7C, 0x7E:
+            true
+        default:
+            false
+        }
+    }
+
+    private static func httpAuthority(in bytes: ArraySlice<UInt8>) -> String? {
+        var value = bytes
+        while value.first == 0x20 || value.first == 0x09 { value = value.dropFirst() }
+        while value.last == 0x20 || value.last == 0x09 { value = value.dropLast() }
+        guard !value.isEmpty,
+              value.allSatisfy({ $0 >= 0x21 && $0 <= 0x7E }) else { return nil }
+
+        let raw = String(decoding: value, as: UTF8.self).lowercased()
+        if raw.hasPrefix("[") {
+            guard let close = raw.firstIndex(of: "]") else { return nil }
+            let after = raw.index(after: close)
+            guard after == raw.endIndex || raw[after] == ":" else { return nil }
+            if after != raw.endIndex {
+                let port = raw[raw.index(after: after)...]
+                guard !port.isEmpty, port.allSatisfy(\.isNumber) else { return nil }
+            }
+            return String(raw[...close])
+        }
+
+        let pieces = raw.split(separator: ":", omittingEmptySubsequences: false)
+        guard pieces.count <= 2,
+              let hostname = pieces.first,
+              !hostname.isEmpty,
+              hostname.allSatisfy({ character in
+                  character == "." || character == "-" || character.isLetter || character.isNumber
+              }) else { return nil }
+        if pieces.count == 2 {
+            guard !pieces[1].isEmpty, pieces[1].allSatisfy(\.isNumber) else { return nil }
+        }
+        return String(hostname)
     }
 
     /// Extracts the SNI host from a complete TLS ClientHello.

@@ -1,59 +1,87 @@
 import SwiftUI
 
 struct MacContentView: View {
+    @Environment(\.openWindow) private var openWindow
     @EnvironmentObject private var model: MacAppModel
-    @State private var editingRule: CloudRulePreference?
-    @State private var selectedRuleID: UUID?
+    @AppStorage(MacInterfaceTheme.storageKey) private var storedTheme = MacInterfaceTheme.light.rawValue
+    @AppStorage(MacHighlightColor.storageKey) private var storedHighlight = MacHighlightColor.defaultValue.rawValue
+    @State private var editingBlockingGroup: CloudBlockingGroup?
+    @State private var editingRetreatID: UUID?
+    @State private var endingRetreatID: UUID?
     @State private var isShowingLockdown = false
+    @State private var isShowingDiagnostics = false
+    @State private var selectedSection: MacWorkspaceSection = .dashboard
 
     var body: some View {
         VStack(spacing: 0) {
-            enforcementBanner
-            NavigationSplitView {
-                List(model.rules, selection: $selectedRuleID) { rule in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(rule.name).font(.headline)
-                        Text(summary(rule)).font(.caption).foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .tag(rule.id)
-                    .contextMenu {
-                        Button("Delete Rule", role: .destructive) { model.delete(rule) }
-                    }
+            if model.isUIPreviewMode {
+                HStack {
+                    Text("UI PREVIEW")
+                        .font(.system(.caption, design: .monospaced, weight: .black))
+                    Text("ENFORCEMENT AND ICLOUD WRITES ARE DISABLED")
+                        .font(.system(.caption2, design: .monospaced, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
                 }
-                .onChange(of: selectedRuleID) { _, id in
-                    guard let id, let rule = model.rules.first(where: { $0.id == id }) else { return }
-                    editingRule = rule
-                    selectedRuleID = nil
+                .padding(.horizontal, 18)
+                .frame(height: 42)
+                .background(MacBrutalPalette.surface)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(MacBrutalPalette.rule).frame(height: 1)
                 }
-                .navigationTitle("Rules")
-                .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
-                .toolbar {
-                    Button("Add Rule", systemImage: "plus") { editingRule = CloudRulePreference() }
-                    Button("Lockdown…", systemImage: "lock.circle") { isShowingLockdown = true }
-                    Button("Refresh", systemImage: "arrow.triangle.2.circlepath") { model.refresh() }
-                }
-            } detail: {
-                ContentUnavailableView(
-                    "iPhone Preference Companion",
-                    systemImage: "iphone.and.arrow.forward",
-                    description: Text("Select a rule to edit its portable preferences, or add a new one.")
-                )
             }
+            HStack(spacing: 0) {
+                MacWorkspaceSidebar(selection: $selectedSection) {
+                    if model.isUIPreviewMode {
+                        MacSidebarPreviewStatus()
+                    } else {
+                        enforcementStatusMenu
+                    }
+                }
+                workspace
+            }
+            .id("workspace-\(storedTheme)-\(storedHighlight)")
         }
-        .sheet(item: $editingRule) { rule in
-            MacRuleEditor(initialRule: rule) { model.save($0) }
+        .font(.system(.body, design: .default))
+        .background(MacBrutalPalette.canvas)
+        .tint(MacBrutalPalette.controlAccent)
+        .preferredColorScheme(currentTheme.colorScheme)
+        .toolbar {
+            Button("LOCKDOWN") { isShowingLockdown = true }
+            Button("DIAGNOSTICS") { isShowingDiagnostics = true }
+            Button("REFRESH") { model.refresh() }
+        }
+        .sheet(item: $editingBlockingGroup) { group in
+            MacBlockingGroupEditor(
+                initialGroup: group,
+                isNew: !model.baseline.blockingGroups.contains(where: { $0.id == group.id }),
+                activityGroups: model.activityGroups,
+                model: model,
+                onSave: model.saveBlockingGroup
+            )
         }
         .sheet(isPresented: $isShowingLockdown) {
             MacLockdownSessionSheet(model: model)
+        }
+        .sheet(isPresented: $isShowingDiagnostics) {
+            MacDiagnosticsSheet(model: model)
+        }
+        .sheet(isPresented: Binding(
+            get: { endingRetreatID != nil },
+            set: { if !$0 { endingRetreatID = nil } }
+        )) {
+            if let endingRetreatID {
+                MacRetreatEarlyEndSheet(model: model, retreatID: endingRetreatID) {
+                    self.endingRetreatID = nil
+                }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(
             for: NSUbiquitousKeyValueStore.didChangeExternallyNotification
         )) { _ in
             model.refresh()
         }
-        .alert("iCloud Sync", isPresented: Binding(
+        .alert("Action needed", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
         )) {
@@ -63,8 +91,84 @@ struct MacContentView: View {
         }
     }
 
-    private var enforcementBanner: some View {
-        MacEnforcementBanner(
+    @ViewBuilder
+    private var workspace: some View {
+        switch selectedSection {
+        case .dashboard:
+            MacDashboardView(
+                activeRules: model.dashboardActiveRules,
+                calendarRules: model.dashboardCalendarRules,
+                baselineRules: model.baselineRules,
+                retreats: model.retreats,
+                temporaryAllowances: model.temporaryAllowanceExpirations,
+                lockdownExpirations: model.lockdownExpirations,
+                onEdit: editBlockingGroup,
+                onAdd: { editingBlockingGroup = CloudBlockingGroup() },
+                onOpenRetreats: {
+                    editingRetreatID = nil
+                    selectedSection = .retreats
+                },
+                onOpenRetreat: { retreat in
+                    editingRetreatID = retreat.id
+                    selectedSection = .retreats
+                },
+                bypassPanel: BypassActivityPanel(groups: model.rules.map { .init(id: $0.id, name: $0.name) }, defaults: .standard,
+                    coverageNote: model.browserBypassRecordingAvailable ? nil : "Browser history is unavailable from the running filter. Update/relaunch the filter and block-page helper to record browser grants.",
+                    onOpen: { id in openWindow(id: "bypass-history", value: id?.uuidString ?? "all") })
+            ) {
+                dashboardEnforcementStatus
+                MacLockdownStatusView(sessions: model.activeLockdownSessions, rules: model.rules, syncStatus: model.lockdownSyncStatus) {
+                    isShowingLockdown = true
+                }
+            }
+        case .retreats:
+            MacRetreatComposerView(
+                baselineGroups: model.baseline.blockingGroups,
+                retreats: model.retreats,
+                initialRetreat: editingRetreatID.flatMap { id in
+                    model.retreats.first(where: { $0.id == id })
+                },
+                onOpenRetreat: { editingRetreatID = $0 }
+            ) { submission in
+                model.saveRetreat(
+                    id: submission.id,
+                    name: submission.name,
+                    goal: submission.goal,
+                    plannedStart: submission.plannedStart,
+                    plannedEnd: submission.plannedEnd,
+                    sourceBlockingGroups: submission.blockingGroups,
+                    modificationPolicy: submission.modificationPolicy,
+                    startImmediately: submission.startImmediately
+                )
+            }
+            .id(editingRetreatID?.uuidString ?? "new-retreat")
+        case .history:
+            MacRetreatHistoryView(
+                retreats: model.retreats,
+                onEnd: { id, _ in endingRetreatID = id }
+            ) { retreat in
+                editingRetreatID = retreat.id
+                selectedSection = .retreats
+            }
+        case .settings:
+            MacSettingsView()
+        }
+    }
+
+    private var currentTheme: MacInterfaceTheme {
+        MacInterfaceTheme(rawValue: storedTheme) ?? .light
+    }
+
+    private func editBlockingGroup(for rule: CloudRulePreference) {
+        guard let group = model.baseline.blockingGroups.first(where: { $0.id == rule.id }) else {
+            selectedSection = .retreats
+            return
+        }
+        editingBlockingGroup = group
+    }
+
+    private var enforcementStatusMenu: some View {
+        MacEnforcementStatusMenu(
             controller: model.enforcement,
             syncStatus: model.syncStatus,
             enforcementHealth: model.enforcementHealth,
@@ -73,12 +177,349 @@ struct MacContentView: View {
         )
     }
 
-    private func summary(_ rule: CloudRulePreference) -> String {
-        var parts = [rule.isEnabled ? "Enabled" : "Disabled", "\(rule.windows.count) block(s)"]
-        if rule.usageLimitEnabled { parts.append("\(rule.dailyUsageLimitMinutes)m/day") }
-        if !rule.domains.isEmpty { parts.append("\(rule.domains.count) domains") }
-        if rule.deviceLocalSelectionCount > 0 { parts.append("\(rule.deviceLocalSelectionCount) iPhone selections") }
-        return parts.joined(separator: " • ")
+    private var dashboardEnforcementStatus: some View {
+        MacDashboardEnforcementStatus(
+            controller: model.enforcement,
+            syncStatus: model.syncStatus,
+            enforcementHealth: model.enforcementHealth,
+            install: model.installDesktopEnforcement,
+            model: model,
+            activeRuleCount: model.dashboardActiveRules.count,
+            activeRetreatCount: model.retreats.filter { $0.state == .active }.count
+        )
+    }
+
+}
+
+private struct MacRetreatEarlyEndSheet: View {
+    @ObservedObject var model: MacAppModel
+    let retreatID: UUID
+    let onEnded: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var passagePurpose: PassagePurpose?
+    private let refreshTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+
+    private enum PassagePurpose: String, Identifiable {
+        case start
+        case checkpoint
+        var id: String { rawValue }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("END RETREAT EARLY")
+                .font(.system(.title2, design: .monospaced, weight: .black))
+            if let retreat, let policy {
+                Text(retreat.name.uppercased())
+                    .font(.system(.headline, design: .monospaced, weight: .bold))
+                Text("ENDING AN ACTIVE RETREAT IS A CHANGE. ITS SAVED CHANGE POLICY MUST COMPLETE FIRST.")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Rectangle().fill(MacBrutalPalette.rule).frame(height: 1)
+                phaseContent(policy: policy)
+            } else {
+                Text("THIS RETREAT IS NO LONGER ACTIVE.")
+                    .font(.system(.body, design: .monospaced, weight: .bold))
+            }
+            HStack {
+                Spacer()
+                Button("KEEP RETREAT") { dismiss() }
+                    .buttonStyle(MacBrutalButtonStyle())
+            }
+        }
+        .padding(24)
+        .frame(width: 560)
+        .macBrutalSheet()
+        .onAppear { model.refreshRetreatLockdowns() }
+        .onReceive(refreshTimer) { _ in model.refreshRetreatLockdowns() }
+        .sheet(item: $passagePurpose) { purpose in
+            MacRetreatPassageSheet(
+                title: purpose == .start ? "START CHANGE PROCESS" : "CHANGE POLICY CHECKPOINT",
+                explanation: purpose == .start
+                    ? "Type the passage to begin the Retreat’s saved change process."
+                    : "Type the passage before this checkpoint expires or the process is cancelled.",
+                wordCount: policy?.passageWordCount ?? 40
+            ) {
+                if purpose == .start { model.startRetreatUnlock(retreatID) }
+                else { model.confirmRetreatUnlock(retreatID) }
+            }
+        }
+    }
+
+    private var retreat: CloudRetreat? {
+        model.retreats.first { $0.id == retreatID && $0.state == .active }
+    }
+
+    private var policy: CloudRetreatChangePolicy? {
+        model.retreatChangePolicy(for: retreatID)
+    }
+
+    @ViewBuilder
+    private func phaseContent(policy: CloudRetreatChangePolicy) -> some View {
+        if !policy.requiresAuthorization {
+            Button("END RETREAT NOW", role: .destructive, action: finish)
+                .buttonStyle(MacBrutalButtonStyle(.danger))
+        } else {
+            switch model.retreatUnlockPhases[retreatID] ?? model.retreatUnlockPhase(for: retreatID) {
+            case .idle, .cancelled:
+                Button("TYPE PASSAGE TO START…") { passagePurpose = .start }
+                    .buttonStyle(MacBrutalButtonStyle(.danger))
+                Text(policy.unlockDelayDays == 0
+                    ? "The change window opens immediately after the passage."
+                    : "The earliest change window opens after \(policy.unlockDelayDays) full day(s).")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            case let .waiting(unlocksAt, nextConfirmationAt):
+                Text("EARLIEST END: \(unlocksAt.formatted(date: .abbreviated, time: .shortened))")
+                if let nextConfirmationAt {
+                    Text("NEXT CHECKPOINT: \(nextConfirmationAt.formatted(date: .abbreviated, time: .shortened))")
+                }
+                Button("CANCEL CHANGE PROCESS") { model.cancelRetreatUnlock(retreatID) }
+                    .buttonStyle(MacBrutalButtonStyle())
+            case let .confirmationDue(_, deadline, checkpoint, total):
+                Text("CHECKPOINT \(checkpoint) OF \(total) — DUE BEFORE \(deadline.formatted(date: .abbreviated, time: .shortened))")
+                    .foregroundStyle(Color.orange)
+                Button("TYPE CHECKPOINT PASSAGE…") { passagePurpose = .checkpoint }
+                    .buttonStyle(MacBrutalButtonStyle(.danger))
+            case let .unlocked(editWindowEndsAt):
+                Text("CHANGE WINDOW OPEN UNTIL \(editWindowEndsAt.formatted(date: .abbreviated, time: .shortened))")
+                    .foregroundStyle(Color.green)
+                Button("END RETREAT EARLY", role: .destructive, action: finish)
+                    .buttonStyle(MacBrutalButtonStyle(.danger))
+            }
+        }
+    }
+
+    private func finish() {
+        if model.finishRetreat(retreatID) {
+            onEnded()
+            dismiss()
+        }
+    }
+}
+
+private struct MacRetreatPassageSheet: View {
+    let title: String
+    let explanation: String
+    let wordCount: Int
+    let onComplete: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var passage = ""
+    @State private var typed = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title).font(.system(.headline, design: .monospaced, weight: .black))
+            Text(explanation).font(.caption).foregroundStyle(.secondary)
+            MacConfirmationPassageView(passage: passage, height: 180)
+            MacPassageInput(text: $typed)
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 110)
+                .overlay { Rectangle().stroke(MacBrutalPalette.rule, lineWidth: 1) }
+            HStack {
+                Button("CANCEL") { dismiss() }.buttonStyle(MacBrutalButtonStyle())
+                Spacer()
+                Button("CONFIRM") {
+                    onComplete()
+                    dismiss()
+                }
+                .buttonStyle(MacBrutalButtonStyle(.danger))
+                .disabled(!CommitmentPassage.matches(typed, passage: passage))
+            }
+        }
+        .padding(20)
+        .frame(width: 560)
+        .macBrutalSheet()
+        .onAppear {
+            if passage.isEmpty { passage = CommitmentPassage.generate(wordCount: wordCount) }
+        }
+    }
+}
+
+private struct MacSidebarPreviewStatus: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(MacBrutalPalette.rule)
+                .frame(width: 9, height: 9)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("WEB ENFORCEMENT")
+                    .font(.system(.caption2, design: .monospaced, weight: .bold))
+                Text("PREVIEW ONLY")
+                    .font(.system(.caption2, design: .monospaced, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(MacBrutalPalette.canvas)
+        .overlay { Rectangle().stroke(MacBrutalPalette.rule, lineWidth: 1) }
+    }
+}
+
+private struct MacDashboardEnforcementStatus: View {
+    @ObservedObject var controller: MacEnforcementController
+    let syncStatus: String
+    let enforcementHealth: FilterEnforcementSummary.Health
+    let install: () -> Void
+    @ObservedObject var model: MacAppModel
+    let activeRuleCount: Int
+    let activeRetreatCount: Int
+    @State private var isShowingDetails = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(statusSummary)
+                .font(.system(size: 32, weight: .black, design: .monospaced))
+                .tracking(-1.2)
+
+            Spacer(minLength: 18)
+
+            statusBadge(syncStatus.uppercased())
+            statusBadge("\(activeRuleCount) ACTIVE BLOCKING")
+            statusBadge("\(activeRetreatCount) ACTIVE RETREATS")
+
+            Button("CONTROLS") {
+                isShowingDetails.toggle()
+            }
+            .buttonStyle(MacBrutalButtonStyle())
+            .popover(isPresented: $isShowingDetails, arrowEdge: .top) {
+                MacEnforcementBanner(
+                    controller: controller,
+                    syncStatus: syncStatus,
+                    enforcementHealth: enforcementHealth,
+                    install: install,
+                    model: model
+                )
+                .frame(width: 680)
+            }
+        }
+        .padding(.horizontal, 22)
+        .frame(minHeight: 82)
+        .foregroundStyle(statusForeground)
+        .background(statusColor)
+        .overlay { Rectangle().stroke(MacBrutalPalette.rule, lineWidth: 2) }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func statusBadge(_ text: String) -> some View {
+        Text(text)
+            .font(.system(.caption2, design: .monospaced, weight: .black))
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(statusForeground.opacity(0.12))
+            .overlay { Rectangle().stroke(statusForeground.opacity(0.6), lineWidth: 1) }
+    }
+
+    private var hasWarning: Bool {
+        controller.activationSafetyRequiresRestart
+            || controller.recoveryWarning != nil
+            || controller.deliveryError != nil
+            || (!controller.isBlockingDisabled && !FilterEnforcementSummary.isHealthy(enforcementHealth))
+    }
+
+    private var statusSummary: String {
+        if controller.activationSafetyRequiresRestart { return "SAFETY LOCKED" }
+        if controller.recoveryWarning != nil { return "NEEDS ATTENTION" }
+        if controller.deliveryError != nil { return "DELIVERY ERROR" }
+        if controller.isBlockingDisabled { return "PAUSED" }
+        if controller.status == .active {
+            return FilterEnforcementSummary.isHealthy(enforcementHealth) ? "ACTIVE" : "NEEDS ATTENTION"
+        }
+        return controller.status.description.uppercased()
+    }
+
+    private var statusForeground: Color {
+        hasWarning ? .white : .black
+    }
+
+    private var statusColor: Color {
+        if hasWarning { return .red }
+        if controller.isBlockingDisabled { return .orange }
+        return switch controller.status {
+        case .active: MacBrutalPalette.signal
+        case .disabled: .orange
+        case .failed: .red
+        default: MacBrutalPalette.scheduleSignal
+        }
+    }
+}
+
+private struct MacEnforcementStatusMenu: View {
+    @ObservedObject var controller: MacEnforcementController
+    let syncStatus: String
+    let enforcementHealth: FilterEnforcementSummary.Health
+    let install: () -> Void
+    @ObservedObject var model: MacAppModel
+    @State private var isShowingDetails = false
+
+    var body: some View {
+        Button {
+            isShowingDetails.toggle()
+        } label: {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 9, height: 9)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("WEB ENFORCEMENT")
+                        .font(.system(.caption2, design: .monospaced, weight: .bold))
+                    Text(statusSummary)
+                        .font(.system(.caption2, design: .monospaced, weight: .medium))
+                        .foregroundStyle(hasWarning ? Color.red : Color.secondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.up")
+                    .font(.system(.caption2, design: .monospaced, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            .background(MacBrutalPalette.canvas)
+            .overlay { Rectangle().stroke(statusColor, lineWidth: hasWarning ? 2 : 1) }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Web enforcement status: \(statusSummary)")
+        .popover(isPresented: $isShowingDetails, arrowEdge: .leading) {
+            MacEnforcementBanner(
+                controller: controller,
+                syncStatus: syncStatus,
+                enforcementHealth: enforcementHealth,
+                install: install,
+                model: model
+            )
+            .frame(width: 680)
+        }
+    }
+
+    private var hasWarning: Bool {
+        controller.activationSafetyRequiresRestart
+            || controller.recoveryWarning != nil
+            || controller.deliveryError != nil
+            || (!controller.isBlockingDisabled && !FilterEnforcementSummary.isHealthy(enforcementHealth))
+    }
+
+    private var statusSummary: String {
+        if controller.activationSafetyRequiresRestart { return "SAFETY LOCKED" }
+        if controller.recoveryWarning != nil { return "NEEDS ATTENTION" }
+        if controller.deliveryError != nil { return "DELIVERY ERROR" }
+        if controller.isBlockingDisabled { return "PAUSED" }
+        if controller.status == .active {
+            return FilterEnforcementSummary.isHealthy(enforcementHealth) ? "ACTIVE" : "NEEDS ATTENTION"
+        }
+        return controller.status.description.uppercased()
+    }
+
+    private var statusColor: Color {
+        if hasWarning { return .red }
+        return switch controller.status {
+        case .active: MacBrutalPalette.signal
+        case .disabled: .orange
+        case .failed: .red
+        default: MacBrutalPalette.scheduleSignal
+        }
     }
 }
 
@@ -89,90 +530,286 @@ private struct MacEnforcementBanner: View {
     let install: () -> Void
     @ObservedObject var model: MacAppModel
     @State private var isShowingRemoval = false
+    @State private var blockingDisableChallenge: DesktopBlockingDisableChallenge?
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 5) {
-                Label(controller.status.description, systemImage: statusIcon)
-                    .font(.headline)
-                Text("iPhone rules sync through iCloud. On this Mac, an approval-free Network Extension enforces domains, DNS queries, and common web-filter bypass paths. Local app-launch enforcement is not included. \(syncStatus)")
+                HStack {
+                    Label(controller.status.description, systemImage: statusIcon)
+                        .font(.system(.headline, design: .monospaced, weight: .black))
+                    Spacer()
+                    Text(syncStatus.uppercased())
+                        .font(.system(.caption2, design: .monospaced, weight: .bold))
+                        .foregroundStyle(.secondary)
+                }
+                Text("iPhone rules sync through iCloud. On this Mac, an approval-free Network Extension enforces domains, DNS queries, and common web-filter bypass paths. Local app-launch enforcement is not included.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 // What the filter reports it is actually enforcing. A rejected
                 // or stale policy is otherwise invisible: the rules simply do
                 // nothing, which looks the same as a filter that is fine.
                 Label(
-                    FilterEnforcementSummary.description(for: enforcementHealth),
-                    systemImage: FilterEnforcementSummary.isHealthy(enforcementHealth)
+                    controller.isBlockingDisabled
+                        ? "Web blocking is paused; internet traffic is not being filtered."
+                        : (controller.enforcementPreparationMessage ?? FilterEnforcementSummary.description(for: enforcementHealth)),
+                    systemImage: controller.isBlockingDisabled
+                        ? "pause.circle"
+                        : (FilterEnforcementSummary.isHealthy(enforcementHealth)
                         ? "checkmark.seal"
-                        : "exclamationmark.triangle.fill"
+                        : "exclamationmark.triangle.fill")
                 )
                 .font(.caption)
-                .foregroundStyle(FilterEnforcementSummary.isHealthy(enforcementHealth) ? Color.secondary : Color.red)
+                .foregroundStyle(
+                    controller.isBlockingDisabled || FilterEnforcementSummary.isHealthy(enforcementHealth)
+                        ? Color.secondary
+                        : Color.red
+                )
                 .textSelection(.enabled)
-                removalNotice
+                if let warning = controller.recoveryWarning {
+                    Label(warning, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(Color.orange)
+                        .textSelection(.enabled)
+                }
+                if let deliveryError = controller.deliveryError {
+                    Label("Policy delivery: \(deliveryError)", systemImage: "exclamationmark.octagon.fill")
+                        .font(.caption)
+                        .foregroundStyle(Color.red)
+                        .textSelection(.enabled)
+                }
+                if controller.activationSafetyRequiresRestart {
+                    Label(
+                        "Web enforcement is safety-locked off after a Network Extension failure. Resetting removes and verifies its preference, tests ordinary connectivity, and keeps blocking disabled until you explicitly enable it.",
+                        systemImage: "arrow.counterclockwise.circle.fill"
+                    )
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.red)
+                    .textSelection(.enabled)
+                    if let reason = controller.activationSafetyReason {
+                        Text("Recorded cause: \(reason)")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+                if let resetStatus = controller.enforcementResetStatus {
+                    Label(
+                        resetStatus,
+                        systemImage: controller.isResettingEnforcement
+                            ? "network.badge.shield.half.filled"
+                            : "checkmark.shield"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(
+                        controller.activationSafetyRequiresRestart
+                            ? Color.orange
+                            : Color.secondary
+                    )
+                    .textSelection(.enabled)
+                }
+                if let smokeTestStatus = model.smokeTestStatus {
+                    Label(smokeTestStatus, systemImage: "network.badge.shield.half.filled")
+                        .font(.caption)
+                        .foregroundStyle(Color.orange)
+                        .textSelection(.enabled)
+                }
             }
-            Spacer(minLength: 12)
-            if controller.status == .active || controller.status == .rebootRequired {
-                Button("Recovery / Remove…", role: .destructive) { isShowingRemoval = true }
-            } else {
-                Button("Install Web Enforcement", action: install)
-                    .buttonStyle(.borderedProminent)
+
+            Rectangle().fill(MacBrutalPalette.rule).frame(height: 1)
+
+            HStack(spacing: 8) {
+                if controller.isRemoving {
+                    if controller.status == .rebootRequired {
+                        Label("Restart this Mac to finish removal", systemImage: "restart")
+                            .font(.callout.weight(.medium))
+                    } else {
+                        ProgressView("Removing Network Extension…")
+                            .controlSize(.small)
+                    }
+                } else {
+                    if controller.isBlockingDisabled {
+                        if controller.activationSafetyRequiresRestart {
+                            if controller.isResettingEnforcement {
+                                ProgressView("Resetting enforcement safely…")
+                                    .controlSize(.small)
+                            } else {
+                                Button("Reset Enforcement Without Restart") {
+                                    model.resetDesktopEnforcementWithoutRestart()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .help("Keeps blocking off, removes and verifies the filter preference, and tests connectivity before clearing the safety interlock")
+                            }
+                            if controller.deliveryError != nil {
+                                Button("Retry Disable") {
+                                    model.disableDesktopBlockingImmediately()
+                                }
+                            }
+                        } else if controller.deliveryError != nil {
+                            Button("Retry Disable") {
+                                model.disableDesktopBlockingImmediately()
+                            }
+                            .buttonStyle(.borderedProminent)
+                        } else {
+                            Button("Enable Web Enforcement", action: install)
+                                .buttonStyle(.borderedProminent)
+                        }
+                    } else if controller.recoveryWarning != nil || controller.deliveryError != nil {
+                        if controller.status == .awaitingApproval {
+                            Button("Open System Settings") {
+                                model.openNetworkExtensionSettings()
+                            }
+                        }
+                        if case .failed = controller.status {
+                            Button("Retry Web Enforcement", action: install)
+                        }
+                        Button("Disable All Web Blocks With Passage…", role: .destructive) {
+                            blockingDisableChallenge = model.makeDesktopBlockingDisableChallenge()
+                        }
+                        .help("Type the confirmation passage to pause every web block immediately")
+                    } else if controller.status == .active || controller.status == .rebootRequired {
+                        Button("Disable Blocking With Passage", role: .destructive) {
+                            blockingDisableChallenge = model.makeDesktopBlockingDisableChallenge()
+                        }
+                        .help("Requires a confirmation passage before disabling the Network Extension")
+                    } else if controller.status == .awaitingApproval {
+                        ProgressView("Waiting for Network Extension approval…")
+                            .controlSize(.small)
+                        Button("Open System Settings") {
+                            model.openNetworkExtensionSettings()
+                        }
+                        Button("Cancel Enable", role: .destructive) {
+                            model.disableDesktopBlockingImmediately()
+                        }
+                    } else if controller.status == .activating {
+                        ProgressView("Enabling web enforcement safely…")
+                            .controlSize(.small)
+                        Button("Cancel Enable", role: .destructive) {
+                            model.disableDesktopBlockingImmediately()
+                        }
+                    } else {
+                        Button("Install Web Enforcement", action: install)
+                            .buttonStyle(.borderedProminent)
+                    }
+
+                    if controller.status != .notInstalled,
+                       !controller.isResettingEnforcement {
+                        Button("Remove Network Extension…", role: .destructive) {
+                            isShowingRemoval = true
+                        }
+                    }
+                }
             }
+            .buttonStyle(MacBrutalButtonStyle())
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(bannerColor)
+        .padding(20)
+        .background(MacBrutalPalette.surface)
+        .overlay { Rectangle().stroke(MacBrutalPalette.rule, lineWidth: 1) }
+        .overlay(alignment: .top) { Rectangle().fill(statusColor).frame(height: 7) }
         .sheet(isPresented: $isShowingRemoval) {
-            MacRemovalSheet(controller: controller, model: model)
+            MacRemovalSheet(model: model)
         }
-    }
-
-    /// A pending uninstall is surfaced in the banner itself, not only inside the
-    /// sheet. A countdown the user has to go looking for is one they can start
-    /// and forget, which defeats the point of having a delay at all.
-    @ViewBuilder private var removalNotice: some View {
-        switch controller.removalState {
-        case .notRequested:
-            EmptyView()
-        case let .waiting(remaining):
-            Label(
-                "Uninstall requested — completes in \(MacRemovalSheet.duration(remaining)). Enforcement continues until then.",
-                systemImage: "hourglass"
-            )
-            .font(.caption)
-            .foregroundStyle(Color.orange)
-        case let .ready(remaining, _):
-            Label(
-                "Uninstall can be confirmed for the next \(MacRemovalSheet.duration(remaining)).",
-                systemImage: "exclamationmark.triangle.fill"
-            )
-            .font(.caption)
-            .foregroundStyle(Color.red)
-        case .expired:
-            Label(
-                "The uninstall window closed unused. Requesting again starts the full wait over.",
-                systemImage: "clock.badge.xmark"
-            )
-            .font(.caption)
-            .foregroundStyle(Color.secondary)
+        .sheet(item: $blockingDisableChallenge) { challenge in
+            MacBlockingDisableSheet(challenge: challenge, model: model)
         }
     }
 
     private var statusIcon: String {
         switch controller.status {
         case .active: "lock.shield.fill"
+        case .disabled: "lock.open.fill"
         case .failed: "exclamationmark.triangle.fill"
         case .awaitingApproval, .rebootRequired: "person.badge.key.fill"
         default: "lock.shield"
         }
     }
 
-    private var bannerColor: Color {
+    private var statusColor: Color {
         switch controller.status {
-        case .active: .green.opacity(0.12)
-        case .failed: .red.opacity(0.12)
-        default: .blue.opacity(0.1)
+        case .active: MacBrutalPalette.signal
+        case .disabled: .orange
+        case .failed: .red
+        default: MacBrutalPalette.scheduleSignal
+        }
+    }
+}
+
+/// The ordinary pause control is deliberately gated. This is separate from
+/// watchdog and repair controls, which must remain immediately available if the
+/// Network Extension itself causes an outage.
+private struct MacBlockingDisableSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let challenge: DesktopBlockingDisableChallenge
+    @ObservedObject var model: MacAppModel
+    @State private var typedPassage = ""
+    @State private var validationError: DesktopBlockingDisableGate.Validation?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Disable web blocking")
+                .font(.title3.weight(.semibold))
+            Text("This pauses every web filter until you manually enable web enforcement again.")
+                .font(.callout)
+            Text("Type this passage exactly. It expires after five minutes and becomes invalid if filter settings change.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            MacConfirmationPassageView(passage: challenge.requiredPassage)
+
+            MacPassageInput(text: $typedPassage)
+                .frame(height: 110)
+                .macBrutalTextField()
+                .lineLimit(3...8)
+
+            if let validationError {
+                Label(validationMessage(for: validationError), systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.red)
+            }
+
+            Divider()
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .buttonStyle(MacBrutalButtonStyle())
+                Button("Disable Blocking", role: .destructive) {
+                    confirm()
+                }
+                .buttonStyle(MacBrutalButtonStyle(.danger))
+                .disabled(typedPassage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 540)
+        .macBrutalSheet()
+    }
+
+    private func confirm() {
+        let validation = model.disableDesktopBlocking(
+            challenge: challenge,
+            passage: typedPassage
+        )
+        if validation == .authorized {
+            dismiss()
+        } else {
+            validationError = validation
+        }
+    }
+
+    private func validationMessage(for validation: DesktopBlockingDisableGate.Validation) -> String {
+        switch validation {
+        case .authorized:
+            "Blocking was disabled."
+        case .passageMismatch:
+            "That does not match the passage."
+        case .expired:
+            "This passage expired. Close this window and request a new one."
+        case .policyChanged:
+            "Filter settings changed. Close this window and request a new passage."
+        case .notYetValid:
+            "This passage is not valid yet. Close this window and request a new one."
         }
     }
 }
@@ -185,8 +822,8 @@ private struct MacLockdownSessionSheet: View {
     @ObservedObject var model: MacAppModel
     @State private var selectedRuleIDs: Set<UUID> = []
     @State private var durationIndex = 4
-    @State private var severity = "delayed"
-    @State private var passageWordCount = 8
+    @State private var severity = "passageOnly"
+    @State private var passageWordCount = 80
     @State private var unlockDelayDays = 0
     @State private var typedPassage = ""
     @State private var endingSessionID: UUID?
@@ -197,6 +834,7 @@ private struct MacLockdownSessionSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Lockdown session").font(.title3.weight(.semibold))
+            Text(model.lockdownSyncStatus).font(.caption).foregroundStyle(.secondary)
 
             if !model.activeLockdownSessions.isEmpty {
                 activeSection
@@ -212,6 +850,7 @@ private struct MacLockdownSessionSheet: View {
         }
         .padding(20)
         .frame(width: 520)
+        .macBrutalSheet()
     }
 
     private var activeSection: some View {
@@ -220,7 +859,7 @@ private struct MacLockdownSessionSheet: View {
             ForEach(model.activeLockdownSessions) { session in
                 VStack(alignment: .leading, spacing: 6) {
                     Label(
-                        "\(names(for: session.ruleIDs)) — \(DesktopLockdownSessionGate.remainingDescription(session.remaining(at: Date()))) left",
+                        "\(names(for: session)) — \(DesktopLockdownSessionGate.remainingDescription(session.remaining(at: Date()))) left",
                         systemImage: "lock.fill"
                     )
                     .font(.callout.weight(.medium))
@@ -229,15 +868,17 @@ private struct MacLockdownSessionSheet: View {
                         Text("Type this passage to end early:")
                             .font(.caption).foregroundStyle(.secondary)
                         Text(session.earlyExitPassage)
+                            .textSelection(.disabled)
                             .font(.system(.caption, design: .monospaced))
                             .padding(6)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color.secondary.opacity(0.12))
-                        TextField("Passage", text: $typedPassage, axis: .vertical)
-                            .textFieldStyle(.roundedBorder)
+                        MacPassageInput(text: $typedPassage)
+                            .frame(height: 100)
+                            .macBrutalTextField()
                             .lineLimit(2...4)
                         if didFailPassage {
-                            Text("That does not match.").font(.caption).foregroundStyle(Color.red)
+                            Text(model.errorMessage ?? "That passage does not match.").font(.caption).foregroundStyle(Color.red)
                         }
                         HStack {
                             Button("End session", role: .destructive) {
@@ -256,7 +897,8 @@ private struct MacLockdownSessionSheet: View {
                     }
                 }
                 .padding(8)
-                .background(Color.orange.opacity(0.10))
+                .background(MacBrutalPalette.raisedSurface)
+                .overlay { Rectangle().stroke(MacBrutalPalette.rule, lineWidth: 1) }
             }
         }
     }
@@ -264,7 +906,7 @@ private struct MacLockdownSessionSheet: View {
     private var startSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Start a new session").font(.headline)
-            Text("The selected lists are held on for the whole period, whatever their schedules say and whether or not they are enabled.")
+            Text("The selected groups are held on across all your devices for the whole period, whatever their schedules say and whether or not they are enabled. An authorized early exit ends the session on all devices.")
                 .font(.caption).foregroundStyle(.secondary)
 
             ScrollView {
@@ -276,6 +918,7 @@ private struct MacLockdownSessionSheet: View {
                         )) {
                             Text("\(rule.name) — \(rule.domains.count) domain(s)")
                         }
+                        .toggleStyle(MacBrutalCheckboxStyle())
                     }
                 }
             }
@@ -289,8 +932,10 @@ private struct MacLockdownSessionSheet: View {
             Picker("Lock mode", selection: $severity) {
                 ForEach(Self.severities, id: \.self) { Text(label(for: $0)).tag($0) }
             }
-            Stepper("Passage length: \(passageWordCount) words", value: $passageWordCount, in: 0...40)
-            Stepper("Extra delay before early exit: \(unlockDelayDays)d", value: $unlockDelayDays, in: 0...30)
+            Stepper("Passage length: \(passageWordCount) words", value: $passageWordCount, in: 20...300)
+            if severity != "passageOnly" {
+                Stepper("Extra delay before early exit: \(unlockDelayDays)d", value: $unlockDelayDays, in: 0...30)
+            }
 
             Button("Start lockdown", role: .destructive) {
                 model.startLockdownSession(
@@ -321,328 +966,80 @@ private struct MacLockdownSessionSheet: View {
         }
     }
 
-    private func names(for ids: Set<UUID>) -> String {
-        let matched = model.rules.filter { ids.contains($0.id) }.map(\.name)
-        return matched.isEmpty ? "\(ids.count) list(s)" : matched.joined(separator: ", ")
+    private func names(for session: DesktopLockdownSession) -> String {
+        session.ruleIDs.map { id in
+            model.rules.first { $0.id == id }?.name ?? session.ruleSnapshots?.first { $0.id == id }?.name ?? "Unavailable group"
+        }.sorted().joined(separator: ", ")
     }
 }
 
-/// The uninstall gate. Uninstalling is the strongest weakening of the policy,
-/// so it goes through the same delay-and-passage workflow as loosening a locked
-/// rule rather than through a button that answers immediately.
+/// An always-available extension-removal escape hatch. It does not inherit a
+/// rule's time delay because an unhealthy Network Extension must never trap the
+/// machine; the fixed eighty-word acknowledgement keeps removal deliberate.
 private struct MacRemovalSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject var controller: MacEnforcementController
     @ObservedObject var model: MacAppModel
     @State private var typedPassage = ""
     @State private var didFailPassage = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Remove web enforcement")
+            Text("Remove Network Extension")
                 .font(.title3.weight(.semibold))
 
-            switch controller.removalState {
-            case .notRequested: notRequested
-            case let .waiting(remaining): waiting(remaining)
-            case let .ready(remaining, passage): ready(remaining, passage)
-            case .expired: expired
+            Label(
+                "Removing the extension disables all website filtering on this Mac.",
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(Color.red)
+
+            Text("Your rules will remain in the app, but they cannot block network traffic until the extension is installed and approved again.")
+                .font(.callout)
+
+            Text("macOS may ask for an administrator password or approval. Removal may require restarting this Mac before it finishes.")
+                .font(.callout)
+
+            Text("Type this \(DesktopNetworkExtensionRemovalGate.requiredWordCount)-word passage exactly, including capitalization and punctuation:")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            MacConfirmationPassageView(passage: DesktopNetworkExtensionRemovalGate.requiredPassage, height: 190)
+
+            MacPassageInput(text: $typedPassage)
+                .frame(height: 140)
+                .macBrutalTextField()
+                .lineLimit(4...10)
+                .onChange(of: typedPassage) { _, _ in
+                    didFailPassage = false
+                }
+
+            if didFailPassage {
+                Label(
+                    "That does not match the displayed passage exactly. The extension was not removed.",
+                    systemImage: "xmark.circle.fill"
+                )
+                .font(.caption)
+                .foregroundStyle(Color.red)
             }
 
             Divider()
             HStack {
-                if controller.removalState != .notRequested {
-                    Button("Cancel uninstall", role: .destructive) {
-                        model.cancelDesktopEnforcementRemoval()
-                        typedPassage = ""
-                    }
-                }
                 Spacer()
-                Button("Close") { dismiss() }.keyboardShortcut(.defaultAction)
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .buttonStyle(MacBrutalButtonStyle())
+                Button("Remove Network Extension", role: .destructive) {
+                    let validation = model.removeDesktopNetworkExtension(passage: typedPassage)
+                    didFailPassage = validation != .authorized
+                    if validation == .authorized { dismiss() }
+                }
+                .buttonStyle(MacBrutalButtonStyle(.danger))
+                .disabled(typedPassage.isEmpty)
             }
         }
         .padding(20)
-        .frame(width: 460)
-    }
-
-    private var notRequested: some View {
-        let terms = controller.removalTerms
-        return VStack(alignment: .leading, spacing: 10) {
-            if terms.delaySeconds <= 0 {
-                Text("No locked rule is currently in force, so enforcement can be removed right away.")
-                    .font(.callout)
-            } else {
-                Text("Your locked rules require a wait of \(Self.duration(terms.delaySeconds)) before enforcement can be removed. Blocking stays fully active for the whole wait, and you can cancel at any point.")
-                    .font(.callout)
-                if terms.passageWordCount > 0 {
-                    Text("When the wait ends you will have \(Self.duration(terms.confirmationWindowSeconds)) to confirm by typing a \(terms.passageWordCount)-word passage. If you miss that window, the wait starts over.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Button("Start the uninstall wait", role: .destructive) {
-                model.beginDesktopEnforcementRemoval()
-            }
-            .buttonStyle(.borderedProminent)
-        }
-    }
-
-    private func waiting(_ remaining: TimeInterval) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Uninstall completes in \(Self.duration(remaining))", systemImage: "hourglass")
-                .font(.callout.weight(.medium))
-            Text("Enforcement is still running and will keep running until you confirm. Nothing has been switched off.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func ready(_ remaining: TimeInterval, _ passage: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Ready to confirm — \(Self.duration(remaining)) left", systemImage: "exclamationmark.triangle.fill")
-                .font(.callout.weight(.medium))
-                .foregroundStyle(Color.red)
-            if passage.isEmpty {
-                Text("Confirm to remove enforcement.").font(.caption).foregroundStyle(.secondary)
-            } else {
-                Text("Type this passage exactly:").font(.caption).foregroundStyle(.secondary)
-                Text(passage)
-                    .font(.system(.body, design: .monospaced))
-                    .textSelection(.disabled)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.secondary.opacity(0.12))
-                TextField("Passage", text: $typedPassage, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(2...4)
-            }
-            if didFailPassage {
-                Text("That does not match the passage.").font(.caption).foregroundStyle(Color.red)
-            }
-            Button("Remove enforcement now", role: .destructive) {
-                didFailPassage = !model.completeDesktopEnforcementRemoval(passage: typedPassage)
-                if !didFailPassage { dismiss() }
-            }
-            .buttonStyle(.borderedProminent)
-        }
-    }
-
-    private var expired: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("The confirmation window closed", systemImage: "clock.badge.xmark")
-                .font(.callout.weight(.medium))
-            Text("Enforcement was never removed. Cancel this request and start again if you still want to uninstall; the full wait applies.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    static func duration(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds.rounded(.up))
-        let days = total / 86_400
-        let hours = (total % 86_400) / 3_600
-        let minutes = (total % 3_600) / 60
-        if days > 0 { return hours > 0 ? "\(days)d \(hours)h" : "\(days)d" }
-        if hours > 0 { return minutes > 0 ? "\(hours)h \(minutes)m" : "\(hours)h" }
-        return "\(max(1, minutes))m"
-    }
-}
-
-private struct MacRuleEditor: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var rule: CloudRulePreference
-    @State private var domainText: String
-    @State private var macApplicationText: String
-    @State private var windowsExecutableText: String
-    @State private var windowsPublisherText: String
-    let onSave: (CloudRulePreference) -> Void
-
-    private let categoryNames = ["social", "video", "news", "shopping", "gaming", "adult", "aiTools", "productivity", "education", "finance", "health", "other"]
-    private let severityNames = ["appDefault", "none", "passageOnly", "delayed", "repeatedConfirmations"]
-
-    init(initialRule: CloudRulePreference, onSave: @escaping (CloudRulePreference) -> Void) {
-        _rule = State(initialValue: initialRule)
-        _domainText = State(initialValue: initialRule.domains.map(\.domain).joined(separator: "\n"))
-        _macApplicationText = State(initialValue: initialRule.macApplicationIdentifiers.sorted().joined(separator: "\n"))
-        _windowsExecutableText = State(initialValue: initialRule.windowsExecutablePaths.sorted().joined(separator: "\n"))
-        _windowsPublisherText = State(initialValue: initialRule.windowsPublisherRules.sorted().joined(separator: "\n"))
-        self.onSave = onSave
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Rule") {
-                    TextField("Name", text: $rule.name)
-                    Toggle("Enabled", isOn: $rule.isEnabled)
-                    Picker("Enforcement", selection: $rule.enforcementMode) {
-                        Text("Block selected").tag("blockList")
-                        Text("Fortress allow-list").tag("fortressAllowList")
-                    }
-                    if rule.deviceLocalSelectionCount > 0 {
-                        LabeledContent("iPhone-only selections", value: "\(rule.deviceLocalSelectionCount)")
-                    }
-                }
-
-                Section("Time Blocks") {
-                    ForEach($rule.windows) { $window in
-                        MacTimeWindowEditor(window: $window) {
-                            rule.windows.removeAll { $0.id == window.id }
-                        }
-                    }
-                    Button("Add Time Block", systemImage: "plus") { rule.windows.append(CloudTimeWindow()) }
-                }
-
-                Section("Usage Length") {
-                    Toggle("Enable daily usage limit", isOn: $rule.usageLimitEnabled)
-                    if rule.usageLimitEnabled {
-                        Stepper("Minutes per day: \(rule.dailyUsageLimitMinutes)", value: $rule.dailyUsageLimitMinutes, in: 1...1440)
-                    }
-                }
-
-                Section("Explicit Website Domains") {
-                    Text("One domain per line. These portable domains can sync; sites selected in Apple's Screen Time picker cannot.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    TextEditor(text: $domainText).frame(minHeight: 100)
-                    DisclosureGroup("Blocked AI-classified categories") {
-                        ForEach(categoryNames, id: \.self) { category in
-                            Toggle(categoryLabel(category), isOn: categoryBinding(category))
-                        }
-                    }
-                }
-
-                Section("Desktop Applications (portable only)") {
-                    Text("macOS signing identifiers remain synced for MDM or a future Apple-approved app-launch provider; this approval-free Mac edition does not enforce application launches locally.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    TextEditor(text: $macApplicationText).frame(minHeight: 80)
-                    Text("Windows executable paths")
-                        .font(.caption).foregroundStyle(.secondary)
-                    TextEditor(text: $windowsExecutableText).frame(minHeight: 80)
-                    Text("Windows publisher rules")
-                        .font(.caption).foregroundStyle(.secondary)
-                    TextEditor(text: $windowsPublisherText).frame(minHeight: 60)
-                }
-
-                Section("Rule Lockdown") {
-                    Picker("Severity", selection: $rule.lockdown.severity) {
-                        ForEach(severityNames, id: \.self) { Text(severityLabel($0)).tag($0) }
-                    }
-                    if rule.lockdown.severity == "delayed" || rule.lockdown.severity == "repeatedConfirmations" {
-                        Stepper("Unlock wait: \(rule.lockdown.unlockDelayDays) days", value: $rule.lockdown.unlockDelayDays, in: 0...365)
-                    }
-                    if rule.lockdown.severity != "none" && rule.lockdown.severity != "appDefault" {
-                        Stepper("Passage: \(rule.lockdown.passageWordCount) words", value: $rule.lockdown.passageWordCount, in: 20...300)
-                        Stepper("Edit window: \(rule.lockdown.editWindowHours) hours", value: $rule.lockdown.editWindowHours, in: 1...72)
-                    }
-                    if rule.lockdown.severity == "repeatedConfirmations" {
-                        Stepper("Confirmation window: \(rule.lockdown.confirmationWindowHours) hours", value: $rule.lockdown.confirmationWindowHours, in: 1...48)
-                    }
-                    Toggle("Allow passage-gated extra time", isOn: $rule.lockdown.allowsTimeExtensions)
-                    if rule.lockdown.allowsTimeExtensions {
-                        Stepper(
-                            "Maximum extra time: \(rule.lockdown.maximumTimeExtensionHours) hours",
-                            value: $rule.lockdown.maximumTimeExtensionHours,
-                            in: 1...8
-                        )
-                        Text("Requests are made on iPhone in one-hour increments. Each consecutive request doubles the required passage length.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Text("A locked iPhone auto-applies only strictly stronger cloud changes. Weaker, mixed, or deletion changes wait for that rule's iPhone unlock.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            .formStyle(.grouped)
-            .navigationTitle(rule.name.isEmpty ? "New Rule" : rule.name)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save to iCloud") {
-                        updateDomains()
-                        updateDesktopApplications()
-                        onSave(rule)
-                        dismiss()
-                    }
-                }
-            }
-        }
-        .frame(minWidth: 680, minHeight: 680)
-    }
-
-    private func updateDomains() {
-        let domains = domainText.split(whereSeparator: { $0.isWhitespace || $0 == "," })
-            .map { String($0).lowercased() }
-        let old = Dictionary(uniqueKeysWithValues: rule.domains.map { ($0.domain, $0) })
-        rule.domains = Array(Set(domains)).sorted().map {
-            old[$0] ?? CloudDomainPreference(domain: $0, category: "other", source: "user")
-        }
-        if !rule.domains.isEmpty { rule.websiteCategories.insert("other") }
-    }
-
-    private func updateDesktopApplications() {
-        rule.macApplicationIdentifiers = normalizedLines(macApplicationText, lowercase: true)
-        rule.windowsExecutablePaths = normalizedLines(windowsExecutableText, lowercase: true)
-        rule.windowsPublisherRules = normalizedLines(windowsPublisherText, lowercase: true)
-    }
-
-    private func normalizedLines(_ text: String, lowercase: Bool) -> Set<String> {
-        Set(text.components(separatedBy: .newlines).compactMap { line in
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return nil }
-            return lowercase ? trimmed.lowercased() : trimmed
-        })
-    }
-
-    private func categoryBinding(_ category: String) -> Binding<Bool> {
-        Binding(
-            get: { rule.websiteCategories.contains(category) },
-            set: { value in
-                if value { rule.websiteCategories.insert(category) }
-                else { rule.websiteCategories.remove(category) }
-            }
-        )
-    }
-
-    private func categoryLabel(_ value: String) -> String {
-        value == "aiTools" ? "AI Tools" : value.capitalized
-    }
-
-    private func severityLabel(_ value: String) -> String {
-        switch value {
-        case "appDefault": "App default"
-        case "none": "No edit lock"
-        case "passageOnly": "Passage only"
-        case "delayed": "Delayed unlock"
-        default: "Repeated confirmations"
-        }
-    }
-}
-
-private struct MacTimeWindowEditor: View {
-    @Binding var window: CloudTimeWindow
-    let onDelete: () -> Void
-    private let symbols = Calendar.current.veryShortWeekdaySymbols
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Days").fontWeight(.semibold)
-                Spacer()
-                Button("Remove", role: .destructive, action: onDelete).buttonStyle(.borderless)
-            }
-            HStack {
-                ForEach(1...7, id: \.self) { day in
-                    Toggle(symbols[day - 1], isOn: Binding(
-                        get: { window.weekdays.contains(day) },
-                        set: { value in
-                            if value { window.weekdays.insert(day) }
-                            else { window.weekdays.remove(day) }
-                        }
-                    )).toggleStyle(.button)
-                }
-            }
-            DatePicker("Starts", selection: $window.startsAt, displayedComponents: .hourAndMinute)
-            DatePicker("Ends", selection: $window.endsAt, displayedComponents: .hourAndMinute)
-        }
-        .padding(.vertical, 5)
+        .frame(width: 560)
+        .macBrutalSheet()
     }
 }

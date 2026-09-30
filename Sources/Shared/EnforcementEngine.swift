@@ -3,8 +3,8 @@ import Foundation
 import ManagedSettings
 
 enum EnforcementEngine {
-    static func apply(_ rule: BlockingRule, to store: ManagedSettingsStore) {
-        guard SharedConfiguration.activeTimeAllowance(for: rule.id) == nil else {
+    static func apply(_ rule: BlockingRule, to store: ManagedSettingsStore, ignoringTemporaryAllowance: Bool = false) {
+        guard ignoringTemporaryAllowance || SharedConfiguration.activeTimeAllowance(for: rule.id) == nil else {
             store.clearAllSettings()
             return
         }
@@ -50,7 +50,13 @@ enum EnforcementEngine {
     }
 
     static func usageShieldIsConfigured(ruleID: UUID) -> Bool {
-        let store = ManagedSettingsStore(named: MonitorDescriptor.usage(ruleID: ruleID).storeName)
+        shieldIsConfigured(storeNamed: MonitorDescriptor.usage(ruleID: ruleID).storeName)
+    }
+
+    /// Whether a store currently holds any restriction. Diagnostics read this to
+    /// tell an applied block apart from one that was already lifted.
+    static func shieldIsConfigured(storeNamed name: ManagedSettingsStore.Name) -> Bool {
+        let store = ManagedSettingsStore(named: name)
         return store.shield.applications != nil
             || store.shield.applicationCategories != nil
             || store.shield.webDomains != nil

@@ -34,7 +34,7 @@ That is a real barrier against arbitrary tooling. It is a weak one against
 | 2 | Set the clock outside a rule's active window | ~10 s | **Open.** |
 | 3 | VPN / SOCKS proxy (FortiClient is already installed here) | ~10 s, no admin | **Open.** |
 | 4 | System Settings → Network → Filters → disable | seconds + admin auth | Apple-gated |
-| 5 | Delete `/Applications/ExecutiveDysfunctionMac.app` | seconds | Needs probe |
+| 5 | Delete `/Applications/Holdfast.app` | seconds | Needs probe |
 | 6 | Forge the policy HMAC (key is in the *user's* Keychain) | minutes | Partially open |
 | 7 | Rebuild the app from source with removal ungated | ~30 min | Inherent |
 | 8 | Recovery / disable SIP / safe mode | reboot | Above the ceiling |
@@ -54,9 +54,12 @@ Removal is now a scheduled event rather than a button:
    runs untouched for the whole delay. Re-requesting while one is pending is a
    no-op, so the wait cannot be restarted to dodge an expiring window, and the
    passage cannot be re-rolled for a shorter one.
-2. `completeRemoval(passage:)` is the only path that may disable the filter, and
-   it returns false unchanged unless the delay has elapsed *and* the passage
-   matches. `disableNetworkFilter()` additionally asserts on any other caller.
+2. `completeRemoval(passage:)` is the only path that may uninstall the filter,
+   and it returns false unchanged unless the delay has elapsed *and* the passage
+   matches. A separate emergency pause may disable filtering immediately,
+   without uninstalling, so a faulty filter cannot trap the user offline. The
+   pause persists across launches and is also available at startup with
+   `--disable-web-filter-now`.
 3. Terms come from the strictest locked rule in force: longest `unlockDelayDays`,
    longest `passageWordCount`, **shortest** `editWindowHours` (a shorter window
    is the stricter setting). Any locked rule earns a floor of one day even if it
