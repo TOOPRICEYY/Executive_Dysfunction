@@ -7,8 +7,16 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <chrono>
+#include <memory>
+#include <vector>
+#include <algorithm>
+#include "../core/Policy.h"
 #include "../include/guard_protocol.h"
 #include "WfpNetworkEnforcer.h"
+#ifdef HOLDFAST_WORKSPACE
+#include "WorkspaceService.h"
+#endif
 
 namespace {
 constexpr wchar_t kServiceName[] = L"HoldfastEnforcement";
@@ -80,28 +88,71 @@ std::filesystem::path PolicyPath() {
 }
 
 bool LoadPolicy(ED_GUARD_POLICY& policy) {
-    // policy.bin is produced by the signed desktop client after it validates
-    // the authenticated JSON envelope. The directory ACL must grant write only
-    // to SYSTEM and Administrators; the service rechecks size/version/revision.
-    std::ifstream input(PolicyPath(), std::ios::binary);
-    if (!input.read(reinterpret_cast<char*>(&policy), sizeof(policy))) return false;
-    if (policy.version != 1 || policy.revision == 0 || policy.ruleCount > ED_GUARD_MAX_RULES) {
-        return false;
-    }
-    for (unsigned long index = 0; index < policy.ruleCount; ++index) {
-        if (policy.rules[index].path[0] == L'\0'
-            || policy.rules[index].path[ED_GUARD_MAX_PATH_CHARS - 1] != L'\0') return false;
+    // This development protocol is authored by the elevated local control
+    // tool. Its trust boundary is the installer-protected directory ACL, NOT
+    // the Apple JSON/HMAC format. No cloud input is accepted by this service.
+    // Readers must share delete access so an atomic policy replacement is not
+    // intermittently rejected while the service samples the previous file.
+    HANDLE file = ::CreateFileW(PolicyPath().c_str(), GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER size{};
+    DWORD read = 0;
+    const bool valid = ::GetFileSizeEx(file, &size) && size.QuadPart == sizeof(policy) &&
+        ::ReadFile(file, &policy, static_cast<DWORD>(sizeof(policy)), &read, nullptr) && read == sizeof(policy);
+    ::CloseHandle(file);
+    return valid;
+}
+
+uint64_t Now() {
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count());
+}
+
+void WriteStatus(const char* phase, const holdfast::PolicyState& state, size_t paths, DWORD error) {
+    const auto target = PolicyPath().parent_path() / L"status.json";
+    const auto temporary = PolicyPath().parent_path() / L"status.tmp";
+    std::ofstream out(temporary, std::ios::trunc);
+    out << "{\"schemaVersion\":1,\"capability\":\"application-network-only\",\"phase\":\"" << phase
+        << "\",\"updatedAtUnixSeconds\":" << Now() << ",\"revision\":" << state.revision()
+        << ",\"validUntilUnixSeconds\":" << state.deadline() << ",\"applications\":" << paths
+        << ",\"filters\":" << paths * 2 << ",\"errorCode\":" << error << "}\n";
+    out.close();
+    if (out) ::MoveFileExW(temporary.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+}
+
+bool SafeResolvedPaths(const std::vector<std::u16string>& paths) {
+    wchar_t windows[MAX_PATH]{};
+    if (!::GetWindowsDirectoryW(windows, ARRAYSIZE(windows))) return false;
+    std::wstring protectedRoot(windows);
+    protectedRoot += L"\\";
+    for (const auto& path : paths) {
+        const std::wstring native(path.begin(), path.end());
+        HANDLE file = ::CreateFileW(native.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (file == INVALID_HANDLE_VALUE) return false;
+        wchar_t resolved[32768]{};
+        const DWORD count = ::GetFinalPathNameByHandleW(file, resolved, ARRAYSIZE(resolved), FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+        ::CloseHandle(file);
+        if (!count || count >= ARRAYSIZE(resolved)) return false;
+        std::wstring canonical(resolved);
+        if (canonical.starts_with(L"\\\\?\\")) canonical.erase(0, 4);
+        // Refuse aliases/junctions and system images; the file WFP resolves must
+        // be precisely the path the administrator reviewed.
+        if (_wcsicmp(canonical.c_str(), native.c_str()) != 0 ||
+            _wcsnicmp(canonical.c_str(), protectedRoot.c_str(), protectedRoot.size()) == 0) return false;
     }
     return true;
 }
 
-unsigned long long AcceptedRevision() {
-    unsigned long long value = 0;
+bool ReadAcceptedRevision(uint64_t& value) {
+    value = 0;
     DWORD bytes = sizeof(value);
     const LSTATUS status = ::RegGetValueW(
         HKEY_LOCAL_MACHINE, kRegistryPath, kRevisionValue,
         RRF_RT_REG_QWORD, nullptr, &value, &bytes);
-    return status == ERROR_SUCCESS ? value : 0;
+    return status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND || status == ERROR_PATH_NOT_FOUND;
 }
 
 bool SaveAcceptedRevision(unsigned long long value) {
@@ -116,45 +167,6 @@ bool SaveAcceptedRevision(unsigned long long value) {
         reinterpret_cast<const BYTE*>(&value), sizeof(value));
     ::RegCloseKey(key);
     return status == ERROR_SUCCESS;
-}
-
-bool SendPolicyToDriver(const ED_GUARD_POLICY& policy) {
-    HANDLE device = ::CreateFileW(
-        ED_GUARD_DEVICE_PATH, GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (device == INVALID_HANDLE_VALUE) return false;
-    DWORD returned = 0;
-    BOOL ok = ::DeviceIoControl(
-        device, IOCTL_ED_GUARD_REPLACE_POLICY,
-        const_cast<ED_GUARD_POLICY*>(&policy), sizeof(policy),
-        nullptr, 0, &returned, nullptr);
-    ::CloseHandle(device);
-    return ok == TRUE;
-}
-
-bool NormalizePathForKernel(wchar_t* path, size_t capacity) {
-    // PS_CREATE_NOTIFY_INFO generally reports an NT device path while WFP's
-    // app-id helper expects a Win32 path. Keep the file copy in Win32 form and
-    // normalize only the copy sent to the process-creation driver.
-    if (!path || capacity == 0 || path[0] == L'\0') return false;
-    if (path[0] == L'\\' && path[1] != L'\\') return true;
-    if (path[1] != L':') return false;
-
-    wchar_t drive[3] = {path[0], L':', L'\0'};
-    wchar_t device[ED_GUARD_MAX_PATH_CHARS]{};
-    if (!::QueryDosDeviceW(drive, device, ARRAYSIZE(device))) return false;
-    std::wstring normalized(device);
-    normalized.append(path + 2);
-    if (normalized.size() >= capacity) return false;
-    ::StringCchCopyW(path, capacity, normalized.c_str());
-    return true;
-}
-
-bool NormalizePolicyForKernel(ED_GUARD_POLICY& policy) {
-    for (unsigned long index = 0; index < policy.ruleCount; ++index) {
-        if (!NormalizePathForKernel(policy.rules[index].path, ED_GUARD_MAX_PATH_CHARS)) return false;
-    }
-    return true;
 }
 
 DWORD WINAPI ControlHandler(DWORD control, DWORD, void*, void*) {
@@ -173,58 +185,87 @@ void WINAPI ServiceMain(DWORD, wchar_t**) {
     SetState(SERVICE_RUNNING);
     AppendDiagnostic(L"event=service-start");
 
-    FILETIME lastWrite{};
-    while (::WaitForSingleObject(gStopEvent, 2000) == WAIT_TIMEOUT) {
-        WIN32_FILE_ATTRIBUTE_DATA attributes{};
-        const auto path = PolicyPath();
-        if (!::GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &attributes)) continue;
-        if (::CompareFileTime(&attributes.ftLastWriteTime, &lastWrite) <= 0) continue;
-        ED_GUARD_POLICY policy{};
-        if (!LoadPolicy(policy)) {
-            if (ShouldLogFailure()) AppendDiagnostic(L"event=policy-invalid");
-            continue;
-        }
-        const auto acceptedRevision = AcceptedRevision();
-        if (policy.revision < acceptedRevision) {
-            if (ShouldLogFailure()) AppendDiagnostic(
-                L"event=policy-rollback-rejected revision=%llu acceptedRevision=%llu",
-                policy.revision, acceptedRevision);
-            continue;
-        }
-        ED_GUARD_POLICY kernelPolicy = policy;
-        const bool kernelReady = NormalizePolicyForKernel(kernelPolicy)
-            && SendPolicyToDriver(kernelPolicy);
-        const bool needsRevisionUpdate = policy.revision > acceptedRevision;
-        // Equal revisions are intentionally retryable. They can also carry a
-        // different active rule set when a schedule boundary rewrites the
-        // policy snapshot without changing the authenticated policy revision.
-        // Always reconcile WFP with the accepted snapshot; otherwise persistent
-        // filters from the previous active window survive indefinitely.
-        const WfpReplaceResult network = ReplacePersistentWfpApplicationBlocks(policy);
-        const bool networkReady = network.success;
-        const bool revisionReady = !needsRevisionUpdate
-            || (kernelReady && networkReady && SaveAcceptedRevision(policy.revision));
-        if (kernelReady && networkReady && revisionReady) {
-            lastWrite = attributes.ftLastWriteTime;
-            gLastFailureLogTick = 0;
-            AppendDiagnostic(
-                L"event=policy-applied revision=%llu acceptedRevision=%llu ruleCount=%lu wfpFilters=%lu",
-                policy.revision, acceptedRevision, policy.ruleCount, network.filtersAdded);
-        } else if (ShouldLogFailure()) {
-            AppendDiagnostic(
-                L"event=policy-apply-failed revision=%llu acceptedRevision=%llu ruleCount=%lu kernelReady=%u wfpReady=%u wfpStage=%ls wfpError=%lu revisionReady=%u",
-                policy.revision, acceptedRevision, policy.ruleCount,
-                kernelReady ? 1u : 0u, networkReady ? 1u : 0u,
-                network.stage, network.errorCode, revisionReady ? 1u : 0u);
-        }
+    auto state = std::make_unique<holdfast::PolicyState>();
+    auto policy = std::make_unique<ED_GUARD_POLICY>();
+    auto enforcer = std::make_unique<WfpNetworkEnforcer>();
+    std::vector<std::u16string> applied;
+    uint64_t acceptedRevision = 0;
+    if (!ReadAcceptedRevision(acceptedRevision)) {
+        AppendDiagnostic(L"event=revision-barrier-unreadable");
+        WriteStatus("error", *state, 0, ERROR_INVALID_DATA);
+        ::CloseHandle(gStopEvent);
+        SetState(SERVICE_STOPPED, ERROR_INVALID_DATA);
+        return;
     }
+    bool reconciled = false;
+    DWORD lastError = ERROR_SUCCESS;
+    uint64_t healthTick = 0;
+#ifdef HOLDFAST_WORKSPACE
+    std::unique_ptr<WorkspaceService> workspace;
+    try { workspace = std::make_unique<WorkspaceService>(PolicyPath().parent_path(), gStopEvent, SafeResolvedPaths); }
+    catch (...) { AppendDiagnostic(L"event=workspace-load-failed"); }
+#endif
+    while (::WaitForSingleObject(gStopEvent, 1000) == WAIT_TIMEOUT) {
+        const auto now = Now();
+        if (LoadPolicy(*policy)) {
+            auto validation = holdfast::ValidatePolicy(*policy, sizeof(*policy), now, acceptedRevision);
+            if (validation.valid && (policy->revision == acceptedRevision || SaveAcceptedRevision(policy->revision))) {
+                state->Accept(*policy, sizeof(*policy), now);
+                acceptedRevision = policy->revision;
+            } else if (ShouldLogFailure()) {
+                AppendDiagnostic(L"event=policy-rejected revision=%llu acceptedRevision=%llu", policy->revision, acceptedRevision);
+            }
+        }
+        auto desired = state->ActivePaths(now);
+#ifdef HOLDFAST_WORKSPACE
+        if (workspace) {
+            const auto groups = workspace->ActivePaths();
+            desired.insert(desired.end(), groups.begin(), groups.end());
+            std::sort(desired.begin(), desired.end());
+            desired.erase(std::unique(desired.begin(), desired.end()), desired.end());
+        }
+#endif
+        if (::GetTickCount64() - healthTick >= 5000) {
+            healthTick = ::GetTickCount64();
+            if (reconciled && !applied.empty() && !enforcer->Healthy()) reconciled = false;
+        }
+        if (!reconciled || desired != applied) {
+            if (!SafeResolvedPaths(desired)) {
+                // Invalid targets never leave an unrelated/stale set installed.
+                enforcer.reset(); enforcer = std::make_unique<WfpNetworkEnforcer>();
+                applied.clear(); reconciled = false; lastError = ERROR_INVALID_NAME;
+            } else {
+                const auto result = enforcer->Replace(desired);
+                lastError = result.errorCode;
+                reconciled = result.success;
+                applied = result.success ? desired : std::vector<std::u16string>{};
+                if (result.success || ShouldLogFailure()) AppendDiagnostic(
+                    L"event=wfp-reconcile revision=%llu ruleCount=%lu wfpFilters=%lu success=%u stage=%ls error=%lu",
+                    state->revision(), static_cast<unsigned long>(desired.size()), result.filtersAdded,
+                    result.success ? 1u : 0u, result.stage, result.errorCode);
+            }
+        }
+        WriteStatus(!reconciled ? "error" : applied.empty() ? "idle" : "enforcing", *state, applied.size(), lastError);
+#ifdef HOLDFAST_WORKSPACE
+        if (workspace) workspace->Acknowledge(reconciled, applied.size() * 2, lastError);
+#endif
+    }
+    enforcer.reset(); // Dynamic WFP session deletion also works on process crash.
+#ifdef HOLDFAST_WORKSPACE
+    workspace.reset(); // Stop event cancels pending IPC before the service exits.
+#endif
+    WriteStatus("stopped", *state, 0, ERROR_SUCCESS);
     AppendDiagnostic(L"event=service-stop");
     ::CloseHandle(gStopEvent);
     SetState(SERVICE_STOPPED);
 }
 } // namespace
 
-int wmain() {
+int wmain(int argc, wchar_t** argv) {
+    if (argc == 2 && std::wstring(argv[1]) == L"--recover") {
+        const auto result = RemoveAllOwnedWfpFilters();
+        return result.success ? 0 : static_cast<int>(result.errorCode);
+    }
     SERVICE_TABLE_ENTRYW table[] = {
         {const_cast<wchar_t*>(kServiceName), ServiceMain},
         {nullptr, nullptr}

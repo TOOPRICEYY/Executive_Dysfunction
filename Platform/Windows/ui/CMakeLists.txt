@@ -1,0 +1,57 @@
+include(FetchContent)
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+# Pinned archives and hashes, not a floating SDK or downloaded build script.
+FetchContent_Declare(holdfast_webview2
+    URL https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.3650.58/microsoft.web.webview2.1.0.3650.58.nupkg
+    URL_HASH SHA256=911a472128c82ac8baa0c486c23342cc9dd6e7dc50d754e676726642ca065c60
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+FetchContent_MakeAvailable(holdfast_webview2)
+set(HOLDFAST_SHARED_UI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../SharedUI/dist" CACHE PATH "One built SharedUI bundle (npm ci && npm run build)")
+if(NOT EXISTS "${HOLDFAST_SHARED_UI_DIR}/app.js")
+    message(FATAL_ERROR "Build SharedUI once and set HOLDFAST_SHARED_UI_DIR. Do not fork its screens into the Windows project.")
+endif()
+if(CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")
+    set(webview_arch arm64)
+elseif(CMAKE_GENERATOR_PLATFORM STREQUAL "x64")
+    set(webview_arch x64)
+else()
+    message(FATAL_ERROR "The shared UI host supports ARM64 and x64 builds.")
+endif()
+add_executable(HoldfastUI WIN32 HoldfastUI.cpp WorkspaceClient.cpp ../service/HoldfastService.rc)
+target_compile_features(HoldfastUI PRIVATE cxx_std_20)
+target_compile_definitions(HoldfastUI PRIVATE UNICODE _UNICODE)
+target_include_directories(HoldfastUI PRIVATE "${holdfast_webview2_SOURCE_DIR}/build/native/include")
+target_link_libraries(HoldfastUI PRIVATE nlohmann_json::nlohmann_json
+    "${holdfast_webview2_SOURCE_DIR}/build/native/${webview_arch}/WebView2LoaderStatic.lib"
+    advapi32 ole32 user32 shell32 shlwapi version)
+if(BUILD_TESTING)
+    # Isolated sign-in harness: never installed with the production UI/service.
+    add_executable(HoldfastCloudKitSignIn WIN32 CloudKitSignIn.cpp CloudKitConnection.cpp ../service/HoldfastService.rc)
+    target_compile_features(HoldfastCloudKitSignIn PRIVATE cxx_std_20)
+    target_compile_definitions(HoldfastCloudKitSignIn PRIVATE UNICODE _UNICODE)
+    target_include_directories(HoldfastCloudKitSignIn PRIVATE "${holdfast_webview2_SOURCE_DIR}/build/native/include")
+    target_link_libraries(HoldfastCloudKitSignIn PRIVATE nlohmann_json::nlohmann_json
+        "${holdfast_webview2_SOURCE_DIR}/build/native/${webview_arch}/WebView2LoaderStatic.lib"
+        winhttp crypt32 advapi32 ole32 user32 shell32 shlwapi version)
+    add_executable(HoldfastCloudKitConnectionTests ../tests/CloudKitConnectionTests.cpp CloudKitConnection.cpp)
+    target_compile_features(HoldfastCloudKitConnectionTests PRIVATE cxx_std_20)
+    target_compile_definitions(HoldfastCloudKitConnectionTests PRIVATE UNICODE _UNICODE)
+    target_link_libraries(HoldfastCloudKitConnectionTests PRIVATE nlohmann_json::nlohmann_json winhttp crypt32 ole32 shell32)
+    add_test(NAME HoldfastCloudKitConnectionTests COMMAND HoldfastCloudKitConnectionTests)
+    add_executable(HoldfastCloudKitRoundTrip ../tests/CloudKitRoundTrip.cpp CloudKitConnection.cpp)
+    target_compile_features(HoldfastCloudKitRoundTrip PRIVATE cxx_std_20)
+    target_compile_definitions(HoldfastCloudKitRoundTrip PRIVATE UNICODE _UNICODE)
+    target_link_libraries(HoldfastCloudKitRoundTrip PRIVATE nlohmann_json::nlohmann_json winhttp crypt32 ole32 shell32)
+    add_executable(HoldfastWorkspaceProbe ../tests/WorkspaceProbe.cpp WorkspaceClient.cpp)
+    target_compile_features(HoldfastWorkspaceProbe PRIVATE cxx_std_20)
+    target_link_libraries(HoldfastWorkspaceProbe PRIVATE nlohmann_json::nlohmann_json advapi32)
+endif()
+add_custom_command(TARGET HoldfastUI POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${HOLDFAST_SHARED_UI_DIR}" "$<TARGET_FILE_DIR:HoldfastUI>/SharedUI")
+install(TARGETS HoldfastUI RUNTIME DESTINATION .)
+install(FILES ../scripts/Test-SharedUI.ps1 DESTINATION scripts)
+install(DIRECTORY "${HOLDFAST_SHARED_UI_DIR}/" DESTINATION SharedUI)
+install(FILES "${holdfast_webview2_SOURCE_DIR}/LICENSE.txt" DESTINATION licenses RENAME WebView2-LICENSE.txt OPTIONAL)
+install(FILES "${holdfast_json_SOURCE_DIR}/LICENSE.MIT" DESTINATION licenses RENAME nlohmann-json-LICENSE.MIT)

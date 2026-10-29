@@ -31,6 +31,13 @@ static VOID ProcessNotify(
     if (!CreateInfo || !CreateInfo->ImageFileName) return;
 
     ExAcquirePushLockShared(&gPolicyLock);
+    LARGE_INTEGER systemTime;
+    KeQuerySystemTimePrecise(&systemTime);
+    ULONGLONG now = (systemTime.QuadPart - 116444736000000000ULL) / 10000000ULL;
+    if (now < gPolicy.issuedAtUnixSeconds || now >= gPolicy.validUntilUnixSeconds) {
+        ExReleasePushLockShared(&gPolicyLock);
+        return;
+    }
     ULONG count = min(gPolicy.ruleCount, ED_GUARD_MAX_RULES);
     for (ULONG index = 0; index < count; ++index) {
         if (PathEqualsInsensitive(CreateInfo->ImageFileName, gPolicy.rules[index].path)) {
@@ -67,7 +74,9 @@ static NTSTATUS DispatchDeviceControl(PDEVICE_OBJECT device, PIRP irp)
     }
 
     const ED_GUARD_POLICY *candidate = (const ED_GUARD_POLICY *)irp->AssociatedIrp.SystemBuffer;
-    if (!candidate || candidate->version != 1 || candidate->revision == 0
+    if (!candidate || candidate->version != ED_GUARD_POLICY_VERSION || candidate->revision == 0
+        || candidate->validUntilUnixSeconds <= candidate->issuedAtUnixSeconds
+        || candidate->validUntilUnixSeconds - candidate->issuedAtUnixSeconds > ED_GUARD_MAX_LEASE_SECONDS
         || candidate->ruleCount > ED_GUARD_MAX_RULES) {
         return CompleteIrp(irp, STATUS_INVALID_PARAMETER, 0);
     }
