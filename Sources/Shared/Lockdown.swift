@@ -390,11 +390,31 @@ struct PassageDiffToken: Equatable {
 enum PassageDiff {
     /// Produces a word-level longest-common-subsequence diff. This keeps later
     /// correct words green even when an earlier word was omitted or inserted.
-    static func compare(typed: String, passage: String) -> [PassageDiffToken] {
+    static func compare(typed: String, passage: String, caseSensitive: Bool = false) -> [PassageDiffToken] {
         let actual = CommitmentPassage.normalizedWords(in: typed)
         let expected = CommitmentPassage.normalizedWords(in: passage)
-        let actualComparison = actual.map { $0.lowercased() }
-        let expectedComparison = expected.map { $0.lowercased() }
+        let actualComparison = actual.map { caseSensitive ? $0 : $0.lowercased() }
+        let expectedComparison = expected.map { caseSensitive ? $0 : $0.lowercased() }
+
+        // Backoff can produce tens of thousands of words. Keep comparison
+        // memory bounded for those passages, while retaining nearby alignment.
+        if actual.count > 0, expected.count > 1_000_000 / actual.count {
+            var result: [PassageDiffToken] = []
+            var i = 0, j = 0
+            while i < actual.count, j < expected.count {
+                if actualComparison[i] == expectedComparison[j] {
+                    result.append(.init(text: actual[i], kind: .matched)); i += 1; j += 1
+                } else if expectedComparison[(j + 1)..<min(expected.count, j + 33)].contains(actualComparison[i]),
+                          !actualComparison[(i + 1)..<min(actual.count, i + 33)].contains(expectedComparison[j]) {
+                    result.append(.init(text: expected[j], kind: .missing)); j += 1
+                } else {
+                    result.append(.init(text: actual[i], kind: .incorrect)); i += 1
+                }
+            }
+            result.append(contentsOf: actual.dropFirst(i).map { .init(text: $0, kind: .incorrect) })
+            result.append(contentsOf: expected.dropFirst(j).map { .init(text: $0, kind: .missing) })
+            return result
+        }
 
         var lengths = Array(
             repeating: Array(repeating: 0, count: expected.count + 1),

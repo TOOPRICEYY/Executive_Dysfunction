@@ -280,6 +280,23 @@ final class BlockPageRendererTests: XCTestCase {
         )
     }
 
+    func testBrowserPassageHasThirtyMinutesButStillExpires() throws {
+        let rule = pauseRule(domains: ["twitter.com"])
+        for elapsed: TimeInterval in [29 * 60, 30 * 60] {
+            let store = BlockPagePauseChallengeStore()
+            let challenge = try store.issue(host: "twitter.com", rule: rule, policyRevision: 4, at: now).get()
+            XCTAssertEqual(challenge.expiresAt.timeIntervalSince(now), 30 * 60)
+            let result = store.redeem(token: challenge.token, host: "twitter.com", ruleID: rule.id,
+                durationSeconds: 600, typedPassage: challenge.passage, currentRule: rule,
+                currentPolicyRevision: 4, at: now.addingTimeInterval(elapsed))
+            if elapsed < 30 * 60 {
+                guard case .success = result else { return XCTFail("Passage must remain valid after five minutes") }
+            } else {
+                guard case .failure = result else { return XCTFail("Passage must expire at thirty minutes") }
+            }
+        }
+    }
+
     func testChallengeIsConsumedWhenPolicyChanges() throws {
         let rule = pauseRule(domains: ["twitter.com"])
         let token = String(repeating: "p", count: 43)

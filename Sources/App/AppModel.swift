@@ -727,6 +727,14 @@ final class AppModel: ObservableObject {
         SharedConfiguration.saveRuleTimeAllowances(ruleTimeAllowances)
     }
 
+    @discardableResult
+    func cancelTemporaryPause(for ruleID: UUID) -> Bool {
+        guard activeTimeAllowance(for: ruleID) != nil else { return false }
+        removeTimeAllowance(ruleID)
+        synchronize()
+        return true
+    }
+
     private func removeTimeAllowance(_ ruleID: UUID) {
         var storedAllowances = SharedConfiguration.loadRuleTimeAllowances()
         guard let removed = storedAllowances.removeValue(forKey: ruleID) else { return }

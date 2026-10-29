@@ -408,6 +408,38 @@ final class MacAppModel: ObservableObject {
         }
     }
 
+    @discardableResult
+    func deleteBlockingGroup(_ group: CloudBlockingGroup) -> Bool {
+        guard !uiPreviewMode else { return false }
+        do {
+            let previous = try store.load()
+            var document = previous
+            guard document.baseline.blockingGroups.contains(where: { $0.id == group.id }) else { return false }
+            document.baseline.blockingGroups.removeAll { $0.id == group.id }
+            document.baseline.modifiedAt = Date()
+            document.rebuildLegacyRuleProjection()
+            let candidate = DesktopEnforcementPolicy(blockProfile: DesktopBlockProfile(cloudRules: document.rules), revision: 1,
+                lockdownSessions: lockdownSessions.isEmpty ? nil : lockdownSessions)
+            var authorization: Date?
+            if let existing = lastPublishedPolicy, !DesktopPolicyRestrictionEvaluator.canReplace(existing: existing, with: candidate) {
+                guard case .unlocked = ruleEditPhase(group.id),
+                      DesktopRuleEditUnlock.canAuthorize(ruleID: group.id, existing: existing, proposed: candidate) else {
+                    errorMessage = "Unlock this Blocking Group before deleting it."
+                    return false
+                }
+                authorization = Date().addingTimeInterval(120)
+            }
+            try store.save(document); apply(document)
+            guard publishDesktopPolicy(weakeningAuthorizationExpiresAt: authorization,
+                authorizedRuleIDs: authorization == nil ? [] : [group.id]) else {
+                try store.save(previous); apply(previous)
+                return false
+            }
+            syncStatus = "Blocking Group deleted"
+            return true
+        } catch { errorMessage = error.localizedDescription; return false }
+    }
+
     func ruleEditPolicy(_ id: UUID) -> DesktopLockdownPolicy? {
         // Use the durable published policy, not the in-progress editor draft.
         lastPublishedPolicy?.rules.first(where: { $0.id == id })?.lockdown ?? desktopRule(for: id)?.lockdown

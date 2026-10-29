@@ -88,7 +88,7 @@ final class BlockPagePauseChallengeStore: @unchecked Sendable {
     private var failureDates: [Date] = []
 
     init(
-        lifetime: TimeInterval = 5 * 60,
+        lifetime: TimeInterval = 30 * 60,
         maximumActiveChallenges: Int = 256,
         maximumFailuresPerChallenge: Int = 5,
         maximumFailuresPerWindow: Int = 40,
@@ -100,7 +100,7 @@ final class BlockPagePauseChallengeStore: @unchecked Sendable {
             BlockPageConfirmationPassage.generate(wordCount: wordCount)
         }
     ) {
-        self.lifetime = max(30, min(10 * 60, lifetime))
+        self.lifetime = max(30, min(30 * 60, lifetime))
         self.maximumActiveChallenges = max(1, maximumActiveChallenges)
         self.maximumFailuresPerChallenge = max(1, maximumFailuresPerChallenge)
         self.maximumFailuresPerWindow = max(1, maximumFailuresPerWindow)

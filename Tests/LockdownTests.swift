@@ -495,6 +495,14 @@ final class LockdownTests: XCTestCase {
         XCTAssertEqual(tokens.filter { $0.kind == .missing }.map(\.text), ["beta"])
     }
 
+    func testPassageDiffHandlesMaximumBackoffWithoutQuadraticMemory() {
+        let words = (0..<38_400).map { "word\($0)" }
+        let typed = words.enumerated().filter { $0.offset != 100 }.map(\.element).joined(separator: " ")
+        let tokens = PassageDiff.compare(typed: typed, passage: words.joined(separator: " "))
+        XCTAssertEqual(tokens.filter { $0.kind == .matched }.count, 38_399)
+        XCTAssertEqual(tokens.filter { $0.kind == .missing }.map(\.text), ["word100"])
+    }
+
     func testPassageDiffUsesSameCaseAndWhitespaceRulesAsConfirmation() {
         let typed = "  ALPHA\n beta  "
         let passage = "alpha beta"

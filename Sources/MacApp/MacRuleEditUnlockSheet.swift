@@ -47,6 +47,8 @@ struct MacRuleEditUnlockSheet: View {
             MacConfirmationPassageView(passage: DesktopRemovalGate.passage(
                 wordCount: DesktopRuleEditUnlock.configuration(policy).passageWordCount, seed: ruleID))
             MacPassageInput(text: $typed).frame(height: 100).macBrutalTextField()
+            PassageCheckView(typed: typed, passage: DesktopRemovalGate.passage(
+                wordCount: DesktopRuleEditUnlock.configuration(policy).passageWordCount, seed: ruleID))
             if failed { Text("Passage did not match, or the saved policy changed. Try again.").foregroundStyle(.red) }
             Button("CONFIRM PASSAGE") {
                 failed = !model.submitRuleEditPassage(ruleID, typed: typed, expectedPolicy: policy)

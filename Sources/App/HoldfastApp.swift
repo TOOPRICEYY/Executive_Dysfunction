@@ -7,7 +7,7 @@ struct HoldfastApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            SharedInterfaceScreen(model: model)
                 .environmentObject(model)
                 .onReceive(NotificationCenter.default.publisher(for: NSUbiquitousKeyValueStore.didChangeExternallyNotification)) { _ in
                     model.syncICloudPreferences()

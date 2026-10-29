@@ -40,6 +40,10 @@ struct MacTemporaryPauseSheet: View {
                 .foregroundStyle(.secondary)
 
             MacConfirmationPassageView(passage: requiredPassage, height: 170)
+            if !requiredPassage.isEmpty {
+                Text("Current requirement: \(CommitmentPassage.normalizedWords(in: requiredPassage).count) words.")
+                    .font(.caption.weight(.medium))
+            }
             Text(model.pausePassageExplanation(for: ruleID))
                 .font(.caption).foregroundStyle(.secondary)
             if let error = model.errorMessage {
@@ -50,6 +54,8 @@ struct MacTemporaryPauseSheet: View {
                 .frame(height: 110)
                 .macBrutalTextField()
                 .lineLimit(3...8)
+
+            PassageCheckView(typed: typedPassage, passage: requiredPassage)
 
             if showsMismatch {
                 Label("That does not match the passage.", systemImage: "exclamationmark.triangle.fill")

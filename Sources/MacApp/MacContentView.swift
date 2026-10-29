@@ -319,6 +319,7 @@ private struct MacRetreatPassageSheet: View {
                 .font(.system(.body, design: .monospaced))
                 .frame(minHeight: 110)
                 .overlay { Rectangle().stroke(MacBrutalPalette.rule, lineWidth: 1) }
+            PassageCheckView(typed: typed, passage: passage)
             HStack {
                 Button("CANCEL") { dismiss() }.buttonStyle(MacBrutalButtonStyle())
                 Spacer()
@@ -763,7 +764,7 @@ private struct MacBlockingDisableSheet: View {
                 .font(.title3.weight(.semibold))
             Text("This pauses every web filter until you manually enable web enforcement again.")
                 .font(.callout)
-            Text("Type this passage exactly. It expires after five minutes and becomes invalid if filter settings change.")
+            Text("Type this passage exactly. You have 30 minutes; it becomes invalid if filter settings change.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -773,6 +774,8 @@ private struct MacBlockingDisableSheet: View {
                 .frame(height: 110)
                 .macBrutalTextField()
                 .lineLimit(3...8)
+
+            PassageCheckView(typed: typedPassage, passage: challenge.requiredPassage)
 
             if let validationError {
                 Label(validationMessage(for: validationError), systemImage: "exclamationmark.triangle.fill")
@@ -829,7 +832,7 @@ private struct MacBlockingDisableSheet: View {
 /// Starts and ends a lockdown session: hold chosen block lists on for a set
 /// period, ignoring their schedules, under the same lock settings a normal
 /// locked rule uses.
-private struct MacLockdownSessionSheet: View {
+struct MacLockdownSessionSheet: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var model: MacAppModel
     @State private var selectedRuleIDs: Set<UUID> = []
@@ -839,7 +842,11 @@ private struct MacLockdownSessionSheet: View {
     @State private var unlockDelayDays = 0
     @State private var typedPassage = ""
     @State private var endingSessionID: UUID?
-    @State private var didFailPassage = false
+    /// Local rather than the model's shared `errorMessage`, which carries
+    /// unrelated failures such as an iCloud sync error and would show them here
+    /// as though the passage were wrong.
+    @State private var passageFailure: String?
+    @State private var checkedEntry: String?
 
     private static let severities = ["passageOnly", "delayed", "repeatedConfirmations"]
 
@@ -848,20 +855,31 @@ private struct MacLockdownSessionSheet: View {
             Text("Lockdown session").font(.title3.weight(.semibold))
             Text(model.lockdownSyncStatus).font(.caption).foregroundStyle(.secondary)
 
-            if !model.activeLockdownSessions.isEmpty {
-                activeSection
-                Divider()
+            // The passage box and the diff make this content taller than the
+            // screen once a session is running, and the Close button has to stay
+            // reachable rather than being pushed off the bottom.
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    if !model.activeLockdownSessions.isEmpty {
+                        activeSection
+                        Divider()
+                    }
+                    startSection
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            startSection
+            .frame(maxHeight: 620)
 
             Divider()
             HStack {
                 Spacer()
-                Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Close") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .buttonStyle(MacBrutalButtonStyle())
             }
         }
         .padding(20)
-        .frame(width: 520)
+        .frame(width: 560)
         .macBrutalSheet()
     }
 
@@ -875,37 +893,58 @@ private struct MacLockdownSessionSheet: View {
                         systemImage: "lock.fill"
                     )
                     .font(.callout.weight(.medium))
+                    Text("Ends \(session.endsAt.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption2).foregroundStyle(.secondary)
 
                     if endingSessionID == session.id {
-                        Text("Type this passage to end early:")
+                        Text("Type this passage to end early. \(CommitmentPassage.normalizedWords(in: session.earlyExitPassage).count) words.")
                             .font(.caption).foregroundStyle(.secondary)
-                        Text(session.earlyExitPassage)
-                            .textSelection(.disabled)
-                            .font(.system(.caption, design: .monospaced))
-                            .padding(6)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.secondary.opacity(0.12))
+                        // A plain Text truncates an eighty-word passage to the
+                        // two lines that fit, which makes the exit impossible to
+                        // complete. This is the component built for that.
+                        MacConfirmationPassageView(passage: session.earlyExitPassage, height: 150)
                         MacPassageInput(text: $typedPassage)
                             .frame(height: 100)
                             .macBrutalTextField()
                             .lineLimit(2...4)
-                        if didFailPassage {
-                            Text(model.errorMessage ?? "That passage does not match.").font(.caption).foregroundStyle(Color.red)
-                        }
-                        HStack {
-                            Button("End session", role: .destructive) {
-                                didFailPassage = !model.endLockdownSession(id: session.id, passage: typedPassage)
-                                if !didFailPassage { endingSessionID = nil; typedPassage = "" }
+                            .onChange(of: typedPassage) { _, _ in passageFailure = nil }
+
+                        HStack(spacing: 10) {
+                            Button(checkedEntry == nil ? "Check passage" : "Check again") {
+                                checkedEntry = typedPassage
                             }
-                            Button("Keep going") { endingSessionID = nil; typedPassage = "" }
+                            .buttonStyle(MacBrutalButtonStyle())
+                            .disabled(CommitmentPassage.normalizedWords(in: typedPassage).isEmpty)
+                            Spacer()
+                        }
+                        if let checkedEntry {
+                            PassageDiffView(typed: checkedEntry, passage: session.earlyExitPassage)
+                            Text("A snapshot from the last check. It does not update while you type.")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+
+                        if let passageFailure {
+                            Label(passageFailure, systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption).foregroundStyle(Color.red)
+                        }
+                        HStack(spacing: 10) {
+                            Button("End session", role: .destructive) {
+                                if model.endLockdownSession(id: session.id, passage: typedPassage) {
+                                    resetEarlyExit()
+                                } else {
+                                    passageFailure = "That does not match the passage. Use Check passage to see which words differ."
+                                }
+                            }
+                            .buttonStyle(MacBrutalButtonStyle(.danger))
+                            Button("Keep session") { resetEarlyExit() }
+                                .buttonStyle(MacBrutalButtonStyle())
                         }
                     } else {
                         Button("End early…") {
+                            resetEarlyExit()
                             endingSessionID = session.id
-                            typedPassage = ""
-                            didFailPassage = false
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(MacBrutalButtonStyle())
                     }
                 }
                 .padding(8)
@@ -928,7 +967,18 @@ private struct MacLockdownSessionSheet: View {
                             get: { selectedRuleIDs.contains(rule.id) },
                             set: { if $0 { selectedRuleIDs.insert(rule.id) } else { selectedRuleIDs.remove(rule.id) } }
                         )) {
-                            Text("\(rule.name) — \(rule.domains.count) domain(s)")
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(rule.name)
+                                HStack(spacing: 6) {
+                                    Text(targetSummary(for: rule))
+                                        .font(.caption2).foregroundStyle(.secondary)
+                                    if !enforceableOnThisMac(rule) {
+                                        Label("not enforced on this Mac", systemImage: "exclamationmark.triangle.fill")
+                                            .font(.caption2)
+                                            .foregroundStyle(.orange)
+                                    }
+                                }
+                            }
                         }
                         .toggleStyle(MacBrutalCheckboxStyle())
                     }
@@ -968,6 +1018,31 @@ private struct MacLockdownSessionSheet: View {
             .buttonStyle(.borderedProminent)
             .disabled(selectedRuleIDs.isEmpty)
         }
+    }
+
+    private func resetEarlyExit() {
+        endingSessionID = nil
+        typedPassage = ""
+        checkedEntry = nil
+        passageFailure = nil
+    }
+
+    /// What this group actually restrains, rather than its domain count alone.
+    /// A group that blocks apps reads as "0 domain(s)" otherwise, which looks
+    /// broken even though it enforces correctly on the iPhone.
+    private func targetSummary(for rule: CloudRulePreference) -> String {
+        var parts: [String] = []
+        if !rule.domains.isEmpty { parts.append("\(rule.domains.count) domain\(rule.domains.count == 1 ? "" : "s")") }
+        if !rule.websiteCategories.isEmpty { parts.append("\(rule.websiteCategories.count) web categor\(rule.websiteCategories.count == 1 ? "y" : "ies")") }
+        if !rule.macApplicationIdentifiers.isEmpty { parts.append("\(rule.macApplicationIdentifiers.count) Mac app\(rule.macApplicationIdentifiers.count == 1 ? "" : "s")") }
+        if rule.deviceLocalSelectionCount > 0 { parts.append("\(rule.deviceLocalSelectionCount) iPhone selection\(rule.deviceLocalSelectionCount == 1 ? "" : "s")") }
+        return parts.isEmpty ? "nothing selected" : parts.joined(separator: " · ")
+    }
+
+    /// A group with no domains and no Mac applications cannot be enforced by
+    /// this Mac's filter, however well it works on the iPhone.
+    private func enforceableOnThisMac(_ rule: CloudRulePreference) -> Bool {
+        !rule.domains.isEmpty || !rule.websiteCategories.isEmpty || !rule.macApplicationIdentifiers.isEmpty
     }
 
     private func label(for severity: String) -> String {
@@ -1025,6 +1100,8 @@ private struct MacRemovalSheet: View {
                 .onChange(of: typedPassage) { _, _ in
                     didFailPassage = false
                 }
+
+            PassageCheckView(typed: typedPassage, passage: DesktopNetworkExtensionRemovalGate.requiredPassage, exactMatch: true)
 
             if didFailPassage {
                 Label(

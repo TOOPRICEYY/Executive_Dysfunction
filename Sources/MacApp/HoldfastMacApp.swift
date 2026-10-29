@@ -18,7 +18,10 @@ struct HoldfastMacApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MacContentView()
+            Group {
+                if CommandLine.arguments.contains("--native-ui") || model.isUIPreviewMode { MacContentView() }
+                else { SharedInterfaceScreen(model: model) }
+            }
                 .environmentObject(model)
                 .frame(minWidth: 1240, minHeight: 700)
                 .onChange(of: scenePhase) { _, phase in

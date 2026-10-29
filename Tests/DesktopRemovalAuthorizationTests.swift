@@ -225,6 +225,10 @@ final class DesktopRemovalAuthorizationTests: XCTestCase {
         )
 
         XCTAssertEqual(challenge.policyRevision, combined.revision)
+        XCTAssertEqual(challenge.expiresAt.timeIntervalSince(issuedAt), 30 * 60)
+        XCTAssertEqual(DesktopBlockingDisableGate.validate(
+            typedPassage: challenge.requiredPassage, challenge: challenge,
+            currentPolicy: combined, at: issuedAt.addingTimeInterval(29 * 60)), .authorized)
         XCTAssertEqual(challenge.requiredPassage.split(separator: " ").count, 60)
         XCTAssertEqual(
             challenge.expiresAt,

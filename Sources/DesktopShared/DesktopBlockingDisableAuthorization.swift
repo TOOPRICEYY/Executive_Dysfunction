@@ -20,7 +20,7 @@ enum DesktopBlockingDisableGate {
         case passageMismatch
     }
 
-    static let challengeLifetime: TimeInterval = 5 * 60
+    static let challengeLifetime: TimeInterval = 30 * 60
     static let defaultPassageWordCount = 40
     static let passageWordCountRange = 20...300
 

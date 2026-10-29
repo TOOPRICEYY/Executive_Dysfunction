@@ -13,7 +13,7 @@ settings:
     DEVELOPMENT_TEAM: 7GXNZJMGPD
     CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1,2"
-    CURRENT_PROJECT_VERSION: 94
+    CURRENT_PROJECT_VERSION: 99
     MARKETING_VERSION: 0.1.0
 
 schemes:
@@ -63,6 +63,15 @@ targets:
       - path: Sources/PresentationShared
       - path: Sources/Shared
       - path: Sources/CloudShared
+      - path: Platform/AppleSharedUI/Sources/HoldfastSharedInterface/HoldfastWebView.swift
+    postBuildScripts:
+      - name: Bundle shared interface
+        script: |
+          set -eu
+          UI_SOURCE="${HOLDFAST_SHARED_UI_DIR:-${SRCROOT}/SharedUI/dist}"
+          test -f "$UI_SOURCE/app.js" || { echo 'error: Build SharedUI first: cd SharedUI && npm ci && npm run build'; exit 1; }
+          /usr/bin/ditto "$UI_SOURCE" "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/SharedUI"
+        basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunction
@@ -107,6 +116,7 @@ targets:
       - path: Sources/DesktopShared
       - path: Sources/BlockPageShared
       - path: Sources/Shared/Lockdown.swift
+      - path: Platform/AppleSharedUI/Sources/HoldfastSharedInterface/HoldfastWebView.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.GabrielPrice.ExecutiveDysfunction
@@ -140,6 +150,13 @@ targets:
           SRC="$BUILT_PRODUCTS_DIR/BlockPageServer"
           DST="$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/BlockPageServer"
           if [ -f "$SRC" ]; then cp -f "$SRC" "$DST"; fi
+      - name: Bundle shared interface
+        script: |
+          set -eu
+          UI_SOURCE="${HOLDFAST_SHARED_UI_DIR:-${SRCROOT}/SharedUI/dist}"
+          test -f "$UI_SOURCE/app.js" || { echo 'error: Build SharedUI first: cd SharedUI && npm ci && npm run build'; exit 1; }
+          /usr/bin/ditto "$UI_SOURCE" "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/SharedUI"
+        basedOnDependencyAnalysis: false
 
   MacWebFilterExtension:
     type: system-extension
@@ -338,12 +355,16 @@ targets:
     platform: macOS
     sources:
       - path: Tests/MacConfirmationPassageLayoutTests.swift
+      - path: Tests/SharedInterfaceGroupTests.swift
       - path: Tests/MacWorkspaceLayoutTests.swift
       - path: Tests/BypassHistoryTests.swift
       - path: Tests/CloudLockdownTests.swift
       - path: Tests/TemporaryAllowanceBackoffTests.swift
       - path: Tests/BlockingSchedulePreviewTests.swift
       - path: Sources/PresentationShared
+        excludes:
+          - SharedInterfaceSession.swift
+          - SharedInterfaceScreen.swift
       - path: Sources/MacApp/MacWorkspaceViews.swift
       - path: Sources/MacApp/MacBlockStatusTimeline.swift
       - path: Sources/MacApp/MacBlockingTargetsEditor.swift
