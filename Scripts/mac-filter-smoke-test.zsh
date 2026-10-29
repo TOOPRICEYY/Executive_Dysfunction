@@ -719,10 +719,10 @@ if [[ -r "$status_file" ]]; then
         add_blocked_probe_candidate "$candidate"
     done < <(jq -r '.blockedDomains[]? // empty' "$status_file" 2>/dev/null)
 fi
-if [[ -r "$policy_file" ]]; then
+if (( ${#blocked_probe_candidates[@]} == 0 )) && [[ -r "$policy_file" ]]; then
     while IFS= read -r candidate; do
         add_blocked_probe_candidate "$candidate"
-    done < <(jq -r \
+    done < <(/usr/bin/perl -e 'alarm shift; exec @ARGV; exit 127' 3 jq -r \
         '.policy.rules[]?
             | select(.enforcementMode == "blockList" and .isEnabled == true)
             | .domains[]? // empty' \
@@ -867,6 +867,7 @@ while (( $(date +%s) < deadline_epoch - 5 )); do
             and (.macFilterSettings.isReady // false) == true
             and .macFilterSettings.appliedPolicyRevision == .revision
             and ((.macFilterSettings.planMode // "") != "domainRules"
+                or ((.macFilterSettings.inspectedWebPorts // [] | sort) == [80,443,8443])
                 or ((.macFilterSettings.requiredRetryGuardDomainCount // 0) > 0
                     and .macFilterSettings.coveredRetryGuardDomainCount
                         == .macFilterSettings.requiredRetryGuardDomainCount

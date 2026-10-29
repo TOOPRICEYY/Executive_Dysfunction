@@ -2503,7 +2503,7 @@ final class MacEnforcementController: NSObject, ObservableObject {
             retainedRetryGuardSnapshot?.reusableResolution(for: plan, at: Date()) ?? .init()
         )
         let retryGuards = resolution.retryGuards(for: plan)
-        if !retryGuards.hasCompleteRequiredCoverage {
+        if !retryGuards.hasCompleteRequiredCoverage, plan.inspectedWebPorts.isEmpty {
             let missing = retryGuards.missingRequiredDomainSuffixes.joined(separator: ",")
             if let retainedSnapshot = retainedRetryGuardSnapshot?.rebound(
                 for: plan,

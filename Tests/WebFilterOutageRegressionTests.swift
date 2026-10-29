@@ -39,6 +39,7 @@ final class WebFilterOutageRegressionTests: XCTestCase {
         let guards = MacFilterRetryGuardSet(addresses: [], missingRequiredDomainSuffixes: ["blocked.example", "unrelated.example"])
         XCTAssertEqual(plan.recoveryDNSDomains(for: guards), ["blocked.example"])
         let maximumRules = plan.blockedDomainSuffixes.count + plan.blockedDestinationPorts.count * 2
+            + plan.inspectedWebPorts.count * 2
             + plan.retryGuardRequiredDomainSuffixes.count + plan.maximumCorrelatedAddresses * MacFilterInterceptionPlan.correlatedWebPorts.count
         XCTAssertLessThanOrEqual(maximumRules, MacFilterInterceptionPlan.maximumSystemRules)
     }
@@ -49,6 +50,7 @@ final class WebFilterOutageRegressionTests: XCTestCase {
 
         XCTAssertEqual(plan.mode, .domainRules)
         XCTAssertEqual(plan.defaultAction, .allow)
+        XCTAssertEqual(plan.inspectedWebPorts, [80, 443, 8443])
         XCTAssertEqual(
             plan.blockedDomainSuffixes.filter { $0.hasSuffix("blocked.example") },
             ["blocked.example"],

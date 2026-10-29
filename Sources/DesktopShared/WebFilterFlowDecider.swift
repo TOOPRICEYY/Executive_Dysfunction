@@ -181,7 +181,8 @@ enum WebFilterFlowDecider {
         policy: DesktopEnforcementPolicy,
         at date: Date = Date(),
         inspectsDNS: Bool = inspectsDNSQueries,
-        matchesRecentlyBlockedEndpoint: Bool = false
+        matchesRecentlyBlockedEndpoint: Bool = false,
+        inspectUnnamedWebFlows: Bool = false
     ) -> WebFilterFlowOutcome {
         // 1. Idle is free. With no active web rule the filter is a pass-through,
         //    so a scheduling bug or a stale policy can never cost connectivity.
@@ -210,7 +211,9 @@ enum WebFilterFlowDecider {
         // ClientHello, while Network Extension waits for that ClientHello
         // before completing connect. A recently *named* blocked flow gives us a
         // bounded alternative for Chrome retries that lose their hostname.
-        if matchesRecentlyBlockedEndpoint,
+        let canInspectWebPayload = inspectUnnamedWebFlows && flow.isTCP
+            && flow.remotePort.map(MacFilterInterceptionPlan.correlatedWebPorts.contains) == true
+        if matchesRecentlyBlockedEndpoint, !canInspectWebPayload,
            flow.hostname?.isEmpty != false,
            flow.remoteAddress?.isEmpty == false {
             // This is not an arbitrary fail-closed guess: the endpoint was
@@ -256,12 +259,16 @@ enum WebFilterFlowDecider {
             return .drop(.unidentified, reason: .unnamedQUICBlocked)
         }
 
-        // 6. No name yet. Do not request outbound payload at new-flow time.
-        //    Some socket clients cannot produce it until connect completes, so
-        //    even a one-byte peek held every HTTPS connection on the live Mac.
-        //    Fortress is intentionally default-deny; a block list must release
-        //    traffic it cannot identify.
+        // 6. Explicit web-port settings opt into bounded payload inspection.
+        //    The legacy/global interception path keeps its prior conservative
+        //    behavior: implicit global filterData settings caused connect/data
+        //    deadlocks on the live VPN. Only the explicit path was live-tested
+        //    with both previously unseen blocked IPs and co-hosted allowed SNI.
         if let port = flow.remotePort, isInspectablePort(port, isTCP: flow.isTCP, inspectsDNS: inspectsDNS) {
+            if inspectUnnamedWebFlows, flow.isTCP, !fortress,
+               MacFilterInterceptionPlan.correlatedWebPorts.contains(port) {
+                return .inspect(initialTCPPeekBytes, reason: .unnamedInspectable)
+            }
             return fortress
                 ? .drop(.unidentified, reason: .unidentifiedFortressBlocked)
                 : .allow(.unnamedPreconnectAllowed)

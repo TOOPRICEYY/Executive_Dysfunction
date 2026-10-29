@@ -3,12 +3,10 @@ import Foundation
 /// A platform-neutral description of how the macOS data provider should ask
 /// Network Extension to route flows.
 ///
-/// A domain-only block list does not need to put every socket on the provider's
-/// verdict path. `NEFilterSettings` can drop named destinations in the system
-/// rule layer and let everything else bypass the provider. Besides being less
-/// work, that distinction matters on Macs with a full-tunnel VPN: live testing
-/// showed that the implicit `filterData` default stopped every new TCP connect
-/// even while `handleNewFlow` returned `.allow()` for each one.
+/// Domain block lists explicitly classify web ports, including sockets at
+/// previously unseen CDN addresses. Other ports keep the allow default. The
+/// explicit rules avoid the implicit global filterData default involved in
+/// earlier VPN connectivity failures.
 struct MacFilterInterceptionPlan: Equatable, Sendable {
     enum DefaultAction: String, Equatable, Sendable {
         case allow
@@ -27,6 +25,9 @@ struct MacFilterInterceptionPlan: Equatable, Sendable {
     /// an address rule to every port would turn a shared CDN address into a
     /// broad IP block instead of a narrow retry guard.
     static let correlatedWebPorts = [80, 443, 8_443]
+    /// Web traffic must be classified even when its CDN IP was not in DNS
+    /// preparation. Keep the default allow action for non-web sockets.
+    var inspectedWebPorts: [Int] { mode == .domainRules ? Self.correlatedWebPorts : [] }
     static let recoveryDNSPort = 53
 
     /// Only the unresolved policy suffixes get a DNS exception, never a
@@ -95,7 +96,7 @@ struct MacFilterInterceptionPlan: Equatable, Sendable {
     var maximumCorrelatedAddresses: Int {
         // Reserve a DNS-only recovery rule per required suffix. Missing DNS
         // must be allowed to recover without clearing all active block rules.
-        let fixedRules = blockedDomainSuffixes.count + blockedDestinationPorts.count * 2
+        let fixedRules = blockedDomainSuffixes.count + blockedDestinationPorts.count * 2 + inspectedWebPorts.count * 2
             + retryGuardRequiredDomainSuffixes.count
         return max(0, (Self.maximumSystemRules - fixedRules) / Self.correlatedWebPorts.count)
     }
@@ -138,7 +139,7 @@ struct MacFilterInterceptionPlan: Equatable, Sendable {
         // accepts at most 1,000 rules total. If a policy cannot be represented
         // completely, retain the existing provider decision path instead of
         // silently omitting a blocked destination.
-        let portRuleCount = dedicatedEncryptedDNSPorts.count * 2
+        let portRuleCount = dedicatedEncryptedDNSPorts.count * 2 + correlatedWebPorts.count * 2
         guard domains.count + portRuleCount + requiredDomains.count <= maximumSystemRules else {
             return MacFilterInterceptionPlan(
                 mode: .providerInspection,

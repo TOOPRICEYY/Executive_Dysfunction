@@ -7,6 +7,19 @@ import XCTest
 /// filter: it must not be trivially bypassable, and it must never become the
 /// reason the machine has no network.
 final class WebFilterFlowDeciderTests: XCTestCase {
+    func testUnseenYouTubeAddressIsClassifiedBeforeWebPayloadIsReleased() {
+        let policy = makePolicy(domains: ["youtube.com"])
+        let flow = WebFilterFlowDescriptor(remoteAddress: "142.251.157.4", remotePort: 443)
+        XCTAssertEqual(WebFilterFlowDecider.outcome(for: flow, policy: policy, at: activeDate,
+            inspectUnnamedWebFlows: true).decision, .inspect(peekBytes: WebFilterFlowDecider.initialTCPPeekBytes))
+        XCTAssertEqual(WebFilterFlowDecider.outcome(for: flow, policy: policy, at: activeDate,
+            matchesRecentlyBlockedEndpoint: true, inspectUnnamedWebFlows: true).decision,
+            .inspect(peekBytes: WebFilterFlowDecider.initialTCPPeekBytes), "A shared CDN IP is not enough to block an allowed hostname")
+        let hello = clientHello(serverName: "www.youtube.com", paddingBeforeServerName: 1700)
+        XCTAssertEqual(WebFilterFlowDecider.decision(forOutboundBytes: hello, flow: flow, policy: policy, at: activeDate), .drop)
+        XCTAssertEqual(WebFilterFlowDecider.decision(forOutboundBytes: clientHello(serverName: "www.google.com"),
+            flow: flow, policy: policy, at: activeDate), .allow, "A co-hosted allowed site must remain usable")
+    }
     // MARK: - Never take the machine offline
 
     func testCaptiveProbeSurvivesFortressWithoutAllowingAllAppleHosts() {

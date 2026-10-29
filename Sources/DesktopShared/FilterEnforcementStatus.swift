@@ -29,6 +29,9 @@ struct MacFilterSettingsStatus: Codable, Equatable {
     var correlatedAddressCount: Int
     /// Named rules are installed, even if IP retry coverage is still partial.
     var isFiltering: Bool? = nil
+    /// A successful explicit web-port interception plan classifies unknown
+    /// CDN addresses even when auxiliary DNS address coverage is incomplete.
+    var inspectedWebPorts: [Int]? = nil
     var missingRetryGuardDomainSuffixes: [String]? = nil
 }
 

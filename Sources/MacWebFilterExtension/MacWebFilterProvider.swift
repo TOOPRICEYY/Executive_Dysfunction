@@ -551,7 +551,7 @@ final class MacWebFilterProvider: NEFilterDataProvider, @unchecked Sendable {
         settingsLock.unlock()
 
         let retryGuards = resolution.retryGuards(for: plan)
-        let isReady = isFiltering && retryGuards.hasCompleteRequiredCoverage
+        let isReady = isFiltering && (retryGuards.hasCompleteRequiredCoverage || !plan.inspectedWebPorts.isEmpty)
         let missing = Set(retryGuards.missingRequiredDomainSuffixes)
         let coveredDomains = plan.retryGuardRequiredDomainSuffixes.filter {
             !missing.contains($0)
@@ -578,6 +578,7 @@ final class MacWebFilterProvider: NEFilterDataProvider, @unchecked Sendable {
             coveredRetryGuardDomainSuffixes: isFiltering ? coveredDomains : [],
             correlatedAddressCount: isFiltering ? correlatedAddressCount : 0,
             isFiltering: isFiltering,
+            inspectedWebPorts: isFiltering ? plan.inspectedWebPorts : [],
             missingRetryGuardDomainSuffixes: retryGuards.missingRequiredDomainSuffixes
         )
         if !isFiltering {
@@ -968,6 +969,14 @@ final class MacWebFilterProvider: NEFilterDataProvider, @unchecked Sendable {
             var rules = unresolvedDomains.map { domain in
                 NEFilterRule(networkRule: makeDestinationHostNetworkRule(domain: domain, port: MacFilterInterceptionPlan.recoveryDNSPort), action: .allow)
             }
+            // First match wins. Classify web traffic before hostname/IP rules
+            // so a DNS-derived shared CDN address cannot drop an allowed SNI.
+            for port in plan.inspectedWebPorts {
+                for address in ["0.0.0.0", "::"] {
+                    rules.append(NEFilterRule(networkRule: makeDestinationNetworkRule(
+                        address: address, port: port, prefix: 0), action: .filterData))
+                }
+            }
             rules += plan.blockedDomainSuffixes.map { domain in
                 NEFilterRule(
                     networkRule: makeDestinationHostNetworkRule(domain: domain),
@@ -1270,7 +1279,8 @@ final class MacWebFilterProvider: NEFilterDataProvider, @unchecked Sendable {
             for: descriptor,
             policy: policy,
             at: now,
-            matchesRecentlyBlockedEndpoint: matchesBlockedEndpoint
+            matchesRecentlyBlockedEndpoint: matchesBlockedEndpoint,
+            inspectUnnamedWebFlows: true
         )
         // Usually no process lookup is necessary. Only a web flow we would
         // otherwise drop can need the OS captive-login exception. Resolve its
@@ -1286,7 +1296,8 @@ final class MacWebFilterProvider: NEFilterDataProvider, @unchecked Sendable {
                 for: descriptor,
                 policy: policy,
                 at: now,
-                matchesRecentlyBlockedEndpoint: matchesBlockedEndpoint
+                matchesRecentlyBlockedEndpoint: matchesBlockedEndpoint,
+                inspectUnnamedWebFlows: true
             )
         }
         diagnostics.recordSourceIdentityResolution(
