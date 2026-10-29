@@ -297,6 +297,7 @@ final class MacFilterAsyncDomainResolver: @unchecked Sendable {
     func resolve(
         domainSuffixes: [String],
         timeout: TimeInterval,
+        collectForFullWindow: Bool = false,
         completion: @escaping @Sendable (MacFilterAsyncDNSResolutionResult) -> Void
     ) -> MacFilterDNSResolutionTask {
         let identifier = UUID()
@@ -308,13 +309,16 @@ final class MacFilterAsyncDomainResolver: @unchecked Sendable {
             let operation = ResolutionOperation(
                 identifier: identifier,
                 domains: domains,
+                collectForFullWindow: collectForFullWindow,
                 completion: completion
             )
             operations[identifier] = operation
             startLookups(for: operation)
         }
         queue.asyncAfter(deadline: deadline) { [self] in
-            finish(identifier, didReachDeadline: true, wasCancelled: false)
+            guard let operation = operations[identifier] else { return }
+            let incomplete = operation.settledDomains.count != operation.domains.count
+            finish(identifier, didReachDeadline: incomplete, wasCancelled: false)
         }
 
         return MacFilterDNSResolutionTask { [weak self] in
@@ -333,6 +337,7 @@ final class MacFilterAsyncDomainResolver: @unchecked Sendable {
         resolve(
             domainSuffixes: plan.retryGuardResolutionDomainSuffixes,
             timeout: timeout,
+            collectForFullWindow: true,
             completion: completion
         )
     }
@@ -356,7 +361,7 @@ final class MacFilterAsyncDomainResolver: @unchecked Sendable {
                 operation.settledDomains.insert(domain)
             }
         }
-        if !operation.isFinished,
+        if !operation.isFinished, !operation.collectForFullWindow || operation.domains.isEmpty,
            operation.settledDomains.count == operation.domains.count {
             finish(operation.identifier, didReachDeadline: false, wasCancelled: false)
         }
@@ -379,8 +384,13 @@ final class MacFilterAsyncDomainResolver: @unchecked Sendable {
         }
         if event.errorCode != DNSServiceErrorType(kDNSServiceErr_NoError) || !event.moreComing {
             operation.settledDomains.insert(domain)
+        } else {
+            operation.settledDomains.remove(domain)
         }
-        if operation.settledDomains.count == operation.domains.count {
+        // MoreComing=false ends only the current callback batch, not the DNS
+        // query. In enforcement preparation keep the reference alive through
+        // the bounded window so delayed A/AAAA answers also receive guards.
+        if !operation.collectForFullWindow, operation.settledDomains.count == operation.domains.count {
             finish(identifier, didReachDeadline: false, wasCancelled: false)
         }
     }
@@ -438,6 +448,7 @@ final class MacFilterAsyncDomainResolver: @unchecked Sendable {
 private final class ResolutionOperation: @unchecked Sendable {
     let identifier: UUID
     let domains: [String]
+    let collectForFullWindow: Bool
     let completion: @Sendable (MacFilterAsyncDNSResolutionResult) -> Void
     var handles: [String: MacFilterDNSLookupHandle] = [:]
     var addressesByDomain: [String: Set<String>] = [:]
@@ -447,10 +458,12 @@ private final class ResolutionOperation: @unchecked Sendable {
     init(
         identifier: UUID,
         domains: [String],
+        collectForFullWindow: Bool,
         completion: @escaping @Sendable (MacFilterAsyncDNSResolutionResult) -> Void
     ) {
         self.identifier = identifier
         self.domains = domains
+        self.collectForFullWindow = collectForFullWindow
         self.completion = completion
     }
 }
@@ -504,7 +517,7 @@ private final class DNSServiceLookup: @unchecked Sendable {
         errorCode: DNSServiceErrorType,
         address: UnsafePointer<sockaddr>?
     ) {
-        let numericAddress = address.flatMap(Self.numericAddress)
+        let numericAddress = errorCode == kDNSServiceErr_NoError ? address.flatMap(Self.numericAddress) : nil
         callback(
             MacFilterDNSLookupEvent(
                 address: numericAddress,

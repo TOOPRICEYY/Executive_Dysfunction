@@ -8,6 +8,9 @@ struct HoldfastMacApp: App {
     @AppStorage(MacHighlightColor.storageKey) private var storedHighlight = MacHighlightColor.defaultValue.rawValue
 
     init() {
+        if CommandLine.arguments.contains("--report-filter-preferences") {
+            MacEnforcementSafetyStateReporter.reportFilterPreferencesAndExit()
+        }
         if CommandLine.arguments.contains(MacEnforcementSafetyStateReporter.argument) {
             MacEnforcementSafetyStateReporter.reportAndExit()
         }

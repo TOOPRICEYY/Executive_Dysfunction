@@ -329,6 +329,33 @@ final class MacFilterPreparedRetryGuardsTests: XCTestCase {
         XCTAssertEqual(DesktopPolicyConfigurationTransport.policy(from: corruptSnapshot), policy)
     }
 
+    func testEnforcementResolverCollectsLaterBatchAfterMoreComingIsFalse() {
+        let finished = DispatchSemaphore(value: 0)
+        let results = LockedBox<[MacFilterAsyncDNSResolutionResult]>([])
+        let resolver = MacFilterAsyncDomainResolver(queue: DispatchQueue(label: "retry-guard-tests.late-batch")) { _, queue, callback in
+            queue.async {
+                callback(.init(address: "172.66.0.227", isAddition: true, moreComing: false, errorCode: 0))
+            }
+            queue.asyncAfter(deadline: .now() + 0.03) {
+                callback(.init(address: "162.159.140.229", isAddition: true, moreComing: false, errorCode: 0))
+            }
+            queue.asyncAfter(deadline: .now() + 0.05) {
+                callback(.init(address: "2606:4700::1", isAddition: true, moreComing: false, errorCode: 0))
+            }
+            return MacFilterDNSLookupHandle {}
+        }
+        let plan = MacFilterInterceptionPlan(mode: .domainRules, defaultAction: .allow,
+            blockedDomainSuffixes: ["x.com"], blockedDestinationPorts: [], retryGuardRequiredDomainSuffixes: ["x.com"])
+        _ = resolver.resolve(for: plan, timeout: 0.1) { result in
+            results.withValue { $0.append(result) }; finished.signal()
+        }
+        XCTAssertEqual(finished.wait(timeout: .now() + 1), .success)
+        XCTAssertEqual(results.value.count, 1)
+        XCTAssertEqual(results.value.first?.resolution.addressesByDomainSuffix["x.com"],
+            Set(["172.66.0.227", "162.159.140.229", "2606:4700::1"]))
+        XCTAssertEqual(results.value.first?.didReachDeadline, false)
+    }
+
     func testResolverCompletesEarlyAfterAllCanonicalLookupsSettle() {
         let completions = LockedBox<[MacFilterAsyncDNSResolutionResult]>([])
         let cancellations = LockedBox(0)
