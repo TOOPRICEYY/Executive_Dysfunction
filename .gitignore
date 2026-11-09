@@ -7,3 +7,4 @@ build/
 Diagnostics/
 *.xcresult
 Holdfast UI Preview.command
+Claude outputs/
