@@ -64,6 +64,8 @@ export interface RetreatGroup {
   id: string;
   name: string;
   now: GroupNow;
+  /** False when the host cannot confirm this group is enforced on this device. */
+  enforced?: boolean;
   lock: ChangePolicy["kind"];
   delayDays: number;
   targets: string;
@@ -298,6 +300,7 @@ export function isSnapshot(value: unknown): value is Snapshot {
             typeof r.id === "string" &&
             typeof r.name === "string" &&
             isNow(r.now) &&
+            (r.enforced === undefined || typeof r.enforced === "boolean") &&
             policyKinds.includes(r.lock) &&
             integer(r.delayDays, 0, 365) &&
             typeof r.targets === "string",

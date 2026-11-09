@@ -225,3 +225,73 @@ test("refresh cannot silently rebase a pending edit onto a newer native revision
     ),
   ).toBe("before-refresh");
 });
+test("dialogs open at the top, notices stay on their page and each page has one title", async ({
+  page,
+}) => {
+  await page.goto("/?preview=1");
+  await page.getByRole("button", { name: "Edit Social feeds" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  // A long editor used to open scrolled part-way down with a ring on "Close".
+  expect(await dialog.evaluate((el) => el.scrollTop)).toBe(0);
+  await expect(dialog).toBeFocused();
+  await page.getByLabel("Name", { exact: true }).fill("Quiet evenings");
+  await page.getByRole("button", { name: "Save group" }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "No device settings changed",
+  );
+  // A saved-but-unenforced group must not read as blocking anywhere.
+  await expect(page.getByText("Saved in this preview only")).toBeVisible();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Settings");
+});
+test("a background status read never swallows the tap that follows it", async ({
+  page,
+}) => {
+  await page.addInitScript((state) => {
+    state.capabilities.push("lockdown");
+    const listeners = new Set<(event: { data: unknown }) => void>();
+    let reads = 0;
+    const host = window as any;
+    host.sentCommands = [];
+    host.chrome ??= {};
+    host.chrome.webview = {
+      addEventListener(
+        _: string,
+        listener: (event: { data: unknown }) => void,
+      ) {
+        listeners.add(listener);
+      },
+      removeEventListener(
+        _: string,
+        listener: (event: { data: unknown }) => void,
+      ) {
+        listeners.delete(listener);
+      },
+      postMessage(request: any) {
+        host.sentCommands.push(request.command.type);
+        const reply: any = { version: 1, id: request.id, ok: true };
+        const read = request.command.type === "snapshot";
+        reply.result = read ? { snapshot: structuredClone(state) } : {};
+        // Only the first read is instant; later reads are slow, like a phone
+        // waking its native engine.
+        setTimeout(
+          () => listeners.forEach((listener) => listener({ data: reply })),
+          read && ++reads > 1 ? 1500 : 0,
+        );
+      },
+    };
+  }, previewSnapshot());
+  await page.goto("/");
+  const lockdown = page.getByRole("button", { name: "Lockdown", exact: true });
+  await expect(lockdown).toBeEnabled();
+  // The first touch after the app comes forward fires "focus" before "click".
+  await page.evaluate(() => dispatchEvent(new Event("focus")));
+  await expect(lockdown).toBeEnabled();
+  await lockdown.click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).sentCommands))
+    .toContain("startLockdown");
+});

@@ -8,20 +8,29 @@ import type {
   Slot,
   Snapshot,
 } from "./contract.ts";
+/** The host says enforcement is on. Sample data is always shown as written. */
+export function enforcementConfirmed(snapshot: Snapshot): boolean {
+  return (
+    snapshot.platform === "preview" || snapshot.enforcement.state === "active"
+  );
+}
 /** Never infer active enforcement from saved schedules or sample data.
  * The host's summary (evaluated by its own schedule engine) is used only while
  * enforcement is confirmed; otherwise the heading says what needs attention. */
 export function nowHeadline(snapshot: Snapshot): string {
-  const confirmed =
-    snapshot.platform === "preview" || snapshot.enforcement.state === "active";
-  if (snapshot.summary && confirmed) return snapshot.summary.headline;
+  if (snapshot.summary && enforcementConfirmed(snapshot))
+    return snapshot.summary.headline;
   if (snapshot.platform === "preview") return "Your day at a glance";
   if (
     snapshot.enforcement.state === "unknown" ||
     snapshot.enforcement.state === "error"
   )
     return "Check device enforcement";
-  if (snapshot.enforcement.state === "disabled") return "Enforcement is paused";
+  if (snapshot.enforcement.state === "disabled")
+    // On iOS nothing was paused: Screen Time access was never granted or was revoked.
+    return snapshot.platform === "ios"
+      ? "Nothing is being blocked"
+      : "Enforcement is paused";
   const blocked = snapshot.groups.filter(
     (g) => g.status === "blocking" || g.status === "lockdown",
   ).length;
@@ -102,6 +111,14 @@ export function bypassCounts(
 
 /** "Next: Social Feeds starts at 18:00", or a fallback. */
 export function nextLine(snapshot: Snapshot): string {
+  // A schedule's next change is not news while nothing is enforced; say what to do instead.
+  if (!enforcementConfirmed(snapshot)) {
+    if (snapshot.enforcement.state !== "disabled")
+      return snapshot.enforcement.detail;
+    return snapshot.platform === "ios"
+      ? "Allow Screen Time access to start blocking. Your groups and schedules are saved."
+      : "Turn enforcement on to start blocking. Your groups and schedules are saved.";
+  }
   if (snapshot.summary)
     return snapshot.summary.next ?? "No changes scheduled in the next week.";
   return snapshot.platform === "preview"
@@ -149,6 +166,26 @@ export function byNow<T extends { name: string }>(
 }
 export const isBlockingState = (s: NowState) =>
   s === "blocking" || s === "lockdown";
+
+/** A blocking or lockdown state the host does not confirm is shown as a plan, never as "Blocking now". */
+export function shownNow(
+  now: GroupNow,
+  enforced: boolean,
+  clockNow = new Date(),
+): GroupNow {
+  if (enforced || !isBlockingState(now.state)) return now;
+  const what = now.state === "lockdown" ? "Lockdown" : "Scheduled";
+  return {
+    ...now,
+    headline: now.changesAt
+      ? `${what} until ${moment(now.changesAt, clockNow)} · not enforced`
+      : `${what} now · not enforced`,
+  };
+}
+/** Group status is the host's per-group verdict; "unsupported" means scheduled but not enforced here. */
+export const groupEnforced = (g: Group) => g.status !== "unsupported";
+export const retreatGroupEnforced = (r: RetreatGroup, snapshot: Snapshot) =>
+  r.enforced ?? enforcementConfirmed(snapshot);
 
 /** Lock chip text and icon, matching the native dashboard row. */
 export function lockChip(
@@ -219,8 +256,10 @@ export function laneLabel(
   blockedMinutes: number,
   isToday: boolean,
   today: Date,
+  enforced = true,
 ): string {
   if (isToday && now) {
+    if (!enforced && isBlockingState(now.state)) return "Not enforced";
     switch (now.state) {
       case "lockdown":
         return "Locked down";
@@ -240,19 +279,34 @@ export function laneLabel(
   }
   return durationText(blockedMinutes);
 }
-export type LaneSource = { id: string; name: string; now?: GroupNow };
+export type LaneSource = {
+  id: string;
+  name: string;
+  now?: GroupNow;
+  enforced: boolean;
+};
 export function lanesFor(snapshot: Snapshot): LaneSource[] {
   const seen = new Set<string>();
   const out: LaneSource[] = [];
   for (const g of snapshot.groups)
     if (!seen.has(g.id)) {
       seen.add(g.id);
-      out.push({ id: g.id, name: g.name, now: groupNow(g) });
+      out.push({
+        id: g.id,
+        name: g.name,
+        now: groupNow(g),
+        enforced: groupEnforced(g),
+      });
     }
   for (const r of snapshot.retreatGroups ?? ([] as RetreatGroup[]))
     if (!seen.has(r.id)) {
       seen.add(r.id);
-      out.push({ id: r.id, name: r.name, now: r.now });
+      out.push({
+        id: r.id,
+        name: r.name,
+        now: r.now,
+        enforced: retreatGroupEnforced(r, snapshot),
+      });
     }
   return out;
 }

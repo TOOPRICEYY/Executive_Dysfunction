@@ -261,4 +261,17 @@ extension GroupNowStatusTests {
             GroupNowStatus.headline(state, now: now, calendar: calendar)
         )
     }
+
+    func testABlockingWindowIsOnlyAPlanWhileTheDeviceIsNotEnforcing() {
+        let state = GroupNowStatus.evaluate(isEnabled: true, windows: [weekdays], now: date(29, 10), calendar: calendar)
+        let unenforced = GroupNowStatus.headline(state, now: date(29, 10), calendar: calendar, coveredBy: nil, enforced: false)
+        XCTAssertTrue(unenforced.hasPrefix("Scheduled until "), unenforced)
+        XCTAssertTrue(unenforced.hasSuffix(" · not enforced"), unenforced)
+        XCTAssertFalse(unenforced.localizedCaseInsensitiveContains("blocking"))
+        XCTAssertEqual(
+            GroupNowStatus.headline(state, now: date(29, 10), calendar: calendar, coveredBy: nil, enforced: true),
+            GroupNowStatus.headline(state, now: date(29, 10), calendar: calendar))
+        // States that claim nothing read the same either way.
+        XCTAssertEqual(GroupNowStatus.headline(.off, now: date(29, 10), calendar: calendar, coveredBy: nil, enforced: false), "Off")
+    }
 }

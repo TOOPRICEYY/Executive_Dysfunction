@@ -11,6 +11,11 @@ import {
   byNow,
   lockChip,
   laneLabel,
+  nextLine,
+  shownNow,
+  groupEnforced,
+  retreatGroupEnforced,
+  enforcementConfirmed,
 } from "../src/presentation.ts";
 
 test("dashboard headline respects confirmed device state and never claims preview enforcement", () => {
@@ -29,6 +34,61 @@ test("dashboard headline respects confirmed device state and never claims previe
   assert.equal(nowHeadline(state), "1 group is blocking now");
   state.groups[1].status = "lockdown";
   assert.equal(nowHeadline(state), "2 groups are blocking now");
+});
+test("a schedule the host cannot enforce is never shown as blocking", () => {
+  const now = new Date(2026, 9, 3, 12, 0);
+  const until = new Date(2026, 9, 3, 17, 0).toISOString();
+  const blocking = {
+    state: "blocking" as const,
+    changesAt: until,
+    headline: "Blocking until 5:00 PM",
+  };
+  // Enforced groups and non-blocking states pass through untouched.
+  assert.equal(shownNow(blocking, true, now), blocking);
+  const upcoming = { state: "upcoming" as const, headline: "Starts 6:00 PM" };
+  assert.equal(shownNow(upcoming, false, now), upcoming);
+  const shown = shownNow(blocking, false, now);
+  assert.match(shown.headline, /^Scheduled until .+ · not enforced$/);
+  assert.doesNotMatch(shown.headline, /Blocking/);
+  assert.equal(
+    shownNow({ state: "lockdown", headline: "Lockdown" }, false, now).headline,
+    "Lockdown now · not enforced",
+  );
+  assert.equal(laneLabel(blocking, 300, true, now, false), "Not enforced");
+  assert.notEqual(laneLabel(blocking, 300, true, now), "Not enforced");
+
+  // An iPhone without Screen Time access: the summary sentence the host
+  // derived from schedules must not headline the dashboard.
+  const state = previewSnapshot();
+  state.platform = "ios";
+  state.enforcement.state = "disabled";
+  state.summary = { headline: "Blocking now", next: "Work hours ends 5:00 PM" };
+  assert.equal(enforcementConfirmed(state), false);
+  assert.equal(nowHeadline(state), "Nothing is being blocked");
+  assert.match(nextLine(state), /^Allow Screen Time access/);
+  state.enforcement.state = "error";
+  state.enforcement.detail = "The filter needs attention.";
+  assert.equal(nextLine(state), "The filter needs attention.");
+  state.enforcement.state = "active";
+  assert.equal(nowHeadline(state), "Blocking now");
+  assert.equal(nextLine(state), "Work hours ends 5:00 PM");
+
+  state.groups[0].status = "unsupported";
+  assert.equal(groupEnforced(state.groups[0]), false);
+  const retreat = {
+    id: "r",
+    name: "R",
+    now: blocking,
+    lock: "none" as const,
+    delayDays: 0,
+    targets: "1 website",
+  };
+  assert.equal(retreatGroupEnforced(retreat, state), true);
+  assert.equal(retreatGroupEnforced({ ...retreat, enforced: false }, state), false);
+  state.enforcement.state = "disabled";
+  assert.equal(retreatGroupEnforced(retreat, state), false);
+  assert.equal(isSnapshot({ ...state, retreatGroups: [{ ...retreat, enforced: "no" }] }), false);
+  assert.equal(isSnapshot({ ...state, retreatGroups: [{ ...retreat, enforced: false }] }), true);
 });
 test("host-evaluated now state drives order, lock chips and lane labels", () => {
   const now = new Date(2026, 9, 3, 12, 0);

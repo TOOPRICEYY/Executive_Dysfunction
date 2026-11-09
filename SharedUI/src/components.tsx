@@ -114,13 +114,21 @@ export function Modal({
   const titleID = useId();
   useEffect(() => {
     const dialog = ref.current;
-    dialog?.showModal();
-    return () => dialog?.close();
+    if (!dialog) return;
+    dialog.showModal();
+    // showModal() focuses the first control, which draws a focus ring on
+    // "Close" and can leave a long editor scrolled part-way down on phones.
+    // Start at the top with focus on the dialog itself; Tab still reaches
+    // every control and the title is announced through aria-labelledby.
+    dialog.focus({ preventScroll: true });
+    dialog.scrollTop = 0;
+    return () => dialog.close();
   }, []);
   return (
     <dialog
       ref={ref}
       className={wide ? "wide" : ""}
+      tabIndex={-1}
       aria-labelledby={titleID}
       onCancel={(e) => {
         e.preventDefault();

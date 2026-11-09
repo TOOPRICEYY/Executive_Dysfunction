@@ -30,6 +30,14 @@ public struct HoldfastWebView {
         view.navigationDelegate = coordinator
         view.uiDelegate = coordinator
         view.allowsBackForwardNavigationGestures = false
+        #if os(iOS)
+        // Let the host's background show until the page paints (no white flash),
+        // and leave the safe-area padding to the page, which uses env() insets.
+        view.isOpaque = false
+        view.backgroundColor = .clear
+        view.scrollView.backgroundColor = .clear
+        view.scrollView.contentInsetAdjustmentBehavior = .never
+        #endif
         view.loadFileURL(coordinator.indexURL, allowingReadAccessTo: assets)
         return view
     }

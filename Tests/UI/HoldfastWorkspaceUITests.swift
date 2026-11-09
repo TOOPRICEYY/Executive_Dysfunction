@@ -1,369 +1,184 @@
 import XCTest
 
-/// Simulator smoke coverage for the iOS workspace shell.
+/// Simulator smoke coverage for the iOS shell: the shared web interface and the
+/// native sheets it opens.
 ///
 /// Screen Time authorization is unavailable in a simulator, so nothing here can
-/// assert enforcement. What it can assert is the class of failure a unit test
-/// never sees: a tab that does not exist, a sheet that traps on a missing
-/// environment object, or a primary action that the tab bar covers.
+/// assert enforcement. What it can assert is what a unit test never sees: a
+/// page that does not load, a status that claims blocking the device cannot
+/// deliver, a sheet that traps on a missing environment object, or a sheet
+/// with two competing dismiss buttons.
 @MainActor
 final class HoldfastWorkspaceUITests: XCTestCase {
-    func testBypassHistoryOpensAndOffersConfigurableFilters() {
-        app.tabBars.buttons["Dashboard"].tap()
-        // Bypass statistics are folded below the fold; expand them first.
-        let section = app.buttons["section-bypasses"]
-        for _ in 0..<8 where !section.isHittable { app.swipeUp() }
-        XCTAssertTrue(section.isHittable)
-        if section.value as? String != "Expanded" { section.tap() }
-        let entry = app.buttons["open-bypass-history"]
-        for _ in 0..<8 where !entry.isHittable { app.swipeUp() }
-        XCTAssertTrue(entry.isHittable)
-        attach(named: "bypass-status-panel")
-        entry.tap()
-        XCTAssertTrue(app.navigationBars["Bypass history"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["bypass-intent-filter"].exists)
-        app.buttons["bypass-intent-filter"].tap()
-        XCTAssertTrue(app.buttons["e-dulgance"].waitForExistence(timeout: 3))
-        app.buttons["e-dulgance"].tap()
-        let indulgence = expectation(for: NSPredicate(format: "value == %@", "e-dulgance"),
-            evaluatedWith: app.buttons["bypass-intent-filter"])
-        XCTAssertEqual(XCTWaiter.wait(for: [indulgence], timeout: 5), .completed)
-        app.buttons["bypass-intent-filter"].tap()
-        XCTAssertTrue(app.buttons["Conscious intervention"].waitForExistence(timeout: 3))
-        app.buttons["Conscious intervention"].tap()
-        let selected = expectation(for: NSPredicate(format: "value == %@", "Conscious intervention"),
-            evaluatedWith: app.buttons["bypass-intent-filter"])
-        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
-        attach(named: "bypass-history-detail")
-        app.buttons["Done"].tap()
-        XCTAssertTrue(app.tabBars.buttons["Dashboard"].waitForExistence(timeout: 5))
-        entry.tap()
-        XCTAssertTrue(app.navigationBars["Bypass history"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons["bypass-intent-filter"].value as? String, "Conscious intervention")
-        app.buttons["Done"].tap()
+    private var app: XCUIApplication!
+
+    override func setUp() async throws {
+        continueAfterFailure = false
+        app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(tab("Dashboard").waitForExistence(timeout: 30), "The shared interface did not load")
     }
-    func testTimedLockdownHasClearScopeAndCannotStartWithoutScreenTime() {
-        app.tabBars.buttons["Dashboard"].tap()
-        let entry = app.buttons["manage-timed-lockdown"]
-        XCTAssertTrue(entry.waitForExistence(timeout: 5))
-        entry.tap()
+
+    func testEveryTabPresentsItsPage() {
+        let pages: [(tab: String, marker: String)] = [
+            ("Retreats", "Live retreats"),
+            ("History", "Past retreats"),
+            ("Settings", "Device connection"),
+            ("Dashboard", "Blocking Groups"),
+        ]
+        for page in pages {
+            tab(page.tab).tap()
+            XCTAssertTrue(text(page.marker).waitForExistence(timeout: 5), "\(page.tab) did not present its page")
+            attach(named: "tab-\(page.tab)")
+        }
+    }
+
+    /// The simulator cannot grant Screen Time access, which makes it the exact
+    /// state the dashboard must be honest about: a schedule may be due, but
+    /// nothing is enforced.
+    func testDashboardNeverClaimsBlockingWithoutScreenTime() {
+        XCTAssertTrue(text("Nothing is being blocked").waitForExistence(timeout: 5))
+        XCTAssertTrue(button("Allow Screen Time access").isHittable, "The way to start blocking must not be hidden")
+        addWorkHoursPresetIfMissing()
+        XCTAssertTrue(button("Edit Work hours").waitForExistence(timeout: 5))
+        XCTAssertFalse(text(containing: "Blocking now").exists, "A group claims to block while Screen Time access is off")
+        XCTAssertFalse(text(containing: "Blocked until").exists, "A group claims to block while Screen Time access is off")
+        attach(named: "dashboard-not-enforced")
+    }
+
+    /// The page draws edge to edge and pads for the status bar itself. Its title
+    /// has to stay below the status bar and its tabs above the home indicator.
+    func testPageKeepsClearOfTheStatusBarAndHomeIndicator() {
+        let title = text("Dashboard")
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        let screen = app.windows.firstMatch.frame
+        XCTAssertGreaterThanOrEqual(title.frame.minY, 44, "The page title sits under the status bar")
+        XCTAssertLessThanOrEqual(tab("Settings").frame.maxY, screen.maxY - 16, "The tabs sit under the home indicator")
+        XCTAssertTrue(tab("Settings").isHittable)
+    }
+
+    func testGroupEditorOpensAtItsTopAndCloses() {
+        addWorkHoursPresetIfMissing()
+        button("Edit Work hours").tap()
+        let close = button("Close dialog")
+        XCTAssertTrue(close.waitForExistence(timeout: 5), "The group editor did not open")
+        XCTAssertTrue(close.isHittable, "The editor opened scrolled away from its title bar")
+        attach(named: "group-editor")
+        close.tap()
+        XCTAssertTrue(waitForDisappearance(of: close), "The group editor did not close")
+        XCTAssertTrue(tab("Dashboard").isHittable)
+    }
+
+    func testTimedLockdownHasOneDismissControlAndCannotStartWithoutScreenTime() {
+        button("Lockdown").tap()
         XCTAssertTrue(app.navigationBars["Lockdown"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "across all your devices")).firstMatch.exists)
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "roughly timed Screen Time window")).firstMatch.exists)
+        XCTAssertFalse(app.buttons["Close"].exists, "The sheet has a second dismiss button above its own")
         let start = app.buttons["confirm-timed-lockdown"]
         for _ in 0..<4 where !start.isHittable { app.swipeUp() }
         XCTAssertTrue(start.exists)
         XCTAssertFalse(start.isEnabled, "A simulator without Screen Time must not pretend to start enforcement")
         attach(named: "timed-lockdown-setup")
         app.buttons["Done"].tap()
-    }
-    func testOptionalPassageBackoffSettingsAppearWithoutSaving() {
-        app.tabBars.buttons["Dashboard"].tap()
-        app.buttons["NEW BLOCKING GROUP"].tap()
-        let allow = app.switches["Allow temporary access"]
-        for _ in 0..<12 where !allow.isHittable { app.swipeUp() }
-        XCTAssertTrue(allow.isHittable)
-        if allow.value as? String == "0" { allow.tap() }
-        let backoff = app.switches["Passage backoff"]
-        for _ in 0..<3 where !backoff.isHittable { app.swipeUp() }
-        XCTAssertTrue(backoff.isHittable)
-        XCTAssertEqual(backoff.value as? String, "0")
-        app.swipeUp()
-        attach(named: "backoff-before-enable")
-        backoff.tap()
-        let enabled = expectation(for: NSPredicate(format: "value == %@", "1"), evaluatedWith: backoff)
-        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 3), .completed)
-        attach(named: "backoff-after-enable")
-        let reset = app.descendants(matching: .any)["allowance-backoff-reset-days"].firstMatch
-        for _ in 0..<3 where !reset.isHittable { app.swipeUp() }
-        XCTAssertTrue(reset.exists)
-        attach(named: "optional-passage-backoff")
-        XCTAssertTrue(app.staticTexts["TEMPORARY ACCESS POLICY"].exists)
-        XCTAssertTrue(app.staticTexts["CHANGE PROTECTION"].exists)
-        let warning = app.descendants(matching: .any)["change-policy-warning"].firstMatch
-        for _ in 0..<4 where !warning.isHittable { app.swipeUp() }
-        XCTAssertTrue(warning.exists, "An unlocked/equally easy change policy must warn about bypassing temporary access")
-        app.swipeUp() // Include the complete multiline warning in the artifact.
-        attach(named: "separate-change-and-access-policies")
-        app.buttons["Cancel"].tap()
+        XCTAssertTrue(tab("Dashboard").waitForExistence(timeout: 5))
     }
 
-    func testBlockingScheduleSummaryIsVisibleAboveEditableFields() {
-        app.tabBars.buttons["Dashboard"].tap()
-        app.buttons["NEW BLOCKING GROUP"].tap()
-        XCTAssertTrue(app.navigationBars["BLOCKING GROUP"].waitForExistence(timeout: 10))
-        let preview = app.descendants(matching: .any)["blocking-schedule-preview"].firstMatch
-        XCTAssertTrue(preview.waitForExistence(timeout: 5))
-        XCTAssertTrue(preview.isHittable, "Weekly summary should be visible without scrolling")
-        let name = app.textFields["Blocking Group name"]
-        XCTAssertLessThan(preview.frame.maxY, name.frame.minY)
-        attach(named: "blocking-group-top-schedule")
-        let compactHeight = preview.frame.height
-        XCTAssertLessThan(compactHeight, 120)
-        let toggle = app.buttons["blocking-schedule-toggle"]
-        XCTAssertEqual(toggle.value as? String, "Collapsed")
-        toggle.tap()
-        XCTAssertEqual(toggle.value as? String, "Expanded")
-        XCTAssertGreaterThan(preview.frame.height, compactHeight + 80)
-        attach(named: "blocking-group-expanded-schedule")
-        toggle.tap()
-        XCTAssertEqual(toggle.value as? String, "Collapsed")
-        XCTAssertEqual(preview.frame.height, compactHeight, accuracy: 1)
-        app.buttons["Cancel"].tap()
-    }
-
-    func testBlockingGroupOwnsTargetsWithoutAnActivityGroupStep() {
-        app.tabBars.buttons["Dashboard"].tap()
-        app.buttons["NEW BLOCKING GROUP"].tap()
-        XCTAssertTrue(app.navigationBars["BLOCKING GROUP"].waitForExistence(timeout: 10))
-        let picker = app.buttons["choose-blocking-apps"]
-        for _ in 0..<4 where !picker.isHittable { app.swipeUp() }
-        XCTAssertTrue(picker.exists)
-        XCTAssertFalse(app.staticTexts["ACTIVITY GROUPS"].exists)
-        XCTAssertFalse(app.switches["Social"].exists, "Advanced filters should start collapsed")
-        let domains = app.textFields["blocking-website-input"]
-        for _ in 0..<3 where !domains.isHittable { app.swipeUp() }
-        XCTAssertTrue(domains.exists)
-        domains.tap()
-        domains.typeText("https://example.com/path,example.org")
-        app.buttons["Add websites"].tap()
-        XCTAssertTrue(app.staticTexts["example.com"].exists)
-        XCTAssertTrue(app.staticTexts["example.org"].exists)
-        attach(named: "compact-blocking-group-targets")
-        app.buttons["Remove example.org"].tap()
-        XCTAssertFalse(app.staticTexts["example.org"].exists)
-        domains.tap()
-        domains.typeText("example.com,invalid")
-        app.buttons["Add websites"].tap()
-        XCTAssertEqual(domains.value as? String, "invalid")
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "already in this group")).firstMatch.exists)
-        app.buttons["Cancel"].tap()
-    }
-
-    private var app: XCUIApplication!
-
-    func testRetreatReviewDoesNotStartUntilExplicitConfirmation() {
-        // A disabled, simulator-only group provides a selectable fixture.
-        let name = "Review fixture " + UUID().uuidString.prefix(6)
-        app.tabBars.buttons["Dashboard"].tap()
-        app.buttons["NEW BLOCKING GROUP"].tap()
-        let nameField = app.textFields["Blocking Group name"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
-        nameField.tap()
-        let current = nameField.value as? String ?? ""
-        nameField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count) + name)
-        app.buttons["Save"].tap()
-        XCTAssertTrue(app.tabBars.buttons["Retreats"].waitForExistence(timeout: 5))
-        app.tabBars.buttons["Retreats"].tap()
-        app.buttons["New"].tap()
-        let group = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch
-        for _ in 0..<4 where !group.isHittable { app.swipeUp() }
-        XCTAssertTrue(group.exists)
-        group.tap()
-        app.buttons["REVIEW & START"].tap()
-        XCTAssertTrue(app.navigationBars["Review retreat"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["confirm-retreat-start"].exists)
-        attach(named: "retreat-review")
-        app.buttons["Back"].tap()
-        XCTAssertTrue(app.navigationBars["RETREAT"].exists)
-        app.buttons["Cancel"].tap()
-        XCTAssertFalse(app.staticTexts["Active · Version 1"].exists)
-    }
-
-    override func setUp() async throws {
-        continueAfterFailure = false
-        app = XCUIApplication()
-        app.launch()
-    }
-
-    func testEveryWorkspaceTabPresentsItsRoot() {
-        XCTAssertFalse(app.tabBars.buttons["Activity Groups"].exists)
-        for tab in ["Dashboard", "Retreats", "Settings"] {
-            let button = app.tabBars.buttons[tab]
-            XCTAssertTrue(button.waitForExistence(timeout: 10), "Missing tab: \(tab)")
-            button.tap()
-            let title = app.staticTexts[tab.uppercased()]
-            XCTAssertTrue(title.waitForExistence(timeout: 5), "\(tab) did not present its root screen")
-            attach(named: "tab-\(tab)")
-        }
-    }
-
-    /// `IOSSettingsHubView` presents `SettingsView` in a sheet. If the environment
-    /// object does not reach the sheet, the app traps the moment it is presented.
-    func testProtectionSettingsSheetPresents() {
-        app.tabBars.buttons["Settings"].tap()
-        let entry = app.buttons["PROTECTION & SYSTEM SETTINGS"]
-        XCTAssertTrue(entry.waitForExistence(timeout: 10))
-        entry.tap()
-        XCTAssertTrue(
-            app.staticTexts["Screen Time Access"].waitForExistence(timeout: 5),
-            "Protection settings sheet did not present"
-        )
-        attach(named: "protection-settings")
-        XCTAssertEqual(app.state, .runningForeground)
-    }
-
-    func testEditorSheetsPresentAndDismiss() {
-        let cases: [(tab: String, open: String, title: String)] = [
-            ("Retreats", "New", "RETREAT")
-        ]
-        for item in cases {
-            app.tabBars.buttons[item.tab].tap()
-            let add = app.buttons[item.open]
-            XCTAssertTrue(add.waitForExistence(timeout: 10), "No \(item.open) button on \(item.tab)")
-            add.tap()
-            XCTAssertTrue(
-                app.navigationBars[item.title].waitForExistence(timeout: 5),
-                "\(item.title) editor did not present"
-            )
-            attach(named: "editor-\(item.title)")
-            app.buttons["Cancel"].tap()
-            XCTAssertTrue(app.tabBars.buttons[item.tab].waitForExistence(timeout: 5))
-        }
-    }
-
-    /// The dashboard's panels end in a primary call to action. Scrolled to the
-    /// end, the last of them has to sit clear of the floating tab bar.
-    func testDashboardScrollsItsLastActionClearOfTheTabBar() {
-        app.tabBars.buttons["Dashboard"].tap()
-        let scroll = app.scrollViews.firstMatch
-        XCTAssertTrue(scroll.waitForExistence(timeout: 10))
-
-        // The folded bypass section is the dashboard's last action.
-        let newRetreat = app.buttons["section-bypasses"]
-        XCTAssertTrue(newRetreat.waitForExistence(timeout: 5))
-
-        var previous = CGRect.null
-        for _ in 0..<12 {
-            let frame = newRetreat.exists ? newRetreat.frame : .null
-            if frame == previous { break }
-            previous = frame
-            scroll.swipeUp()
-        }
-        attach(named: "dashboard-scrolled-to-end")
-
-        XCTAssertTrue(newRetreat.exists, "NEW RETREAT disappeared while scrolling")
-        XCTAssertTrue(newRetreat.isHittable, "NEW RETREAT is not reachable")
-        XCTAssertLessThanOrEqual(
-            newRetreat.frame.maxY,
-            app.tabBars.firstMatch.frame.minY,
-            "NEW RETREAT stays underneath the tab bar at the end of the scroll"
-        )
-    }
-
-    /// A save the model rejects has to say so. The alert lives on the workspace
-    /// root, which a sheet covers, so an editor that does not carry its own
-    /// alert fails in silence and simply appears to ignore the button.
-    func testRejectedRetreatSaveReportsWhyItFailed() {
-        app.tabBars.buttons["Retreats"].tap()
-        app.buttons["New"].tap()
-        XCTAssertTrue(app.navigationBars["RETREAT"].waitForExistence(timeout: 10))
-
-        app.buttons["SAVE DRAFT"].tap()
-
-        let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 5), "Saving an empty Retreat failed silently")
-        attach(named: "rejected-retreat-save")
-        XCTAssertTrue(
-            alert.staticTexts["A Retreat must contain at least one Blocking Group."].exists,
-            "The alert did not explain the rejection"
-        )
-        alert.buttons["OK"].tap()
-        XCTAssertTrue(app.navigationBars["RETREAT"].exists, "The editor should stay open after a rejection")
-    }
-
-    /// The schedule grid encodes to `CloudTimeWindow`s through the same codec
-    /// the Mac painter uses. Painting the whole week has to collapse to a single
-    /// window, which is what the Blocking Group summary reports.
-    func testAllowanceScheduleRoundTripsThroughTheSharedCodec() {
-        app.tabBars.buttons["Dashboard"].tap()
-        app.buttons["NEW BLOCKING GROUP"].tap()
-        XCTAssertTrue(app.navigationBars["BLOCKING GROUP"].waitForExistence(timeout: 10))
-
-        let edit = app.buttons["EDIT"]
-        XCTAssertTrue(edit.waitForExistence(timeout: 5))
-        for _ in 0..<6 where !edit.isHittable { app.swipeUp() }
-        edit.tap()
-        XCTAssertTrue(app.navigationBars["ALLOWANCE SCHEDULE"].waitForExistence(timeout: 5))
-        app.buttons["SELECT ALL"].tap()
-        attach(named: "allowance-schedule")
-        app.buttons["Done"].tap()
-
-        XCTAssertTrue(
-            app.staticTexts["1 ALLOWANCE WINDOW"].waitForExistence(timeout: 5),
-            "A fully painted week did not encode to one window"
-        )
-        let monday = app.descendants(matching: .any)["blocking-schedule-day-2"].firstMatch
-        for _ in 0..<6 where !monday.isHittable { app.swipeDown() }
-        XCTAssertEqual(monday.value as? String, "No scheduled blocking", "Preview must reflect unsaved allowance changes")
-    }
-
-    /// The diagnostics screen has to render its findings on the device. Needing
-    /// to export a file before you can read the answer would make it useless in
-    /// the moment it is wanted.
-    func testDiagnosticsReportRendersAndCanBeOpenedInFull() {
-        app.tabBars.buttons["Settings"].tap()
-        app.buttons["PROTECTION & SYSTEM SETTINGS"].tap()
-
-        // The row is a NavigationLink wrapping a LabeledContent, so its
-        // accessibility label carries the trailing value too.
-        let entry = app.buttons.containing(
-            NSPredicate(format: "label BEGINSWITH %@", "Device Report")
-        ).firstMatch
-        // The settings list renders lazily, and the row sits below the fold.
-        for _ in 0..<6 where !entry.exists {
-            app.swipeUp()
-        }
-        XCTAssertTrue(
-            entry.waitForExistence(timeout: 10),
-            "No diagnostics row in protection settings. Buttons: \(app.buttons.allElementsBoundByIndex.map(\.label))"
-        )
-        entry.tap()
-
+    /// The diagnostics screen has to render its findings on the device, and it
+    /// is presented outside the app's navigation, so it must bring its own way
+    /// out.
+    func testDiagnosticsReportRendersWithOneDismissControl() {
+        tab("Settings").tap()
+        let open = button("Open diagnostics")
+        XCTAssertTrue(open.waitForExistence(timeout: 5))
+        open.tap()
         XCTAssertTrue(app.navigationBars["Diagnostics"].waitForExistence(timeout: 10))
-        XCTAssertTrue(
-            app.staticTexts["Findings"].waitForExistence(timeout: 10),
-            "The report did not produce a findings section"
-        )
+        XCTAssertTrue(app.staticTexts["Findings"].waitForExistence(timeout: 10), "The report did not produce a findings section")
+        XCTAssertFalse(app.buttons["Close"].exists, "The sheet has a second dismiss button above its own")
         attach(named: "diagnostics-report")
-
-        let viewFull = app.buttons["View full report"]
-        for _ in 0..<8 where !viewFull.isHittable {
-            app.swipeUp()
-        }
-        XCTAssertTrue(viewFull.isHittable, "The full-report button never scrolled into reach")
-        viewFull.tap()
-        attach(named: "diagnostics-after-tap")
-        XCTAssertTrue(
-            app.navigationBars["Full report"].waitForExistence(timeout: 10),
-            "Tapping the full-report button presented nothing"
-        )
-        attach(named: "diagnostics-full-report")
-
-        // What the rendering contains is asserted in the unit suite, where it is
-        // cheap. Reading a report-sized accessibility label here costs minutes.
-        app.buttons["Done"].tap()
-        XCTAssertTrue(app.navigationBars["Diagnostics"].waitForExistence(timeout: 5))
+        app.navigationBars["Diagnostics"].buttons["Done"].tap()
+        XCTAssertTrue(tab("Settings").waitForExistence(timeout: 5))
+        XCTAssertFalse(text(containing: "opened").exists, "Opening a sheet should not leave a notice behind")
     }
 
-    /// The pause lives in the Blocking Group detail. It must appear only for a
-    /// saved, enabled group, since pausing changes enforcement rather than the
-    /// draft being edited.
-    func testTemporaryPauseIsAbsentFromAnUnsavedBlockingGroup() {
-        app.tabBars.buttons["Dashboard"].tap()
-        app.buttons["NEW BLOCKING GROUP"].tap()
-        XCTAssertTrue(app.navigationBars["BLOCKING GROUP"].waitForExistence(timeout: 10))
+    /// The native editors are reached through a sheet. If the environment object
+    /// does not reach it, the app traps the moment it is presented.
+    func testAdvancedControlsSheetPresentsAndCloses() {
+        tab("Settings").tap()
+        let open = button("Advanced native controls")
+        XCTAssertTrue(open.waitForExistence(timeout: 5))
+        open.tap()
+        XCTAssertTrue(app.staticTexts["Advanced native controls"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["Dashboard"].waitForExistence(timeout: 5), "The native workspace did not present")
+        XCTAssertEqual(app.state, .runningForeground)
+        attach(named: "advanced-controls")
+        app.buttons["Close"].tap()
+        XCTAssertTrue(tab("Settings").waitForExistence(timeout: 5))
+    }
 
-        let scroll = app.scrollViews.firstMatch
-        for _ in 0..<6 {
-            scroll.swipeUp()
+    func testRetreatEditorPresentsAndDismisses() {
+        tab("Retreats").tap()
+        let new = button("New retreat")
+        XCTAssertTrue(new.waitForExistence(timeout: 5))
+        new.tap()
+        XCTAssertTrue(app.navigationBars["RETREAT"].waitForExistence(timeout: 5), "The retreat editor did not present")
+        XCTAssertFalse(app.buttons["Close"].exists, "The sheet has a second dismiss button above its own")
+        attach(named: "retreat-editor")
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(tab("Retreats").waitForExistence(timeout: 5))
+    }
+
+    /// A refused or unavailable Screen Time request has to say so in plain words
+    /// and leave the dashboard honest, rather than fail in silence.
+    func testRefusedScreenTimeAccessIsReportedAndNothingClaimsToBlock() {
+        let allow = button("Allow Screen Time access")
+        XCTAssertTrue(allow.waitForExistence(timeout: 5))
+        allow.tap()
+        // The system may show its own permission prompt first.
+        let prompt = app.alerts.firstMatch
+        if prompt.waitForExistence(timeout: 3) {
+            let refuse = prompt.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] %@", "Don")).firstMatch
+            (refuse.exists ? refuse : prompt.buttons.firstMatch).tap()
         }
-        attach(named: "blocking-group-unsaved")
+        XCTAssertTrue(text(containing: "Screen Time access was not granted").waitForExistence(timeout: 15),
+            "A failed Screen Time request was not explained")
+        XCTAssertTrue(text("Nothing is being blocked").exists)
+        XCTAssertTrue(allow.exists, "The request must stay available to try again")
+        attach(named: "screen-time-refused")
+    }
 
-        XCTAssertFalse(
-            app.staticTexts["DISABLE TEMPORARILY"].exists,
-            "An unsaved Blocking Group is not enforcing anything, so it must not offer a pause"
-        )
+    // MARK: Web content
+
+    private func tab(_ name: String) -> XCUIElement { button(name) }
+
+    /// Buttons rendered by the shared interface. CSS may change the case a label
+    /// is drawn in, so labels are matched without regard to it.
+    private func button(_ label: String) -> XCUIElement {
+        app.webViews.buttons.matching(NSPredicate(format: "label ==[c] %@", label)).firstMatch
+    }
+
+    private func text(_ label: String) -> XCUIElement {
+        app.webViews.staticTexts.matching(NSPredicate(format: "label ==[c] %@", label)).firstMatch
+    }
+
+    private func text(containing fragment: String) -> XCUIElement {
+        app.webViews.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", fragment)).firstMatch
+    }
+
+    /// Gives the dashboard one scheduled group, so there is a row whose state
+    /// can be read and whose editor can be opened. Kept across runs.
+    private func addWorkHoursPresetIfMissing() {
+        let row = button("Edit Work hours")
+        if row.waitForExistence(timeout: 2) { return }
+        button("Add").tap()
+        let preset = app.webViews.descendants(matching: .any)
+            .matching(NSPredicate(format: "label ==[c] %@", "Work hours")).firstMatch
+        XCTAssertTrue(preset.waitForExistence(timeout: 5), "The add menu offers no Work hours preset")
+        preset.tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "The Work hours preset was not added")
+    }
+
+    private func waitForDisappearance(of element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: element)
+        return XCTWaiter.wait(for: [gone], timeout: timeout) == .completed
     }
 
     private func attach(named name: String) {

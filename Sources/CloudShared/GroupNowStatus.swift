@@ -187,6 +187,24 @@ enum GroupNowStatus {
         }
     }
 
+    /// A schedule is only a plan until the device confirms it is enforcing it.
+    /// While it is not, a group in a blocking window must not read "Blocking now".
+    static func headline(
+        _ state: GroupNowState,
+        now: Date,
+        calendar: Calendar = .current,
+        coveredBy holder: GroupCoverage.Holder?,
+        enforced: Bool
+    ) -> String {
+        guard !enforced, state.isBlocking else {
+            return headline(state, now: now, calendar: calendar, coveredBy: holder)
+        }
+        let what: String
+        if case .lockdown = state { what = "Lockdown" } else { what = "Scheduled" }
+        return state.changesAt.map { "\(what) until \(moment($0, now: now, calendar: calendar)) · not enforced" }
+            ?? "\(what) now · not enforced"
+    }
+
     private static func sentenceCased(_ value: String) -> String {
         guard let first = value.first else { return value }
         return String(first).uppercased() + String(value.dropFirst())
