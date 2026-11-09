@@ -245,6 +245,7 @@ struct PassageEntryView: View {
     let title: String
     let explanation: String
     let wordCount: Int
+    var onVerified: ((Int) -> Void)? = nil
     let onComplete: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -262,10 +263,13 @@ struct PassageEntryView: View {
                 }
                 Section("Type this passage") {
                     Text(passage)
+                        .textSelection(.disabled)
                         .font(.callout)
                 }
                 Section("Your entry") {
-                    TextEditor(text: $typed)
+                    Text("Type directly. Paste, drag-and-drop, and bulk text insertion are disabled.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    IOSPassageInput(text: $typed)
                         .frame(minHeight: 140)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
@@ -285,7 +289,8 @@ struct PassageEntryView: View {
                 }
                 Section {
                     Button("Confirm") {
-                        onComplete()
+                        if let onVerified { onVerified(CommitmentPassage.normalizedWords(in: passage).count) }
+                        else { onComplete() }
                         dismiss()
                     }
                     .disabled(!CommitmentPassage.matches(typed, passage: passage))
@@ -304,68 +309,5 @@ struct PassageEntryView: View {
                 }
             }
         }
-    }
-}
-
-private struct PassageDiffView: View {
-    let typed: String
-    let passage: String
-
-    private var tokens: [PassageDiffToken] {
-        PassageDiff.compare(typed: typed, passage: passage)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 14) {
-                legendItem(color: .green, label: "Correct")
-                legendItem(color: .red, label: "Incorrect")
-                Text("Struck = missing")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
-            if CommitmentPassage.normalizedWords(in: typed).isEmpty {
-                Text("Start typing to see the comparison.")
-                    .foregroundStyle(.secondary)
-            } else {
-                diffText
-                    .font(.callout.monospaced())
-                    .textSelection(.disabled)
-                    .accessibilityLabel(accessibilityDescription)
-            }
-        }
-    }
-
-    private var diffText: Text {
-        tokens.reduce(Text("")) { partial, token in
-            partial + styledText(for: token) + Text(" ")
-        }
-    }
-
-    private func styledText(for token: PassageDiffToken) -> Text {
-        switch token.kind {
-        case .matched:
-            Text(token.text).foregroundColor(.green)
-        case .incorrect:
-            Text(token.text).foregroundColor(.red).bold()
-        case .missing:
-            Text(token.text).foregroundColor(.red.opacity(0.55)).strikethrough()
-        }
-    }
-
-    private func legendItem(color: Color, label: String) -> some View {
-        Label {
-            Text(label).font(.caption2)
-        } icon: {
-            Circle().fill(color).frame(width: 8, height: 8)
-        }
-    }
-
-    private var accessibilityDescription: String {
-        let correct = tokens.filter { $0.kind == .matched }.count
-        let incorrect = tokens.filter { $0.kind == .incorrect }.count
-        let missing = tokens.filter { $0.kind == .missing }.count
-        return "\(correct) correct words, \(incorrect) incorrect words, \(missing) missing words."
     }
 }

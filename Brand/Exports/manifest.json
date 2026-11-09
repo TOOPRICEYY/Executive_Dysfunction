@@ -1,0 +1,65 @@
+{
+  "brand": "Holdfast",
+  "identityFamily": "Escaping Path Labyrinth",
+  "source": {
+    "path": "../Concepts/labyrinth-blue-escape-final.png",
+    "pixelSize": 1254,
+    "sha256": "03e9ab021bab0844ab829db1353f1e7217d037ae1a1c727f1c285a410ec411d8"
+  },
+  "master": {
+    "path": "Holdfast-AppIcon-1024.png",
+    "pixelSize": 1024,
+    "colorSpace": "sRGB",
+    "alpha": false,
+    "sha256": "1d58ac227359eab2be4f4c854427d628e9f5d6aa224e33b36b5a56b680e63cf7"
+  },
+  "adaptiveVariants": {
+    "directory": "Variants",
+    "generator": "../../Scripts/generate-holdfast-icon-variants.mjs",
+    "themes": ["Light", "Dark"],
+    "highlights": [
+      "ThemeDefault",
+      "SignalYellow",
+      "PhosphorGreen",
+      "ElectricBlue",
+      "WarningOrange",
+      "HotMagenta",
+      "TerminalViolet"
+    ],
+    "count": 14,
+    "routeOnlyAccent": true,
+    "darkModeInvertsNeutralMark": true
+  },
+  "routeVerification": {
+    "path": "labyrinth-route-verification.json",
+    "sha256": "c2a3a02541fccd0596e2be31ffd508f948853fd330c11a5554ada353ce1aae96",
+    "verifiedUnbranched": true,
+    "endpoints": 2,
+    "blackWallIntersections": 0,
+    "minimumRenderedWallClearance": 7,
+    "constantWidthRoute": true,
+    "routeWidthAnalysisPixels": 14,
+    "routeColorSRGBHex": "#168BFF",
+    "interiorTerminalDotRadiusAnalysisPixels": 23.1,
+    "rotationDegrees": 180,
+    "uniformScalePercent": 110,
+    "mirroredHorizontally": true,
+    "pathPreservedByWholeMarkTransforms": true
+  },
+  "deployments": {
+    "iOS": {
+      "assetCatalog": "../../Sources/App/Assets.xcassets/AppIcon.appiconset",
+      "pixelSizes": [20, 29, 40, 58, 60, 76, 80, 87, 120, 152, 167, 180, 1024]
+    },
+    "macOS": {
+      "assetCatalog": "../../Sources/MacApp/Assets.xcassets/AppIcon.appiconset",
+      "pixelSizes": [16, 32, 64, 128, 256, 512, 1024]
+    },
+    "Windows": {
+      "icon": "../../Platform/Windows/assets/Holdfast.ico",
+      "preview": "../../Platform/Windows/assets/Holdfast-256.png",
+      "icoPixelSizes": [16, 32, 48, 64, 128, 256],
+      "sha256": "51448b9f30904519c14993dea3dbab7029e97747642599e2cfa0bb50a1888b7d"
+    }
+  }
+}

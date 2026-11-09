@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import OSLog
 import Security
 
 enum DesktopEnforcementConstants {
@@ -36,6 +37,8 @@ struct DesktopEnforcementPolicy: Codable, Equatable {
     /// Time-boxed commitments holding block lists on. Optional so policies
     /// written before sessions existed still decode.
     var lockdownSessions: [DesktopLockdownSession]?
+    /// Shared cancellation cannot authorize unrelated rule weakening.
+    var lockdownCancellationAuthorization: DesktopLockdownCancellationAuthorization? = nil
 
     static let empty = DesktopEnforcementPolicy(
         revision: 0,
@@ -87,7 +90,7 @@ struct DesktopEnforcementPolicy: Codable, Equatable {
         }
 
         return activeRules(at: date).contains { rule in
-            let matchesIdentifier = rule.macApplicationIdentifiers.contains(identifier)
+            let matchesIdentifier = rule.matchesApplication(identifier)
             switch rule.enforcementMode {
             case .blockList: return matchesIdentifier
             case .fortressAllowList: return !matchesIdentifier
@@ -99,12 +102,72 @@ struct DesktopEnforcementPolicy: Codable, Equatable {
     /// the rules it names. Committing to a list ahead of time is worth nothing
     /// if it still depends on a toggle staying switched on, or on the clock
     /// being inside a weekly window.
+    /// Whether two policies say the same thing, ignoring revision and issue
+    /// time.
+    ///
+    /// Saving the filter configuration restarts the provider and causes a brief
+    /// measured startup interruption. Republishing unchanged policy must
+    /// therefore be a no-op rather than a new revision.
+    func hasSameContent(as other: DesktopEnforcementPolicy) -> Bool {
+        rules == other.rules
+            && (lockdownSessions ?? []) == (other.lockdownSessions ?? [])
+            && weakeningAuthorizationExpiresAt == other.weakeningAuthorizationExpiresAt
+            && lockdownCancellationAuthorization == other.lockdownCancellationAuthorization
+    }
+
+    /// Rules in force at `date`. When the filter's clock guard has detected a
+    /// wall-clock change, rules in force at the corresponding trusted instant
+    /// are added: tampering can only make enforcement stricter.
     func activeRules(at date: Date, calendar: Calendar = .current) -> [DesktopEnforcementRule] {
+        var result = activeRulesAtWallTime(date, calendar: calendar)
+        if let trusted = ClockTamperGuard.shared.alternateDate(for: date) {
+            for rule in activeRulesAtWallTime(trusted, calendar: calendar) where !result.contains(rule) {
+                result.append(rule)
+            }
+        }
+        return result
+    }
+
+    private func activeRulesAtWallTime(_ date: Date, calendar: Calendar) -> [DesktopEnforcementRule] {
         let forced = sessionForcedRuleIDs(at: date)
-        return rules.filter { rule in
+        var active = rules.filter { rule in
+            // A lockdown session is a commitment that a pause must not undo, so
+            // the forced check deliberately comes first.
             if forced.contains(rule.id) { return true }
+            if rule.isPaused(at: date) { return false }
+            guard rule.isWithinPlannedInterval(at: date) else { return false }
             return rule.isEnabled && rule.windows.contains { $0.isActive(at: date, calendar: calendar) }
         }
+        // Additive: edits can strengthen a live group, but cannot erase the
+        // targets committed to at the start of a lockdown.
+        for session in activeSessions(at: date) {
+            for rule in session.ruleSnapshots ?? [] where !active.contains(rule) {
+                active.append(rule)
+            }
+        }
+        return active
+    }
+
+    /// Returns the same authenticated policy with only the locally-authorized
+    /// temporary pauses removed from enforcement. The revision intentionally
+    /// does not change: a pause is an expiring runtime exception to the signed
+    /// policy, not a replacement policy that the app may later accept as the
+    /// newest configuration.
+    func excludingTemporarilyPausedRules(_ ruleIDs: Set<UUID>, at now: Date = Date()) -> DesktopEnforcementPolicy {
+        guard !ruleIDs.isEmpty else { return self }
+        var effective = self
+        let forced = sessionForcedRuleIDs(at: now)
+        effective.rules.removeAll { ruleIDs.contains($0.id) && !forced.contains($0.id) }
+        return effective
+    }
+
+    /// Binds a block-page authorization to both the accepted policy revision
+    /// and one exact rule. A policy edit changes the revision and therefore
+    /// invalidates every outstanding pause, even if a rule ID is reused.
+    func temporaryPauseFingerprint(for ruleID: UUID) -> String {
+        let value = "\(revision):\(ruleID.uuidString.lowercased())"
+        let digest = SHA256.hash(data: Data(value.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 
     func hasActiveFortress(at date: Date = Date()) -> Bool {
@@ -114,6 +177,16 @@ struct DesktopEnforcementPolicy: Codable, Equatable {
     func hasActiveWebRestrictions(at date: Date = Date()) -> Bool {
         activeRules(at: date).contains {
             $0.enforcementMode == .fortressAllowList || !$0.domains.isEmpty
+        }
+    }
+
+    /// Whether evaluating a new flow can possibly need the source process's
+    /// signing identity. Resolving an audit token invokes synchronous Security
+    /// APIs on Network Extension's verdict path, so doing it for domain-only
+    /// policies can starve otherwise-allowed traffic during a process storm.
+    func hasActiveMacApplicationRestrictions(at date: Date = Date()) -> Bool {
+        activeRules(at: date).contains {
+            $0.enforcementMode == .blockList && !$0.macApplicationIdentifiers.isEmpty
         }
     }
 
@@ -165,6 +238,46 @@ struct DesktopEnforcementRule: Codable, Equatable, Identifiable {
     var windowsExecutablePaths: Set<String>
     var windowsPublisherRules: Set<String>
     var lockdown: DesktopLockdownPolicy
+    /// A locally authorized pause on this rule. Optional so policies written
+    /// before pauses existed still decode, and absent means "not paused", so an
+    /// unreadable or missing value fails closed rather than releasing a block.
+    var pausedUntil: Date?
+    /// Set only by the filter, never by the app: when the filter first saw the
+    /// current uninterrupted pause. Lets it cap a pause session at the rule's
+    /// maximum no matter how often the app republishes a later expiry.
+    var pauseSessionStartedAt: Date?
+    /// Stable for one locally authorized allowance session, including extensions.
+    var pauseAuthorizationID: String? = nil
+    /// Planned interval for a Retreat's group, so the filter starts and ends
+    /// the Retreat on time even when the app is not running. Nil for Baseline
+    /// groups, which have no boundary.
+    var activeFrom: Date?
+    var activeUntil: Date?
+
+    func isWithinPlannedInterval(at date: Date) -> Bool {
+        if let activeFrom, date < activeFrom { return false }
+        if let activeUntil, date >= activeUntil { return false }
+        return true
+    }
+
+    /// Exact signing identifier, or a family written as `com.vendor.*`, which
+    /// also covers helpers and network extensions the vendor ships under its
+    /// own prefix (a VPN's tunnel provider, for example).
+    func matchesApplication(_ identifier: String) -> Bool {
+        let identifier = identifier.lowercased()
+        guard !identifier.isEmpty else { return false }
+        if macApplicationIdentifiers.contains(identifier) { return true }
+        return macApplicationIdentifiers.contains { entry in
+            guard entry.hasSuffix(".*") else { return false }
+            let prefix = String(entry.dropLast(1))
+            return prefix.count > 1 && identifier.hasPrefix(prefix)
+        }
+    }
+
+    func isPaused(at date: Date) -> Bool {
+        guard let pausedUntil else { return false }
+        return pausedUntil > date
+    }
 }
 
 struct DesktopLockdownPolicy: Codable, Equatable {
@@ -175,6 +288,31 @@ struct DesktopLockdownPolicy: Codable, Equatable {
     var editWindowHours: Int
     var allowsTimeExtensions: Bool
     var maximumTimeExtensionHours: Int
+    var temporaryAllowanceResetDays: Int? = nil
+    var requiresNativeTemporaryAccess: Bool? = nil
+    var temporaryAccessPassageWordCount: Int? = nil
+    /// The session maximum in minutes. Optional so a policy written before
+    /// minutes existed still decodes; the hour field remains its fallback.
+    var maximumTemporaryAccessMinutes: Int? = nil
+
+    var effectiveTemporaryAccessPassageWordCount: Int {
+        min(300, max(20, temporaryAccessPassageWordCount ?? passageWordCount))
+    }
+
+    /// The session maximum every caller should use.
+    var effectiveMaximumTemporaryAccessMinutes: Int {
+        let resolved = maximumTemporaryAccessMinutes ?? (maximumTimeExtensionHours * 60)
+        return max(0, min(480, resolved))
+    }
+
+    var needsNativeTemporaryAccess: Bool {
+        temporaryAllowanceResetDays != nil
+            || effectiveTemporaryAccessPassageWordCount != min(300, max(20, passageWordCount))
+    }
+
+    var permitsAnyTemporaryAccess: Bool {
+        allowsTimeExtensions || requiresNativeTemporaryAccess == true
+    }
 }
 
 struct DesktopTimeWindow: Codable, Equatable, Hashable {
@@ -196,9 +334,102 @@ struct DesktopTimeWindow: Codable, Equatable, Hashable {
     }
 }
 
+/// The fully accumulated, normalized block profile used to construct a signed
+/// enforcement policy. Baseline and active Retreat rules are additive inputs.
+/// Building this once avoids repeating domain/path normalization for the
+/// content-comparison candidate and the revisioned policy publication.
+struct DesktopBlockProfile: Equatable {
+    var rules: [DesktopEnforcementRule]
+
+    init(
+        cloudRules: [CloudRulePreference],
+        temporaryPauses: [UUID: Date] = [:],
+        temporaryPauseAuthorizationIDs: [UUID: String] = [:],
+        now: Date = Date()
+    ) {
+        rules = cloudRules.map { rule in
+            var desktop = Self.desktopRule(rule)
+            // Only a rule that opted into temporary access can carry a pause,
+            // so a stale or hand-edited record cannot weaken a rule that never
+            // allowed one.
+            if desktop.lockdown.allowsTimeExtensions {
+                desktop.pausedUntil = Self.clampedPause(
+                    temporaryPauses[rule.id],
+                    maximumMinutes: desktop.lockdown.effectiveMaximumTemporaryAccessMinutes,
+                    now: now
+                )
+                if desktop.pausedUntil != nil {
+                    desktop.pauseAuthorizationID = temporaryPauseAuthorizationIDs[rule.id]
+                }
+            }
+            return desktop
+        }
+    }
+
+    /// The pause ledger lives in preferences the device owner can edit, and the
+    /// grant-time checks (passage, session maximum, backoff) never see a record
+    /// written by hand. Whatever is stored, a published pause may therefore end
+    /// no later than the rule's own session maximum from now; an expired or
+    /// nonsensical value publishes no pause at all.
+    static func clampedPause(_ expiry: Date?, maximumMinutes: Int, now: Date) -> Date? {
+        guard let expiry, expiry > now, maximumMinutes > 0 else { return nil }
+        let ceiling = now.addingTimeInterval(TimeInterval(maximumMinutes) * 60)
+        return min(expiry, ceiling)
+    }
+
+    private static func desktopRule(_ rule: CloudRulePreference) -> DesktopEnforcementRule {
+        DesktopEnforcementRule(
+            id: rule.id,
+            name: rule.name,
+            isEnabled: rule.isEnabled,
+            enforcementMode: DesktopEnforcementRule.Mode(rawValue: rule.enforcementMode) ?? .blockList,
+            windows: rule.windows.map {
+                DesktopTimeWindow(
+                    weekdays: $0.weekdays,
+                    startMinutes: $0.startMinutes,
+                    endMinutes: $0.endMinutes
+                )
+            },
+            domains: Set(rule.domains.map { $0.domain.lowercased() }),
+            macApplicationIdentifiers: Set(rule.macApplicationIdentifiers.map { $0.lowercased() }),
+            windowsExecutablePaths: Set(rule.windowsExecutablePaths.map { $0.lowercased() }),
+            windowsPublisherRules: Set(rule.windowsPublisherRules.map { $0.lowercased() }),
+            lockdown: DesktopLockdownPolicy(
+                severity: rule.lockdown.severity,
+                unlockDelayDays: rule.lockdown.unlockDelayDays,
+                passageWordCount: rule.lockdown.passageWordCount,
+                confirmationWindowHours: rule.lockdown.confirmationWindowHours,
+                editWindowHours: rule.lockdown.editWindowHours,
+                allowsTimeExtensions: rule.lockdown.allowsTimeExtensions,
+                maximumTimeExtensionHours: rule.lockdown.maximumTimeExtensionHours,
+                temporaryAllowanceResetDays: rule.lockdown.temporaryAllowanceResetDays,
+                temporaryAccessPassageWordCount: rule.lockdown.temporaryAccessPassageWordCount,
+                maximumTemporaryAccessMinutes: rule.lockdown.effectiveMaximumTemporaryAccessMinutes
+            )
+        )
+    }
+}
+
 extension DesktopEnforcementPolicy {
     init(
         cloudRules: [CloudRulePreference],
+        revision: UInt64,
+        issuedAt: Date = Date(),
+        weakeningAuthorizationExpiresAt: Date? = nil,
+        lockdownSessions: [DesktopLockdownSession]? = nil,
+        temporaryPauses: [UUID: Date] = [:]
+    ) {
+        self.init(
+            blockProfile: DesktopBlockProfile(cloudRules: cloudRules, temporaryPauses: temporaryPauses),
+            revision: revision,
+            issuedAt: issuedAt,
+            weakeningAuthorizationExpiresAt: weakeningAuthorizationExpiresAt,
+            lockdownSessions: lockdownSessions
+        )
+    }
+
+    init(
+        blockProfile: DesktopBlockProfile,
         revision: UInt64,
         issuedAt: Date = Date(),
         weakeningAuthorizationExpiresAt: Date? = nil,
@@ -207,33 +438,16 @@ extension DesktopEnforcementPolicy {
         self.init(
             revision: revision,
             issuedAt: issuedAt,
-            rules: cloudRules.map { rule in
-                DesktopEnforcementRule(
-                    id: rule.id,
-                    name: rule.name,
-                    isEnabled: rule.isEnabled,
-                    enforcementMode: DesktopEnforcementRule.Mode(rawValue: rule.enforcementMode) ?? .blockList,
-                    windows: rule.windows.map {
-                        DesktopTimeWindow(
-                            weekdays: $0.weekdays,
-                            startMinutes: $0.startMinutes,
-                            endMinutes: $0.endMinutes
-                        )
-                    },
-                    domains: Set(rule.domains.map { $0.domain.lowercased() }),
-                    macApplicationIdentifiers: Set(rule.macApplicationIdentifiers.map { $0.lowercased() }),
-                    windowsExecutablePaths: Set(rule.windowsExecutablePaths.map { $0.lowercased() }),
-                    windowsPublisherRules: Set(rule.windowsPublisherRules.map { $0.lowercased() }),
-                    lockdown: DesktopLockdownPolicy(
-                        severity: rule.lockdown.severity,
-                        unlockDelayDays: rule.lockdown.unlockDelayDays,
-                        passageWordCount: rule.lockdown.passageWordCount,
-                        confirmationWindowHours: rule.lockdown.confirmationWindowHours,
-                        editWindowHours: rule.lockdown.editWindowHours,
-                        allowsTimeExtensions: rule.lockdown.allowsTimeExtensions,
-                        maximumTimeExtensionHours: rule.lockdown.maximumTimeExtensionHours
-                    )
-                )
+            rules: blockProfile.rules.map { original in
+                var rule = original
+                if rule.lockdown.allowsTimeExtensions, rule.lockdown.needsNativeTemporaryAccess {
+                    // Older helpers/providers understand this existing opt-in
+                    // bit. Turn off their browser path too, even if they ignore
+                    // the newly added backoff fields during a staged upgrade.
+                    rule.lockdown.allowsTimeExtensions = false
+                    rule.lockdown.requiresNativeTemporaryAccess = true
+                }
+                return rule
             },
             weakeningAuthorizationExpiresAt: weakeningAuthorizationExpiresAt,
             lockdownSessions: lockdownSessions
@@ -247,6 +461,9 @@ enum DesktopPolicyRestrictionEvaluator {
         with proposed: DesktopEnforcementPolicy,
         at now: Date = Date()
     ) -> Bool {
+        guard Set(proposed.rules.map(\.id)).count == proposed.rules.count else {
+            return false
+        }
         guard existing.revision > 0 else { return true }
         if let expiry = proposed.weakeningAuthorizationExpiresAt, now < expiry { return true }
 
@@ -261,9 +478,12 @@ enum DesktopPolicyRestrictionEvaluator {
         return true
     }
 
-    private static func isSameOrStricter(old: DesktopEnforcementRule, new: DesktopEnforcementRule) -> Bool {
+    static func isSameOrStricter(old: DesktopEnforcementRule, new: DesktopEnforcementRule) -> Bool {
         guard old.enforcementMode == new.enforcementMode else { return false }
         if old.isEnabled && !new.isEnabled { return false }
+        // A shorter planned interval (a Retreat pulled in) is weaker.
+        if (new.activeUntil ?? .distantFuture) < (old.activeUntil ?? .distantFuture) { return false }
+        if (new.activeFrom ?? .distantPast) > (old.activeFrom ?? .distantPast) { return false }
         if !weeklyCoverage(new.windows).isSuperset(of: weeklyCoverage(old.windows)) { return false }
 
         switch old.enforcementMode {
@@ -287,23 +507,34 @@ enum DesktopPolicyRestrictionEvaluator {
         old: DesktopLockdownPolicy,
         new: DesktopLockdownPolicy
     ) -> Bool {
-        if lockdownStrength(new.severity) < lockdownStrength(old.severity) { return false }
-        if new.unlockDelayDays < old.unlockDelayDays { return false }
+        if lockdownStrength(new) < lockdownStrength(old) { return false }
+        let oldDelay = old.severity == "passageOnly" ? 0 : old.unlockDelayDays
+        let newDelay = new.severity == "passageOnly" ? 0 : new.unlockDelayDays
+        if newDelay < oldDelay { return false }
         if new.passageWordCount < old.passageWordCount { return false }
         if new.editWindowHours > old.editWindowHours { return false }
         if old.severity == "repeatedConfirmations",
            new.confirmationWindowHours > old.confirmationWindowHours { return false }
-        if !old.allowsTimeExtensions && new.allowsTimeExtensions { return false }
-        if old.allowsTimeExtensions && new.allowsTimeExtensions,
-           new.maximumTimeExtensionHours > old.maximumTimeExtensionHours { return false }
+        if !old.permitsAnyTemporaryAccess && new.permitsAnyTemporaryAccess { return false }
+        if old.permitsAnyTemporaryAccess && new.permitsAnyTemporaryAccess,
+           new.effectiveMaximumTemporaryAccessMinutes > old.effectiveMaximumTemporaryAccessMinutes { return false }
+        if old.permitsAnyTemporaryAccess && new.permitsAnyTemporaryAccess,
+           new.effectiveTemporaryAccessPassageWordCount < old.effectiveTemporaryAccessPassageWordCount { return false }
+        if old.permitsAnyTemporaryAccess && new.permitsAnyTemporaryAccess,
+           old.temporaryAllowanceResetDays != new.temporaryAllowanceResetDays {
+            // Backoff is additive over the existing session passage floor.
+            guard let newDays = new.temporaryAllowanceResetDays,
+                  newDays >= (old.temporaryAllowanceResetDays ?? 0) else { return false }
+        }
         return true
     }
 
-    private static func lockdownStrength(_ severity: String) -> Int {
-        switch severity {
+    private static func lockdownStrength(_ policy: DesktopLockdownPolicy) -> Int {
+        switch policy.severity {
         case "none": return 0
         case "passageOnly": return 1
-        case "delayed", "appDefault": return 2
+        case "delayed": return policy.unlockDelayDays > 0 ? 2 : 1
+        case "appDefault": return 2
         case "repeatedConfirmations": return 3
         default: return 2
         }
@@ -338,15 +569,23 @@ struct AuthenticatedDesktopPolicy: Codable, Equatable {
 enum DesktopPolicyConfigurationTransport {
     private static let policyDataKey = "desktopPolicyData"
     private static let policyRevisionKey = "desktopPolicyRevision"
+    private static let preparedRetryGuardsDataKey = "preparedRetryGuardsData"
 
-    static func vendorConfiguration(for policy: DesktopEnforcementPolicy) throws -> [String: Any] {
+    static func vendorConfiguration(
+        for policy: DesktopEnforcementPolicy,
+        preparedRetryGuards: MacFilterPreparedRetryGuardSnapshot? = nil
+    ) throws -> [String: Any] {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .millisecondsSince1970
         encoder.outputFormatting = [.sortedKeys]
-        return [
+        var configuration: [String: Any] = [
             policyDataKey: try encoder.encode(policy),
             policyRevisionKey: NSNumber(value: policy.revision)
         ]
+        if let preparedRetryGuards {
+            configuration[preparedRetryGuardsDataKey] = try encoder.encode(preparedRetryGuards)
+        }
+        return configuration
     }
 
     static func policy(from vendorConfiguration: [String: Any]?) -> DesktopEnforcementPolicy? {
@@ -358,6 +597,17 @@ enum DesktopPolicyConfigurationTransport {
 
     static func revision(from vendorConfiguration: [String: Any]?) -> UInt64? {
         (vendorConfiguration?[policyRevisionKey] as? NSNumber)?.uint64Value
+    }
+
+    static func preparedRetryGuards(
+        from vendorConfiguration: [String: Any]?
+    ) -> MacFilterPreparedRetryGuardSnapshot? {
+        guard let data = vendorConfiguration?[preparedRetryGuardsDataKey] as? Data else {
+            return nil
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .millisecondsSince1970
+        return try? decoder.decode(MacFilterPreparedRetryGuardSnapshot.self, from: data)
     }
 }
 
@@ -405,6 +655,13 @@ enum DesktopPolicyAuthenticator {
 }
 
 final class DesktopPolicyKeyStore {
+    /// On macOS an access group is ignored unless the item is in the
+    /// data-protection Keychain; without `kSecUseDataProtectionKeychain` the key
+    /// lands in the file-based login keychain, where the owner can reveal it in
+    /// Keychain Access and sign a policy of their own. New keys therefore go to
+    /// the data-protection Keychain, an existing legacy key is moved there once,
+    /// and a context without that Keychain (no entitlement, or no user session)
+    /// keeps using the legacy location so publishing never breaks.
     func loadOrCreate() throws -> Data {
         if let existing = try load() { return existing }
         var key = Data(count: 32)
@@ -413,35 +670,85 @@ final class DesktopPolicyKeyStore {
         }
         guard status == errSecSuccess else { throw DesktopPolicyError.keychain(status) }
 
-        var query = baseQuery
-        query[kSecValueData as String] = key
-        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let addStatus = SecItemAdd(query as CFDictionary, nil)
-        if addStatus == errSecDuplicateItem, let existing = try load() { return existing }
-        guard addStatus == errSecSuccess else { throw DesktopPolicyError.keychain(addStatus) }
-        return key
+        for protected in [true, false] {
+            var query = baseQuery(dataProtection: protected)
+            query[kSecValueData as String] = key
+            query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            let addStatus = SecItemAdd(query as CFDictionary, nil)
+            if addStatus == errSecDuplicateItem, let existing = try load() { return existing }
+            if addStatus == errSecSuccess { return key }
+            if protected, Self.isDataProtectionUnavailable(addStatus) { continue }
+            throw DesktopPolicyError.keychain(addStatus)
+        }
+        throw DesktopPolicyError.keychain(errSecNotAvailable)
     }
 
     func load() throws -> Data? {
-        var query = baseQuery
+        switch read(dataProtection: true) {
+        case let .found(data):
+            return data
+        case .notFound, .unavailable:
+            break
+        case let .failed(status):
+            throw DesktopPolicyError.keychain(status)
+        }
+        switch read(dataProtection: false) {
+        case let .found(data):
+            migrateToDataProtection(data)
+            return data
+        case .notFound, .unavailable:
+            return nil
+        case let .failed(status):
+            throw DesktopPolicyError.keychain(status)
+        }
+    }
+
+    private enum ReadResult {
+        case found(Data)
+        case notFound
+        case unavailable
+        case failed(OSStatus)
+    }
+
+    private func read(dataProtection: Bool) -> ReadResult {
+        var query = baseQuery(dataProtection: dataProtection)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, let data = item as? Data else {
-            throw DesktopPolicyError.keychain(status)
-        }
-        return data
+        if status == errSecSuccess, let data = item as? Data { return .found(data) }
+        if status == errSecItemNotFound { return .notFound }
+        if dataProtection, Self.isDataProtectionUnavailable(status) { return .unavailable }
+        return .failed(status)
     }
 
-    private var baseQuery: [String: Any] {
-        [
+    /// Same key bytes, new location, so policies signed earlier still verify.
+    private func migrateToDataProtection(_ key: Data) {
+        var add = baseQuery(dataProtection: true)
+        add[kSecValueData as String] = key
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let status = SecItemAdd(add as CFDictionary, nil)
+        guard status == errSecSuccess || status == errSecDuplicateItem else { return }
+        SecItemDelete(baseQuery(dataProtection: false) as CFDictionary)
+    }
+
+    private static func isDataProtectionUnavailable(_ status: OSStatus) -> Bool {
+        status == errSecMissingEntitlement
+            || status == errSecNotAvailable
+            || status == errSecInteractionNotAllowed
+    }
+
+    private func baseQuery(dataProtection: Bool) -> [String: Any] {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: DesktopEnforcementConstants.keychainService,
             kSecAttrAccount as String: DesktopEnforcementConstants.keychainAccount,
             kSecAttrAccessGroup as String: DesktopEnforcementConstants.keychainAccessGroup
         ]
+        if dataProtection {
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
+        return query
     }
 }
 
@@ -511,7 +818,7 @@ final class DesktopPolicyFileStore {
 /// and account, so anything running as the same user shares one baseline. A
 /// test that used the real store silently inherited a revision left behind by
 /// another process and then rejected its own fixtures as rollbacks.
-protocol AcceptedPolicyPersisting: AnyObject {
+protocol AcceptedPolicyPersisting: AnyObject, Sendable {
     func load() -> DesktopEnforcementPolicy?
     func save(_ policy: DesktopEnforcementPolicy) throws
 }
@@ -538,7 +845,7 @@ final class InMemoryAcceptedPolicyStore: AcceptedPolicyPersisting, @unchecked Se
 /// A target-private, this-device-only baseline. Because no access group is
 /// supplied, the controller app cannot replace the copy owned by the web-filter
 /// system extension. This closes the reboot/restart gap in an in-memory-only baseline.
-final class AcceptedDesktopPolicyStore: AcceptedPolicyPersisting {
+final class AcceptedDesktopPolicyStore: AcceptedPolicyPersisting, @unchecked Sendable {
     private let service = "com.GabrielPrice.ExecutiveDysfunction.accepted-desktop-policy.v1"
     private let account = "last-accepted-policy"
 
@@ -588,7 +895,24 @@ final class AcceptedDesktopPolicyStore: AcceptedPolicyPersisting {
 /// vendor configuration on every flow, and writing the Keychain baseline on
 /// every accepted read, is enough to starve the filter and present as a total
 /// loss of connectivity rather than as a slow filter.
+private enum VendorPolicyDiagnosticOutcome: String, Equatable {
+    case rollbackRejected = "rollback-rejected"
+    case accepted
+    case malformedRejected = "malformed-rejected"
+    case missingRevision = "missing-revision"
+}
+
+private struct VendorPolicyDiagnosticKey: Equatable {
+    var outcome: VendorPolicyDiagnosticOutcome
+    var proposedRevision: UInt64?
+    var cachedRevision: UInt64
+}
+
 final class ResilientDesktopPolicyLoader: @unchecked Sendable {
+    private let logger = Logger(
+        subsystem: "com.GabrielPrice.ExecutiveDysfunction.WebFilter",
+        category: "policy-loader"
+    )
     private let lock = NSLock()
     private let store = DesktopPolicyFileStore()
     private let acceptedStore: AcceptedPolicyPersisting
@@ -603,6 +927,8 @@ final class ResilientDesktopPolicyLoader: @unchecked Sendable {
     private var ingestedVendorRevision: UInt64?
     private var lastAttempt = Date.distantPast
     private var isRefreshing = false
+    private var lastVendorDiagnostic: VendorPolicyDiagnosticKey?
+    private var lastSharedDiagnostic: String?
 
     init(acceptedStore: AcceptedPolicyPersisting = AcceptedDesktopPolicyStore()) {
         self.acceptedStore = acceptedStore
@@ -633,18 +959,46 @@ final class ResilientDesktopPolicyLoader: @unchecked Sendable {
         // Rollback is still refused by the monotonic revision check.
         if let proposedRevision = DesktopPolicyConfigurationTransport.revision(
             from: vendorConfiguration
-        ), proposedRevision != ingestedVendorRevision, proposedRevision >= cached.revision,
-           let proposed = DesktopPolicyConfigurationTransport.policy(from: vendorConfiguration),
-           proposed.revision == proposedRevision {
-            // Latched only on acceptance, so a proposal rejected for a
-            // transient reason is retried rather than skipped forever.
-            ingestedVendorRevision = proposedRevision
-            // A running session outlives the policy that started it. The app
-            // republishes on every refresh, so without this a commitment would
-            // end at the next routine save rather than at the time promised.
-            let merged = proposed.carryingForwardSessions(from: cached, at: now)
-            cached = merged
-            persist(merged)
+        ), proposedRevision != ingestedVendorRevision {
+            if proposedRevision < cached.revision {
+                logVendorTransitionLocked(
+                    .rollbackRejected,
+                    proposedRevision: proposedRevision,
+                    cachedRevision: cached.revision
+                )
+            } else if let proposed = DesktopPolicyConfigurationTransport.policy(
+                from: vendorConfiguration
+            ), proposed.revision == proposedRevision {
+                // Latched only on acceptance, so a proposal rejected for a
+                // transient reason is retried rather than skipped forever.
+                ingestedVendorRevision = proposedRevision
+                // A running session outlives the policy that started it. The app
+                // republishes on every refresh, so without this a commitment would
+                // end at the next routine save rather than at the time promised.
+                let merged = proposed
+                    .carryingForwardSessions(from: cached, at: now)
+                    .boundingPauses(from: cached, at: now)
+                cached = merged
+                logVendorTransitionLocked(
+                    .accepted,
+                    proposedRevision: proposedRevision,
+                    cachedRevision: cached.revision
+                )
+                persist(merged)
+            } else {
+                logVendorTransitionLocked(
+                    .malformedRejected,
+                    proposedRevision: proposedRevision,
+                    cachedRevision: cached.revision
+                )
+            }
+        } else if vendorConfiguration != nil,
+                  DesktopPolicyConfigurationTransport.revision(from: vendorConfiguration) == nil {
+            logVendorTransitionLocked(
+                .missingRevision,
+                proposedRevision: nil,
+                cachedRevision: cached.revision
+            )
         }
 
         let shouldRefresh = !isRefreshing && now.timeIntervalSince(lastAttempt) >= 2
@@ -664,25 +1018,97 @@ final class ResilientDesktopPolicyLoader: @unchecked Sendable {
     /// the last accepted snapshot untouched.
     private func scheduleRefresh(minimumRevision: UInt64) {
         refreshQueue.async { [self] in
-            let loaded = (try? store.loadVerified(minimumRevision: minimumRevision))
-                ?? (try? store.loadForMonotonicFallback(minimumRevision: minimumRevision))
+            let loaded: DesktopEnforcementPolicy?
+            let source: String
+            do {
+                loaded = try store.loadVerified(minimumRevision: minimumRevision)
+                source = "verified"
+            } catch {
+                do {
+                    loaded = try store.loadForMonotonicFallback(minimumRevision: minimumRevision)
+                    source = "monotonic-fallback"
+                } catch {
+                    loaded = nil
+                    source = "unavailable"
+                }
+            }
             let now = Date()
             lock.lock()
             isRefreshing = false
             if let loaded, loaded.revision >= cached.revision,
                DesktopPolicyRestrictionEvaluator.canReplace(existing: cached, with: loaded, at: now) {
-                let loaded = loaded.carryingForwardSessions(from: cached, at: now)
+                let loaded = loaded
+                    .carryingForwardSessions(from: cached, at: now)
+                    .boundingPauses(from: cached, at: now)
                 let changed = loaded != cached
                 cached = loaded
+                logSharedTransitionLocked(
+                    changed ? "\(source)-accepted" : "\(source)-unchanged",
+                    loadedRevision: loaded.revision,
+                    cachedRevision: cached.revision
+                )
                 lock.unlock()
-                if changed { try? acceptedStore.save(loaded) }
+                if changed {
+                    do {
+                        try acceptedStore.save(loaded)
+                    } catch {
+                        let error = error as NSError
+                        logger.error(
+                            "policy_baseline_persist_failed revision=\(loaded.revision, privacy: .public) error_domain=\(error.domain, privacy: .public) error_code=\(error.code, privacy: .public) description=\(error.localizedDescription, privacy: .private)"
+                        )
+                    }
+                }
                 return
             }
+            logSharedTransitionLocked(
+                loaded == nil ? source : "restriction-rejected",
+                loadedRevision: loaded?.revision,
+                cachedRevision: cached.revision
+            )
             lock.unlock()
         }
     }
 
     private func persist(_ policy: DesktopEnforcementPolicy) {
-        refreshQueue.async { [acceptedStore] in try? acceptedStore.save(policy) }
+        refreshQueue.async { [acceptedStore, logger] in
+            do {
+                try acceptedStore.save(policy)
+            } catch {
+                let error = error as NSError
+                logger.error(
+                    "policy_baseline_persist_failed revision=\(policy.revision, privacy: .public) error_domain=\(error.domain, privacy: .public) error_code=\(error.code, privacy: .public) description=\(error.localizedDescription, privacy: .private)"
+                )
+            }
+        }
+    }
+
+    private func logVendorTransitionLocked(
+        _ outcome: VendorPolicyDiagnosticOutcome,
+        proposedRevision: UInt64?,
+        cachedRevision: UInt64
+    ) {
+        let key = VendorPolicyDiagnosticKey(
+            outcome: outcome,
+            proposedRevision: proposedRevision,
+            cachedRevision: cachedRevision
+        )
+        guard key != lastVendorDiagnostic else { return }
+        lastVendorDiagnostic = key
+        logger.notice(
+            "policy_vendor outcome=\(outcome.rawValue, privacy: .public) proposed_revision=\(proposedRevision ?? 0, privacy: .public) cached_revision=\(cachedRevision, privacy: .public)"
+        )
+    }
+
+    private func logSharedTransitionLocked(
+        _ outcome: String,
+        loadedRevision: UInt64?,
+        cachedRevision: UInt64
+    ) {
+        let key = "\(outcome):\(loadedRevision.map(String.init) ?? "none"):\(cachedRevision)"
+        guard key != lastSharedDiagnostic else { return }
+        lastSharedDiagnostic = key
+        logger.notice(
+            "policy_shared outcome=\(outcome, privacy: .public) loaded_revision=\(loadedRevision ?? 0, privacy: .public) cached_revision=\(cachedRevision, privacy: .public)"
+        )
     }
 }

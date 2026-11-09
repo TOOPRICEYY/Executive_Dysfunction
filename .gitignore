@@ -3,3 +3,8 @@ xcuserdata/
 *.xcuserstate
 DerivedData/
 build/
+.build/
+Diagnostics/
+*.xcresult
+Holdfast UI Preview.command
+Claude outputs/

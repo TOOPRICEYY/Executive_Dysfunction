@@ -7,14 +7,18 @@ final class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         super.intervalDidStart(for: activity)
         guard let descriptor = MonitorDescriptor.parse(activity) else { return }
         switch descriptor {
+        case let .lockdown(sessionID):
+            SharedConfiguration.loadTimedLockdowns().first { $0.id == sessionID }?.reconcile()
         case let .window(ruleID, windowID):
             guard let rule = enabledRule(id: ruleID),
                   let window = rule.windows.first(where: { $0.id == windowID }),
                   window.isActive(at: Date())
             else { return }
             EnforcementEngine.apply(rule, to: ManagedSettingsStore(named: descriptor.storeName))
+            SharedConfiguration.recordShieldedWindowStore(descriptor)
         case let .allowance(ruleID):
-            guard let rule = enabledRule(id: ruleID) else { return }
+            guard SharedConfiguration.activeTimeAllowance(for: ruleID) != nil,
+                  let rule = enabledRule(id: ruleID) else { return }
             EnforcementEngine.suspend(rule)
         case .usage, .usageBatch:
             break
@@ -25,6 +29,10 @@ final class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         super.intervalDidEnd(for: activity)
         guard let descriptor = MonitorDescriptor.parse(activity) else { return }
         switch descriptor {
+        case let .lockdown(sessionID):
+            // Delayed callbacks from stopMonitoring must not release a still
+            // active commitment. Session IDs are never reused.
+            SharedConfiguration.loadTimedLockdowns().first { $0.id == sessionID }?.reconcile()
         case .window, .usage:
             EnforcementEngine.clear(storeNamed: descriptor.storeName)
         case let .allowance(ruleID):
@@ -64,15 +72,19 @@ final class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
     private func endAllowance(ruleID: UUID) {
         var allowances = SharedConfiguration.loadRuleTimeAllowances()
-        guard let allowance = allowances.removeValue(forKey: ruleID) else { return }
+        // An older interval can finish after this rule's pause was extended.
+        // Its delayed callback must not cancel the newer authorization.
+        guard let allowance = allowances[ruleID], allowance.isDueForMonitorEnd(at: Date()) else { return }
+        allowances.removeValue(forKey: ruleID)
         SharedConfiguration.saveRuleTimeAllowances(allowances)
         guard let rule = enabledRule(id: ruleID) else { return }
 
         for window in rule.windows where window.isActive(at: Date()) {
             let descriptor = MonitorDescriptor.window(ruleID: ruleID, windowID: window.id)
             EnforcementEngine.apply(rule, to: ManagedSettingsStore(named: descriptor.storeName))
+            SharedConfiguration.recordShieldedWindowStore(descriptor)
         }
-        if allowance.restoreUsageShield {
+        if allowance.restoreUsageShield && rule.usageLimitEnabled {
             EnforcementEngine.apply(
                 rule,
                 to: ManagedSettingsStore(named: MonitorDescriptor.usage(ruleID: ruleID).storeName)

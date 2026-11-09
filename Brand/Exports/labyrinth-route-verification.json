@@ -1,0 +1,44 @@
+{
+  "labyrinthBounds": {
+    "minX": 125,
+    "minY": 125,
+    "maxX": 500,
+    "maxY": 484
+  },
+  "start": {
+    "x": 309,
+    "y": 301
+  },
+  "exit": {
+    "x": 289,
+    "y": 508
+  },
+  "routePixels": 663,
+  "simplifiedPoints": 192,
+  "routeLength": 755.2,
+  "minimumWallClearance": 7,
+  "verifiedUnbranched": true,
+  "endpoints": 2,
+  "blackWallIntersections": 0,
+  "renderedPoints": 192,
+  "smoothed": true,
+  "minimumRenderedWallClearance": 7,
+  "requiredRenderedWallClearance": 7,
+  "constantWidthRoute": true,
+  "routeWidthAnalysisPixels": 14,
+  "routeColorSRGBHex": "#168BFF",
+  "interiorTerminalDot": {
+    "center": {
+      "x": 309,
+      "y": 301
+    },
+    "radiusAnalysisPixels": 23.1
+  },
+  "sourcePixelSize": 1254,
+  "rotationDegrees": 180,
+  "uniformScalePercent": 110,
+  "mirroredHorizontally": true,
+  "wholeMarkTransforms": true,
+  "pathPreservedByWholeMarkTransforms": true,
+  "fullResolutionBlueWallOverlapFraction": 0
+}

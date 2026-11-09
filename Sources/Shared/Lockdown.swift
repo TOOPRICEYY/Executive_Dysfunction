@@ -12,6 +12,14 @@ struct LockdownConfiguration: Codable, Equatable {
     var confirmationWindowHours = 24
     /// How long settings remain editable after a successful unlock.
     var editWindowHours = 24
+    /// An unlock can never open later than this instant.
+    ///
+    /// Set for a Retreat's early-end process, where the delay is capped at the
+    /// Retreat's own remaining time: three days of friction guarding a
+    /// thirty-nine hour Retreat is a request that can never come due. It is
+    /// derived state, never user-set, so it stays out of `loosens` — the
+    /// app-wide configuration always leaves it nil.
+    var unlockCeiling: Date? = nil
 
     static let delayRange = 0...365
     static let passageWordRange = 20...300
@@ -87,10 +95,39 @@ struct RuleLockdownPolicy: Codable, Equatable {
     var passageWordCount = 40
     var confirmationWindowHours = 24
     var editWindowHours = 24
-    /// Allows a typed passage to suspend this rule in one-hour increments.
+    /// Allows a typed passage to suspend this rule for one of the fixed,
+    /// short-duration temporary-access choices.
     var allowsTimeExtensions = false
     /// Bounds an allowance session so exponential passages cannot grow forever.
     var maximumTimeExtensionHours = 3
+    var temporaryAllowanceResetDays: Int? = nil
+    var temporaryAccessPassageWordCount: Int? = nil
+    /// The session maximum in minutes. Optional so a rule compiled before
+    /// minutes existed still decodes against the hour field above.
+    var maximumTemporaryAccessMinutes: Int? = nil
+
+    var effectiveTemporaryAccessPassageWordCount: Int {
+        min(300, max(20, temporaryAccessPassageWordCount ?? passageWordCount))
+    }
+
+    /// The session maximum every caller should use.
+    var effectiveMaximumTemporaryAccessMinutes: Int {
+        let resolved = maximumTemporaryAccessMinutes ?? (maximumTimeExtensionHours * 60)
+        return min(TimeAllowancePolicy.maximumMinutesRange.upperBound,
+                   max(0, resolved))
+    }
+
+    /// Sets the session maximum, keeping the legacy hour field floored in step
+    /// so an older reader never grants more than intended.
+    mutating func setMaximumTemporaryAccess(minutes: Int) {
+        let clamped = min(TimeAllowancePolicy.maximumMinutesRange.upperBound,
+                          max(TimeAllowancePolicy.maximumMinutesRange.lowerBound, minutes))
+        maximumTimeExtensionHours = clamped / 60
+        // See CloudRuleLockdownPreference: a whole-hour value stays in the
+        // legacy field so an unchanged policy is not rewritten.
+        guard clamped % 60 != 0 || maximumTemporaryAccessMinutes != nil else { return }
+        maximumTemporaryAccessMinutes = clamped
+    }
 
     func configuration(appDefault: LockdownConfiguration) -> LockdownConfiguration {
         guard severity != .appDefault else { return appDefault }
@@ -111,6 +148,8 @@ extension RuleLockdownPolicy {
         case severity, unlockDelayDays, passageWordCount
         case confirmationWindowHours, editWindowHours
         case allowsTimeExtensions, maximumTimeExtensionHours
+        case temporaryAllowanceResetDays
+        case temporaryAccessPassageWordCount
     }
 
     init(from decoder: Decoder) throws {
@@ -122,23 +161,116 @@ extension RuleLockdownPolicy {
         editWindowHours = try values.decodeIfPresent(Int.self, forKey: .editWindowHours) ?? 24
         allowsTimeExtensions = try values.decodeIfPresent(Bool.self, forKey: .allowsTimeExtensions) ?? false
         maximumTimeExtensionHours = try values.decodeIfPresent(Int.self, forKey: .maximumTimeExtensionHours) ?? 3
+        temporaryAllowanceResetDays = try values.decodeIfPresent(Int.self, forKey: .temporaryAllowanceResetDays).map { min(365, max(1, $0)) }
+        temporaryAccessPassageWordCount = try values.decodeIfPresent(Int.self, forKey: .temporaryAccessPassageWordCount).map { min(300, max(20, $0)) }
     }
+}
+
+enum TemporaryAccessDuration: Int, Codable, CaseIterable, Identifiable, Sendable {
+    case oneMinute = 1
+    case fiveMinutes = 5
+    case tenMinutes = 10
+    case thirtyMinutes = 30
+    case sixtyMinutes = 60
+
+    var id: Int { rawValue }
+    var minutes: Int { rawValue }
+    var seconds: TimeInterval { TimeInterval(rawValue * 60) }
+
+    var title: String {
+        rawValue == 1 ? "1 minute" : "\(rawValue) minutes"
+    }
+
+    /// Apple's shield offers exactly three secondary submenu slots, so that
+    /// path cannot grow with this list. It keeps the longer options, which are
+    /// the ones worth reaching for from a shield; the finer grain is available
+    /// in the app and on the block page, where there is room for every choice.
+    static let shieldSubmenuOptions: [TemporaryAccessDuration] = [
+        .tenMinutes, .thirtyMinutes, .sixtyMinutes
+    ]
 }
 
 struct RuleTimeAllowance: Codable, Equatable {
     var ruleID: UUID
     var expiresAt: Date
+    /// Legacy builds counted one-hour increments. Keep writing this field so a
+    /// device that has not updated yet can still read a conservative grant
+    /// count, while new builds use `grantCount` and `totalMinutesGranted`.
     var incrementsGranted: Int
+    /// Cumulative access granted during this contiguous allowance session.
+    /// It resets only after the allowance expires and is removed.
+    var totalMinutesGranted: Int
+    /// Number of passages accepted in this contiguous allowance session. This,
+    /// rather than the chosen duration, drives exponential passage escalation.
+    var grantCount: Int
     /// A usage-threshold shield was active when the allowance began or fired
     /// during it, and must be restored when the allowance expires.
     var restoreUsageShield: Bool
 
+    init(
+        ruleID: UUID,
+        expiresAt: Date,
+        incrementsGranted: Int,
+        restoreUsageShield: Bool
+    ) {
+        let count = max(0, incrementsGranted)
+        self.ruleID = ruleID
+        self.expiresAt = expiresAt
+        self.incrementsGranted = count
+        totalMinutesGranted = count * 60
+        grantCount = count
+        self.restoreUsageShield = restoreUsageShield
+    }
+
+    init(
+        ruleID: UUID,
+        expiresAt: Date,
+        totalMinutesGranted: Int,
+        grantCount: Int,
+        restoreUsageShield: Bool
+    ) {
+        let count = max(0, grantCount)
+        self.ruleID = ruleID
+        self.expiresAt = expiresAt
+        incrementsGranted = count
+        self.totalMinutesGranted = max(0, totalMinutesGranted)
+        self.grantCount = count
+        self.restoreUsageShield = restoreUsageShield
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case ruleID, expiresAt, incrementsGranted
+        case totalMinutesGranted, grantCount, restoreUsageShield
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        ruleID = try values.decode(UUID.self, forKey: .ruleID)
+        expiresAt = try values.decode(Date.self, forKey: .expiresAt)
+        let legacyCount = max(0, try values.decodeIfPresent(Int.self, forKey: .incrementsGranted) ?? 0)
+        grantCount = max(0, try values.decodeIfPresent(Int.self, forKey: .grantCount) ?? legacyCount)
+        incrementsGranted = grantCount
+        totalMinutesGranted = max(
+            0,
+            try values.decodeIfPresent(Int.self, forKey: .totalMinutesGranted)
+                ?? (legacyCount * 60)
+        )
+        restoreUsageShield = try values.decodeIfPresent(Bool.self, forKey: .restoreUsageShield) ?? false
+    }
+
     func isActive(at date: Date) -> Bool { date < expiresAt }
+
+    /// DeviceActivity stores calendar boundaries at whole-second precision.
+    /// Accept that boundary even when the persisted expiry has a fraction,
+    /// while refusing a delayed callback belonging to an earlier grant.
+    func isDueForMonitorEnd(at date: Date) -> Bool {
+        date.timeIntervalSince1970 >= expiresAt.timeIntervalSince1970.rounded(.down)
+    }
 
     func nextPassageWordCount(base: Int) -> Int {
         TimeAllowancePolicy.passageWordCount(
             base: base,
-            incrementsAlreadyGranted: incrementsGranted
+            incrementsAlreadyGranted: grantCount
         )
     }
 }
@@ -146,8 +278,45 @@ struct RuleTimeAllowance: Codable, Equatable {
 enum TimeAllowancePolicy {
     static let hour: TimeInterval = 60 * 60
     static let maximumHoursRange = 1...8
+    /// The session maximum is configured in minutes so a group can permit a
+    /// genuinely short bypass. One minute is the floor; eight hours remains the
+    /// ceiling.
+    static let maximumMinutesRange = 1...480
 
-    /// The first hour uses the base passage. Every consecutive hour doubles it.
+    /// The values the session-maximum control steps through. A plain
+    /// one-minute step would take hundreds of presses to cross eight hours, so
+    /// the ladder is fine where it matters and coarse where it does not.
+    static let maximumMinutesLadder = [
+        1, 2, 3, 4, 5, 10, 15, 20, 30, 45,
+        60, 90, 120, 180, 240, 300, 360, 420, 480
+    ]
+
+    /// The nearest ladder value at or below `minutes`, so a policy written with
+    /// an arbitrary value still lands on a reachable rung.
+    static func ladderIndex(forMinutes minutes: Int) -> Int {
+        let clamped = min(maximumMinutesRange.upperBound, max(maximumMinutesRange.lowerBound, minutes))
+        let index = maximumMinutesLadder.lastIndex { $0 <= clamped }
+        return index ?? 0
+    }
+
+    static func describeMaximum(minutes: Int) -> String {
+        let clamped = min(maximumMinutesRange.upperBound, max(maximumMinutesRange.lowerBound, minutes))
+        if clamped < 60 { return clamped == 1 ? "1 minute" : "\(clamped) minutes" }
+        let hours = clamped / 60
+        let remainder = clamped % 60
+        let hourText = hours == 1 ? "1 hour" : "\(hours) hours"
+        return remainder == 0 ? hourText : "\(hourText) \(remainder) min"
+    }
+
+    static func canGrant(
+        _ duration: TemporaryAccessDuration,
+        afterMinutes alreadyGranted: Int,
+        maximumMinutes: Int
+    ) -> Bool {
+        max(0, alreadyGranted) + duration.minutes <= max(0, maximumMinutes)
+    }
+
+    /// The first grant uses the base passage. Every consecutive grant doubles it.
     static func passageWordCount(base: Int, incrementsAlreadyGranted: Int) -> Int {
         let multiplier = 1 << max(0, min(7, incrementsAlreadyGranted))
         return max(1, base) * multiplier
@@ -188,8 +357,9 @@ enum Lockdown {
     ) -> UnlockPhase {
         guard configuration.isEnabled, let process else { return .idle }
 
-        let unlocksAt = process.startedAt
+        let requestedUnlockAt = process.startedAt
             .addingTimeInterval(TimeInterval(configuration.unlockDelayDays) * day)
+        let unlocksAt = configuration.unlockCeiling.map { min(requestedUnlockAt, $0) } ?? requestedUnlockAt
         let editDuration = TimeInterval(configuration.editWindowHours) * 60 * 60
 
         guard configuration.repeatConfirmations else {
@@ -203,7 +373,13 @@ enum Lockdown {
         // The initial passage is stored at index zero. Every completed 24-hour
         // checkpoint appends one additional timestamp, and no checkpoint can be
         // completed before its due time.
-        let requiredCheckpoints = configuration.unlockDelayDays
+        // Only the checkpoints that fit before the ceiling can be required, or
+        // the process could never finish inside the window it guards.
+        var requiredCheckpoints = configuration.unlockDelayDays
+        if let ceiling = configuration.unlockCeiling {
+            let fits = Int(ceiling.timeIntervalSince(process.startedAt) / day)
+            requiredCheckpoints = min(requiredCheckpoints, max(0, fits))
+        }
         let completedCheckpoints = max(0, process.confirmedAt.count - 1)
         if completedCheckpoints >= requiredCheckpoints {
             let completedAt = process.confirmedAt.max() ?? unlocksAt
@@ -289,11 +465,31 @@ struct PassageDiffToken: Equatable {
 enum PassageDiff {
     /// Produces a word-level longest-common-subsequence diff. This keeps later
     /// correct words green even when an earlier word was omitted or inserted.
-    static func compare(typed: String, passage: String) -> [PassageDiffToken] {
+    static func compare(typed: String, passage: String, caseSensitive: Bool = false) -> [PassageDiffToken] {
         let actual = CommitmentPassage.normalizedWords(in: typed)
         let expected = CommitmentPassage.normalizedWords(in: passage)
-        let actualComparison = actual.map { $0.lowercased() }
-        let expectedComparison = expected.map { $0.lowercased() }
+        let actualComparison = actual.map { caseSensitive ? $0 : $0.lowercased() }
+        let expectedComparison = expected.map { caseSensitive ? $0 : $0.lowercased() }
+
+        // Backoff can produce tens of thousands of words. Keep comparison
+        // memory bounded for those passages, while retaining nearby alignment.
+        if actual.count > 0, expected.count > 1_000_000 / actual.count {
+            var result: [PassageDiffToken] = []
+            var i = 0, j = 0
+            while i < actual.count, j < expected.count {
+                if actualComparison[i] == expectedComparison[j] {
+                    result.append(.init(text: actual[i], kind: .matched)); i += 1; j += 1
+                } else if expectedComparison[(j + 1)..<min(expected.count, j + 33)].contains(actualComparison[i]),
+                          !actualComparison[(i + 1)..<min(actual.count, i + 33)].contains(expectedComparison[j]) {
+                    result.append(.init(text: expected[j], kind: .missing)); j += 1
+                } else {
+                    result.append(.init(text: actual[i], kind: .incorrect)); i += 1
+                }
+            }
+            result.append(contentsOf: actual.dropFirst(i).map { .init(text: $0, kind: .incorrect) })
+            result.append(contentsOf: expected.dropFirst(j).map { .init(text: $0, kind: .missing) })
+            return result
+        }
 
         var lengths = Array(
             repeating: Array(repeating: 0, count: expected.count + 1),
