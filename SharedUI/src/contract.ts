@@ -45,6 +45,13 @@ export interface GroupNow {
   changesAt?: string;
   /** Ready-to-show sentence, e.g. "Next block · tomorrow 09:00". */
   headline: string;
+  /**
+   * Another group that is blocking this group's targets right now, so an idle
+   * schedule does not read as an open door. Already folded into `headline`.
+   * Portable targets only: Screen Time selections are opaque and cannot be
+   * compared between groups.
+   */
+  coveredBy?: { name: string; isComplete: boolean };
 }
 /** Host-evaluated progress of an edit unlock. */
 export interface UnlockState {
@@ -348,7 +355,12 @@ function isNow(n: unknown): n is GroupNow {
       v.state,
     ) &&
     typeof v.headline === "string" &&
-    (v.changesAt === undefined || isDate(v.changesAt))
+    (v.changesAt === undefined || isDate(v.changesAt)) &&
+    (v.coveredBy === undefined ||
+      (!!v.coveredBy &&
+        typeof v.coveredBy === "object" &&
+        typeof v.coveredBy.name === "string" &&
+        typeof v.coveredBy.isComplete === "boolean"))
   );
 }
 export function isGroup(g: unknown): g is Group {

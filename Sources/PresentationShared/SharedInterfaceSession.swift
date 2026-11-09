@@ -90,7 +90,55 @@ final class SharedInterfaceSession: ObservableObject {
     }
     private static let policyKinds = ["none": "none", "passageOnly": "passage", "delayed": "delay", "repeatedConfirmations": "checkpoints"]
     /// Host-evaluated "what is this doing now". The renderer never derives this from a schedule.
-    private func nowObject(_ state: GroupNowState, now: Date) -> [String: Any] {
+    /// Works out, before any row is written, which group is actually holding
+    /// each group's sites. A row cannot answer this alone: the answer depends
+    /// on what every other group is doing at this instant.
+    private func coverageHolders(
+        liveRules: [CloudRulePreference],
+        baselineIDs: Set<UUID>,
+        now: Date
+    ) -> [UUID: GroupCoverage.Holder] {
+        var subjects: [GroupCoverage.Subject] = []
+        var seen = Set<UUID>()
+        for rule in liveRules where seen.insert(rule.id).inserted {
+            let state = GroupNowStatus.evaluate(
+                isEnabled: rule.isEnabled, windows: rule.windows, now: now,
+                allowanceUntil: pause(rule.id), lockdownUntil: model.lockdownExpirations[rule.id]
+            )
+            subjects.append(GroupCoverage.Subject(
+                id: rule.id,
+                name: rule.name,
+                isRetreatCopy: !baselineIDs.contains(rule.id),
+                isBlockingNow: state.isBlocking,
+                isAllowListFortress: rule.enforcementMode == "fortressAllowList",
+                targets: GroupCoverage.targets(of: rule)
+            ))
+        }
+        // A disabled group never blocks, so it is only ever a subject — but it
+        // is exactly the row most likely to claim "Off" while its sites are
+        // held by a Retreat copy of itself.
+        for group in model.baseline.blockingGroups where !seen.contains(group.id) {
+            let owned = group.owningTargets(
+                from: model.activityGroups,
+                containerPolicy: model.baseline.modificationPolicy
+            )
+            subjects.append(GroupCoverage.Subject(
+                id: group.id,
+                name: group.name,
+                isRetreatCopy: false,
+                isBlockingNow: false,
+                isAllowListFortress: false,
+                targets: GroupCoverage.targets(of: owned.targets)
+            ))
+        }
+        return GroupCoverage.holders(for: subjects)
+    }
+
+    private func nowObject(
+        _ state: GroupNowState,
+        now: Date,
+        coveredBy holder: GroupCoverage.Holder? = nil
+    ) -> [String: Any] {
         let name: String
         switch state {
         case .lockdown: name = "lockdown"
@@ -100,8 +148,14 @@ final class SharedInterfaceSession: ObservableObject {
         case .idle: name = "idle"
         case .off: name = "off"
         }
-        var value: [String: Any] = ["state": name, "headline": GroupNowStatus.headline(state, now: now)]
+        var value: [String: Any] = [
+            "state": name,
+            "headline": GroupNowStatus.headline(state, now: now, coveredBy: holder)
+        ]
         if let at = state.changesAt { value["changesAt"] = iso(at) }
+        if let holder {
+            value["coveredBy"] = ["name": holder.name, "isComplete": holder.isComplete]
+        }
         return value
     }
     private func unlockObject(_ phase: UnlockPhase) -> [String: Any] {
@@ -169,6 +223,14 @@ final class SharedInterfaceSession: ObservableObject {
         let sync = model.cloudSyncStatus
         #endif
         var summaryGroups: [DashboardNowSummary.Group] = []
+        // Groups in force only through a running Retreat or a lockdown: shown, never edited here.
+        #if os(macOS)
+        let liveRules = model.dashboardActiveRules
+        #else
+        let liveRules = model.dashboardBlockingRules
+        #endif
+        let baselineIDs = Set(model.baseline.blockingGroups.map(\.id))
+        let coverage = coverageHolders(liveRules: liveRules, baselineIDs: baselineIDs, now: now)
         let groups: [[String: Any]] = try model.baseline.blockingGroups.map { original in
             let group = original.owningTargets(from: model.activityGroups, containerPolicy: model.baseline.modificationPolicy)
             var value = try object(SharedInterfaceGroup(group))
@@ -199,9 +261,11 @@ final class SharedInterfaceSession: ObservableObject {
             default: status = "allowed"
             }
             value["status"] = status
-            value["detail"] = status == "unsupported" ? (!hasDeviceTargets ? "This group has no selected targets available on this device. Other devices keep their own targets." : "Scheduled to block; enforcement is not confirmed. \(GroupNowStatus.headline(state, now: now))") : GroupNowStatus.headline(state, now: now)
+            let holder = coverage[group.id]
+            let sentence = GroupNowStatus.headline(state, now: now, coveredBy: holder)
+            value["detail"] = status == "unsupported" ? (!hasDeviceTargets ? "This group has no selected targets available on this device. Other devices keep their own targets." : "Scheduled to block; enforcement is not confirmed. \(sentence)") : sentence
             value["canEdit"] = isUnlocked(group.id)
-            value["now"] = nowObject(state, now: now)
+            value["now"] = nowObject(state, now: now, coveredBy: holder)
             if let until = model.lockdownExpirations[group.id], until > now { value["lockdownUntil"] = iso(until) }
             if group.modificationPolicy.severity != "none" {
                 #if os(macOS)
@@ -218,19 +282,13 @@ final class SharedInterfaceSession: ObservableObject {
             #endif
             return value
         }
-        // Groups in force only through a running Retreat or a lockdown: shown, never edited here.
-        #if os(macOS)
-        let liveRules = model.dashboardActiveRules
-        #else
-        let liveRules = model.dashboardBlockingRules
-        #endif
-        let baselineIDs = Set(model.baseline.blockingGroups.map(\.id))
         var seenLive = Set<UUID>()
         let retreatGroups: [[String: Any]] = liveRules.filter { !baselineIDs.contains($0.id) && seenLive.insert($0.id).inserted }.map { rule in
             let state = GroupNowStatus.evaluate(isEnabled: rule.isEnabled, windows: rule.windows, now: now,
                 allowanceUntil: pause(rule.id), lockdownUntil: model.lockdownExpirations[rule.id])
             summaryGroups.append(.init(name: rule.name, state: state))
-            return ["id": rule.id.uuidString, "name": rule.name, "now": nowObject(state, now: now),
+            return ["id": rule.id.uuidString, "name": rule.name,
+                    "now": nowObject(state, now: now, coveredBy: coverage[rule.id]),
                     "lock": Self.policyKinds[rule.lockdown.severity] ?? "inherited",
                     "delayDays": min(365, max(0, rule.lockdown.unlockDelayDays)),
                     "targets": HoldfastPresentation.targets(rule: rule)]

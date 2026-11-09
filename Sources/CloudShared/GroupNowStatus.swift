@@ -136,6 +136,40 @@ enum GroupNowStatus {
         return .idle
     }
 
+    /// `coveredBy` names a group that is blocking this one's targets right now.
+    /// It changes the sentence rather than appending to it: a row that is idle
+    /// on its own schedule while its sites are unreachable has to lead with the
+    /// part the reader can act on.
+    static func headline(
+        _ state: GroupNowState,
+        now: Date,
+        calendar: Calendar = .current,
+        coveredBy holder: GroupCoverage.Holder?
+    ) -> String {
+        let base = headline(state, now: now, calendar: calendar)
+        guard let holder, !state.isBlocking else { return base }
+        let whole = "blocked now by \(holder.name)"
+        let part = "some sites blocked now by \(holder.name)"
+        switch state {
+        case .off:
+            return "Off · \(holder.isComplete ? whole : part)"
+        case .paused:
+            // The pause bought nothing if the same sites are held elsewhere.
+            return holder.isComplete
+                ? "Paused · still \(whole)"
+                : "\(base) · \(part)"
+        case let .upcoming(at):
+            let lead = sentenceCased(holder.isComplete ? whole : part)
+            return "\(lead) · own block \(moment(at, now: now, calendar: calendar))"
+        case .idle:
+            return holder.isComplete
+                ? sentenceCased(whole)
+                : "\(sentenceCased(part)) · no block of its own this week"
+        case .blocking, .lockdown:
+            return base
+        }
+    }
+
     static func headline(_ state: GroupNowState, now: Date, calendar: Calendar = .current) -> String {
         switch state {
         case let .lockdown(until):
@@ -151,6 +185,11 @@ enum GroupNowStatus {
         case .off:
             "Off"
         }
+    }
+
+    private static func sentenceCased(_ value: String) -> String {
+        guard let first = value.first else { return value }
+        return String(first).uppercased() + String(value.dropFirst())
     }
 
     /// "14:00", "tomorrow 09:00", "Fri 09:00". With `preposition`, "at 14:00".
@@ -206,5 +245,108 @@ struct DashboardNowSummary: Equatable, Sendable {
     func nextLine(now: Date, calendar: Calendar = .current) -> String? {
         guard let nextChange, let nextChangeDescription else { return nil }
         return "Next: \(nextChangeDescription) \(GroupNowStatus.moment(nextChange, now: now, calendar: calendar, preposition: true))"
+    }
+}
+
+/// Which group is actually holding a target right now.
+///
+/// A group whose own schedule is idle can still have every one of its sites
+/// unreachable, because a different group that is blocking right now lists the
+/// same target. The dashboard used to answer that row with "Next block ·
+/// tomorrow", which reads as an invitation to go and look. This finds the
+/// group with its foot against the door so the row can say so.
+///
+/// Only portable targets can be compared. Screen Time selections are opaque
+/// tokens that never leave the device that minted them, so two groups that
+/// overlap solely in app selections cannot be seen to overlap here, and such a
+/// row keeps its own schedule's wording.
+enum GroupCoverage {
+    /// The group holding this one's targets, and whether it holds all of them.
+    struct Holder: Equatable, Sendable {
+        var name: String
+        var isComplete: Bool
+    }
+
+    /// One row's side of the question.
+    struct Subject: Equatable, Sendable {
+        var id: UUID
+        var name: String
+        /// Retreat copies share their source group's name. Saying which one is
+        /// holding the door matters when both are on screen.
+        var isRetreatCopy: Bool
+        var isBlockingNow: Bool
+        /// An allow-list group blocks everything it does not name, so it covers
+        /// every other group's web targets while it runs.
+        var isAllowListFortress: Bool
+        var targets: Set<String>
+    }
+
+    /// Portable targets, namespaced so a domain can never collide with a
+    /// category or a bundle identifier.
+    static func targets(
+        domains: [String],
+        websiteCategories: Set<String>,
+        applicationIdentifiers: Set<String>
+    ) -> Set<String> {
+        var value = Set<String>()
+        for domain in domains {
+            let trimmed = domain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !trimmed.isEmpty else { continue }
+            // www. is a spelling of the same site, not a different target.
+            value.insert("site:" + (trimmed.hasPrefix("www.") ? String(trimmed.dropFirst(4)) : trimmed))
+        }
+        for category in websiteCategories { value.insert("category:" + category.lowercased()) }
+        for identifier in applicationIdentifiers { value.insert("app:" + identifier.lowercased()) }
+        return value
+    }
+
+    static func targets(of targets: CloudBlockingTargets?) -> Set<String> {
+        guard let targets else { return [] }
+        return self.targets(
+            domains: targets.domains.map(\.domain),
+            websiteCategories: targets.websiteCategories,
+            applicationIdentifiers: targets.macApplicationIdentifiers
+        )
+    }
+
+    static func targets(of rule: CloudRulePreference) -> Set<String> {
+        targets(
+            domains: rule.domains.map(\.domain),
+            websiteCategories: rule.websiteCategories,
+            applicationIdentifiers: rule.macApplicationIdentifiers
+        )
+    }
+
+    /// `result[id]` names a group blocking some or all of that group's targets
+    /// right now. Groups that are themselves blocking are left out: their own
+    /// row already says what is happening.
+    static func holders(for subjects: [Subject]) -> [UUID: Holder] {
+        let blocking = subjects.filter { $0.isBlockingNow && (!$0.targets.isEmpty || $0.isAllowListFortress) }
+        guard !blocking.isEmpty else { return [:] }
+
+        var result: [UUID: Holder] = [:]
+        for subject in subjects where !subject.isBlockingNow && !subject.targets.isEmpty {
+            var best: (overlap: Int, label: String)?
+            var covered = Set<String>()
+            for candidate in blocking where candidate.id != subject.id {
+                let overlap = candidate.isAllowListFortress
+                    ? subject.targets
+                    : candidate.targets.intersection(subject.targets)
+                guard !overlap.isEmpty else { continue }
+                covered.formUnion(overlap)
+                let label = candidate.isRetreatCopy ? "\(candidate.name) (Retreat)" : candidate.name
+                // Widest holder wins; the name breaks ties so the sentence does
+                // not change between two equally good answers.
+                if let current = best,
+                   current.overlap > overlap.count
+                       || (current.overlap == overlap.count && current.label <= label) {
+                    continue
+                }
+                best = (overlap.count, label)
+            }
+            guard let best else { continue }
+            result[subject.id] = Holder(name: best.label, isComplete: covered == subject.targets)
+        }
+        return result
     }
 }

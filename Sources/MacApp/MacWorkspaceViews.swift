@@ -215,6 +215,22 @@ struct MacDashboardView<StatusContent: View>: View {
         }
     }
 
+    /// Which group is holding each group's sites right now. Computed over the
+    /// whole list, because a row on its own cannot know that another group
+    /// already blocks the site it is about to say is free until tomorrow.
+    private func coverage(now: Date) -> [UUID: GroupCoverage.Holder] {
+        GroupCoverage.holders(for: dashboardRules.map { rule in
+            GroupCoverage.Subject(
+                id: rule.id,
+                name: rule.name,
+                isRetreatCopy: !baselineRuleIDs.contains(rule.id),
+                isBlockingNow: state(for: rule, now: now).isBlocking,
+                isAllowListFortress: rule.enforcementMode == "fortressAllowList",
+                targets: GroupCoverage.targets(of: rule)
+            )
+        })
+    }
+
     private func state(for rule: CloudRulePreference, now: Date) -> GroupNowState {
         GroupNowStatus.evaluate(
             isEnabled: rule.isEnabled,
@@ -282,6 +298,7 @@ struct MacDashboardView<StatusContent: View>: View {
                             rule: rule,
                             origin: baselineRuleIDs.contains(rule.id) ? "BASELINE" : "RETREAT",
                             state: state(for: rule, now: now),
+                            coveredBy: coverage(now: now)[rule.id],
                             now: now,
                             allowanceExpiresAt: temporaryAllowances[rule.id],
                             lockdownEndsAt: lockdownExpirations[rule.id]
@@ -415,6 +432,7 @@ private struct MacDashboardBlockingGroupRow: View {
     let rule: CloudRulePreference
     let origin: String
     let state: GroupNowState
+    let coveredBy: GroupCoverage.Holder?
     let now: Date
     let allowanceExpiresAt: Date?
     let lockdownEndsAt: Date?
@@ -432,7 +450,7 @@ private struct MacDashboardBlockingGroupRow: View {
                         MacRowChip(text: "RETREAT")
                     }
                 }
-                Text(GroupNowStatus.headline(state, now: now))
+                Text(GroupNowStatus.headline(state, now: now, coveredBy: coveredBy))
                     .font(.system(.callout, design: .default, weight: .semibold))
                     .foregroundStyle(state.isBlocking ? Color.primary : Color.secondary)
                 if let lockdownEndsAt {

@@ -278,6 +278,7 @@ struct IOSDashboardView: View {
                     IOSEmptyObjectRow(text: "No matching groups. Try a different name.")
                 }
                 let now = Date()
+                let coverage = coverageHolders(now: now)
                 ForEach(sortedGroups(now: now).filter { groupSearch.isEmpty || $0.name.localizedCaseInsensitiveContains(groupSearch) }) { group in
                     let state = nowState(group, now: now)
                     Button { editingBlockingGroup = group } label: {
@@ -290,7 +291,7 @@ struct IOSDashboardView: View {
                         }
                         IOSObjectRow(
                             title: group.name,
-                            headline: GroupNowStatus.headline(state, now: now),
+                            headline: GroupNowStatus.headline(state, now: now, coveredBy: coverage[group.id]),
                             headlineIsActive: state.isBlocking,
                             detail: HoldfastPresentation.targets(group.targets),
                             color: rowColor(state),
@@ -314,6 +315,39 @@ struct IOSDashboardView: View {
                 .accessibilityIdentifier("NEW BLOCKING GROUP")
             }
         }
+    }
+
+    /// Which group is holding each group's targets right now. A row cannot
+    /// work this out alone: the answer depends on every other group's state,
+    /// including the Retreat copies that are not in this list.
+    private func coverageHolders(now: Date) -> [UUID: GroupCoverage.Holder] {
+        let baselineIDs = Set(model.baseline.blockingGroups.map(\.id))
+        var subjects = model.baseline.blockingGroups.map { group in
+            GroupCoverage.Subject(
+                id: group.id,
+                name: group.name,
+                isRetreatCopy: false,
+                isBlockingNow: nowState(group, now: now).isBlocking,
+                isAllowListFortress: group.enforcementMode == "fortressAllowList",
+                targets: GroupCoverage.targets(of: group.targets)
+            )
+        }
+        for rule in model.dashboardBlockingRules where !baselineIDs.contains(rule.id) {
+            let state = GroupNowStatus.evaluate(
+                isEnabled: rule.isEnabled, windows: rule.windows, now: now,
+                allowanceUntil: model.activeTimeAllowance(for: rule.id)?.expiresAt,
+                lockdownUntil: model.lockdownExpirations[rule.id]
+            )
+            subjects.append(GroupCoverage.Subject(
+                id: rule.id,
+                name: rule.name,
+                isRetreatCopy: true,
+                isBlockingNow: state.isBlocking,
+                isAllowListFortress: rule.enforcementMode == "fortressAllowList",
+                targets: GroupCoverage.targets(of: rule)
+            ))
+        }
+        return GroupCoverage.holders(for: subjects)
     }
 
     private func nowState(_ group: CloudBlockingGroup, now: Date) -> GroupNowState {

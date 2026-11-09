@@ -115,3 +115,150 @@ final class GroupNowStatusTests: XCTestCase {
         XCTAssertEqual(ScheduleLanes.duration(minutes: 0), "Free")
     }
 }
+
+extension GroupNowStatusTests {
+    private func subject(
+        _ name: String,
+        blocking: Bool,
+        sites: [String],
+        retreat: Bool = false,
+        fortress: Bool = false
+    ) -> GroupCoverage.Subject {
+        GroupCoverage.Subject(
+            id: UUID(),
+            name: name,
+            isRetreatCopy: retreat,
+            isBlockingNow: blocking,
+            isAllowListFortress: fortress,
+            targets: GroupCoverage.targets(
+                domains: sites, websiteCategories: [], applicationIdentifiers: []
+            )
+        )
+    }
+
+    /// The case this came from: the Youtube group's own window had ended, but
+    /// youtube.com was still unreachable because a Retreat's "Full break"
+    /// listed it. The row said "Next block · tomorrow", which reads as an
+    /// invitation.
+    func testAGroupWhoseSitesAreHeldElsewhereIsToldSo() {
+        let idle = subject("Youtube", blocking: false, sites: ["youtube.com"])
+        let holder = subject("Full break", blocking: true, sites: ["youtube.com", "reddit.com"], retreat: true)
+
+        let holders = GroupCoverage.holders(for: [idle, holder])
+
+        XCTAssertEqual(holders[idle.id], GroupCoverage.Holder(name: "Full break (Retreat)", isComplete: true))
+        XCTAssertNil(holders[holder.id], "A group that is blocking already says so itself")
+    }
+
+    func testPartialOverlapIsReportedAsPartial() {
+        let idle = subject("Hyper intellectualizing", blocking: false, sites: ["reddit.com", "metr.com"])
+        let holder = subject("Full break", blocking: true, sites: ["reddit.com"])
+
+        XCTAssertEqual(
+            GroupCoverage.holders(for: [idle, holder])[idle.id],
+            GroupCoverage.Holder(name: "Full break", isComplete: false)
+        )
+    }
+
+    /// Two holders between them can cover everything even though neither does
+    /// alone, and the row should not claim to be only partly blocked.
+    func testTwoHoldersTogetherCountAsCompleteCover() {
+        let idle = subject("Feeds", blocking: false, sites: ["reddit.com", "x.com"])
+        let first = subject("Aardvark", blocking: true, sites: ["reddit.com"])
+        let second = subject("Zebra", blocking: true, sites: ["x.com"])
+
+        let holder = GroupCoverage.holders(for: [idle, first, second])[idle.id]
+
+        XCTAssertEqual(holder?.isComplete, true)
+        XCTAssertNotNil(holder?.name)
+    }
+
+    /// An allow-list group blocks everything it does not name, so it holds
+    /// every other group's sites while it runs.
+    func testAnAllowListFortressCoversEverything() {
+        let idle = subject("Feeds", blocking: false, sites: ["reddit.com", "metr.com"])
+        let fortress = subject("Deep work", blocking: true, sites: ["docs.example"], fortress: true)
+
+        XCTAssertEqual(
+            GroupCoverage.holders(for: [idle, fortress])[idle.id],
+            GroupCoverage.Holder(name: "Deep work", isComplete: true)
+        )
+    }
+
+    /// www. is a spelling of the same site, not a different target.
+    func testWWWPrefixDoesNotHideAnOverlap() {
+        let idle = subject("Twitter", blocking: false, sites: ["www.x.com"])
+        let holder = subject("Full break", blocking: true, sites: ["x.com"])
+
+        XCTAssertEqual(GroupCoverage.holders(for: [idle, holder])[idle.id]?.isComplete, true)
+    }
+
+    func testUnrelatedGroupsAreLeftAlone() {
+        let idle = subject("Mail", blocking: false, sites: ["mail.google.com"])
+        let holder = subject("Full break", blocking: true, sites: ["reddit.com"])
+
+        XCTAssertNil(GroupCoverage.holders(for: [idle, holder])[idle.id])
+    }
+
+    /// Screen Time selections are opaque tokens, so a group with no portable
+    /// targets cannot be matched and keeps its own schedule's wording.
+    func testAGroupWithNoPortableTargetsIsNeverCovered() {
+        let idle = subject("Apps only", blocking: false, sites: [])
+        let holder = subject("Full break", blocking: true, sites: ["reddit.com"])
+
+        XCTAssertNil(GroupCoverage.holders(for: [idle, holder])[idle.id])
+    }
+
+    func testHeadlineLeadsWithTheGroupActuallyBlocking() {
+        let state = GroupNowStatus.evaluate(
+            isEnabled: true, windows: [weekdays], now: date(28, 18), calendar: calendar
+        )
+        let sentence = GroupNowStatus.headline(
+            state, now: date(28, 18), calendar: calendar,
+            coveredBy: GroupCoverage.Holder(name: "Full break (Retreat)", isComplete: true)
+        )
+
+        XCTAssertTrue(sentence.hasPrefix("Blocked now by Full break (Retreat)"), sentence)
+        XCTAssertTrue(sentence.contains("own block"), sentence)
+    }
+
+    func testHeadlineIsUnchangedWithoutAHolder() {
+        let now = date(28, 18)
+        let state = GroupNowStatus.evaluate(isEnabled: true, windows: [weekdays], now: now, calendar: calendar)
+
+        XCTAssertEqual(
+            GroupNowStatus.headline(state, now: now, calendar: calendar, coveredBy: nil),
+            GroupNowStatus.headline(state, now: now, calendar: calendar)
+        )
+    }
+
+    /// A pause buys nothing if the same sites are held by another group, and
+    /// saying "Paused" alone would be the most misleading line on the screen.
+    func testAPausedGroupSaysItIsStillBlocked() {
+        let now = date(28, 12)
+        let state = GroupNowStatus.evaluate(
+            isEnabled: true, windows: [weekdays], now: now,
+            allowanceUntil: date(28, 13), calendar: calendar
+        )
+        let sentence = GroupNowStatus.headline(
+            state, now: now, calendar: calendar,
+            coveredBy: GroupCoverage.Holder(name: "Full break", isComplete: true)
+        )
+
+        XCTAssertEqual(sentence, "Paused · still blocked now by Full break")
+    }
+
+    /// A group that is itself blocking needs no second opinion.
+    func testABlockingGroupKeepsItsOwnSentence() {
+        let now = date(28, 12)
+        let state = GroupNowStatus.evaluate(isEnabled: true, windows: [weekdays], now: now, calendar: calendar)
+
+        XCTAssertEqual(
+            GroupNowStatus.headline(
+                state, now: now, calendar: calendar,
+                coveredBy: GroupCoverage.Holder(name: "Full break", isComplete: true)
+            ),
+            GroupNowStatus.headline(state, now: now, calendar: calendar)
+        )
+    }
+}
