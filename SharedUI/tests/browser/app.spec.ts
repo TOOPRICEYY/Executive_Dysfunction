@@ -295,3 +295,72 @@ test("a background status read never swallows the tap that follows it", async ({
     .poll(() => page.evaluate(() => (window as any).sentCommands))
     .toContain("startLockdown");
 });
+// The same bundle runs inside the Mac app and the Windows app. A filter that is
+// on but has not confirmed the current rules may still be blocking, so those
+// hosts read "not confirmed" rather than "not enforced".
+for (const platform of ["macos", "windows"] as const) {
+  test(`${platform} host: an unconfirmed filter never reads as blocking`, async ({
+    page,
+  }) => {
+    await page.addInitScript(
+      ({ state, platform }) => {
+        state.platform = platform;
+        delete state.summary;
+        state.enforcementEnabled = true;
+        state.enforcement = {
+          state: "unknown",
+          title: "Applying changes",
+          detail: "The filter is applying the latest rules.",
+        };
+        for (const group of state.groups) {
+          group.status = "unsupported";
+          group.detail = "Blocking is not confirmed on this device.";
+        }
+        state.groups[0].now = {
+          state: "blocking",
+          headline: "Blocking now · until 5:00 PM",
+          changesAt: new Date(Date.now() + 3600000).toISOString(),
+        };
+        const listeners = new Set<(event: { data: unknown }) => void>();
+        const host = window as any;
+        host.chrome ??= {};
+        host.chrome.webview = {
+          addEventListener(_: string, fn: (event: { data: unknown }) => void) {
+            listeners.add(fn);
+          },
+          removeEventListener(
+            _: string,
+            fn: (event: { data: unknown }) => void,
+          ) {
+            listeners.delete(fn);
+          },
+          postMessage(request: any) {
+            const reply = {
+              version: 1,
+              id: request.id,
+              ok: true,
+              result: { snapshot: structuredClone(state) },
+            };
+            queueMicrotask(() =>
+              listeners.forEach((fn) => fn({ data: reply })),
+            );
+          },
+        };
+      },
+      { state: previewSnapshot(), platform },
+    );
+    await page.goto("/");
+    await expect(page.getByText("Check device enforcement")).toBeVisible();
+    await expect(
+      page.getByText("The filter is applying the latest rules.").first(),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/^Scheduled until .+ · not confirmed$/).first(),
+    ).toBeVisible();
+    await expect(page.getByText(/^Blocking now/)).toHaveCount(0);
+    await expect(page.getByText(/· not enforced$/)).toHaveCount(0);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(page.viewportSize()!.width);
+  });
+}

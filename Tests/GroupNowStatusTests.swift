@@ -273,5 +273,11 @@ extension GroupNowStatusTests {
             GroupNowStatus.headline(state, now: date(29, 10), calendar: calendar))
         // States that claim nothing read the same either way.
         XCTAssertEqual(GroupNowStatus.headline(.off, now: date(29, 10), calendar: calendar, coveredBy: nil, enforced: false), "Off")
+        // A Mac filter that is on but cannot vouch for the rules may still be
+        // blocking, so the Mac says "not confirmed" rather than "not enforced".
+        let unconfirmed = GroupNowStatus.headline(state, now: date(29, 10), calendar: calendar, coveredBy: nil,
+                                                  enforced: false, unenforcedNote: GroupNowStatus.notConfirmed)
+        XCTAssertTrue(unconfirmed.hasPrefix("Scheduled until "), unconfirmed)
+        XCTAssertTrue(unconfirmed.hasSuffix(" · not confirmed"), unconfirmed)
     }
 }

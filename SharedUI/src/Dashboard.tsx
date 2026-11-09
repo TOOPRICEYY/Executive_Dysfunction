@@ -31,6 +31,8 @@ import {
   retreatGroupEnforced,
   sameDay,
   shownNow,
+  unenforcedNote,
+  type UnenforcedNote,
   targetSummary,
 } from "./presentation.ts";
 import { duration } from "./view-format.ts";
@@ -109,13 +111,15 @@ function LockChip({
 
 export function GroupRow({
   group: g,
+  note,
   onEdit,
 }: {
   group: Group;
+  note?: UnenforcedNote;
   onEdit(): void;
 }) {
   // Worded and styled as blocking only when the host also confirms enforcement.
-  const now = shownNow(groupNow(g), groupEnforced(g));
+  const now = shownNow(groupNow(g), groupEnforced(g), undefined, note);
   const enforced = isBlockingState(now.state) && groupEnforced(g);
   return (
     <button
@@ -163,13 +167,15 @@ export function GroupRow({
 function RetreatGroupRow({
   group: g,
   enforced,
+  note,
   onOpen,
 }: {
   group: RetreatGroup;
   enforced: boolean;
+  note?: UnenforcedNote;
   onOpen(): void;
 }) {
-  const now = shownNow(g.now, enforced);
+  const now = shownNow(g.now, enforced, undefined, note);
   const blocking = isBlockingState(now.state);
   return (
     <button
@@ -287,6 +293,7 @@ export function ScheduleLanes({
   const now = useNow(60_000);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const sources = lanesFor(snapshot);
+  const note = unenforcedNote(snapshot);
   const hostDay = snapshot.schedule?.days.find((d) =>
     sameDay(
       new Date(d.start),
@@ -412,6 +419,7 @@ export function ScheduleLanes({
               isToday,
               now,
               lane.enforced,
+              note,
             );
             const active =
               isToday &&
@@ -423,7 +431,7 @@ export function ScheduleLanes({
                 key={lane.id}
                 className="schedule-lane"
                 onClick={() => onSelect(lane.id)}
-                aria-label={`${lane.name}. ${isToday && lane.now ? shownNow(lane.now, lane.enforced, now).headline : label}`}
+                aria-label={`${lane.name}. ${isToday && lane.now ? shownNow(lane.now, lane.enforced, now, note).headline : label}`}
               >
                 <span className="lane-name">
                   <strong>{lane.name}</strong>
@@ -706,6 +714,7 @@ export function Dashboard({
   const match = (name: string) =>
     !search || name.toLowerCase().includes(search.toLowerCase());
   const presets = onPreset ? (snapshot.presets ?? []) : [];
+  const note = unenforcedNote(snapshot);
   const blocking = [
     ...groups.filter(groupEnforced).map(groupNow),
     ...retreatGroups
@@ -748,7 +757,12 @@ export function Dashboard({
           {groups
             .filter((g) => match(g.name))
             .map((g) => (
-              <GroupRow key={g.id} group={g} onEdit={() => edit(g)} />
+              <GroupRow
+                key={g.id}
+                group={g}
+                note={note}
+                onEdit={() => edit(g)}
+              />
             ))}
           {retreatGroups
             .filter((g) => match(g.name))
@@ -757,6 +771,7 @@ export function Dashboard({
                 key={g.id}
                 group={g}
                 enforced={retreatGroupEnforced(g, snapshot)}
+                note={note}
                 onOpen={onRetreats}
               />
             ))}

@@ -117,6 +117,35 @@ struct MacWorkspaceSidebar<StatusContent: View>: View {
     }
 }
 
+/// Why the Mac dashboard must not present its schedules as blocking. `nil`
+/// means the web filter confirms it is enforcing them.
+struct MacDashboardEnforcementGap: Equatable {
+    let headline: String
+    let detail: String
+    /// "not enforced" when the filter is off, "not confirmed" when it is on but
+    /// cannot vouch for the current rules.
+    let note: String
+
+    static func current(blockingDisabled: Bool, health: FilterEnforcementSummary.Health) -> MacDashboardEnforcementGap? {
+        if blockingDisabled {
+            return MacDashboardEnforcementGap(
+                headline: "Web filter is off",
+                detail: "Turn the web filter on to start blocking. Your groups and schedules are saved.",
+                note: GroupNowStatus.notEnforced)
+        }
+        switch health {
+        // Hostname blocking is in force while only IP retry protection is incomplete.
+        case .enforcing, .idle, .limited:
+            return nil
+        case .notReporting, .stale, .behind, .applying:
+            return MacDashboardEnforcementGap(
+                headline: "Check the web filter",
+                detail: FilterEnforcementSummary.description(for: health),
+                note: GroupNowStatus.notConfirmed)
+        }
+    }
+}
+
 struct MacDashboardView<StatusContent: View>: View {
     let activeRules: [CloudRulePreference]
     let calendarRules: [BlockStatusCalendarRule]
@@ -124,6 +153,7 @@ struct MacDashboardView<StatusContent: View>: View {
     let retreats: [CloudRetreat]
     let temporaryAllowances: [UUID: Date]
     let lockdownExpirations: [UUID: Date]
+    let enforcementGap: MacDashboardEnforcementGap?
     let onEdit: (CloudRulePreference) -> Void
     let onAdd: () -> Void
     let onAddPreset: ((HoldfastPresets.BlockingPreset) -> Void)?
@@ -140,6 +170,7 @@ struct MacDashboardView<StatusContent: View>: View {
         retreats: [CloudRetreat],
         temporaryAllowances: [UUID: Date] = [:],
         lockdownExpirations: [UUID: Date] = [:],
+        enforcementGap: MacDashboardEnforcementGap? = nil,
         onEdit: @escaping (CloudRulePreference) -> Void,
         onAdd: @escaping () -> Void,
         onAddPreset: ((HoldfastPresets.BlockingPreset) -> Void)? = nil,
@@ -154,6 +185,7 @@ struct MacDashboardView<StatusContent: View>: View {
         self.retreats = retreats
         self.temporaryAllowances = temporaryAllowances
         self.lockdownExpirations = lockdownExpirations
+        self.enforcementGap = enforcementGap
         self.onEdit = onEdit
         self.onAdd = onAdd
         self.onAddPreset = onAddPreset
@@ -199,14 +231,17 @@ struct MacDashboardView<StatusContent: View>: View {
         let summary = DashboardNowSummary(groups: dashboardRules.map {
             DashboardNowSummary.Group(name: $0.name, state: state(for: $0, now: now))
         })
+        // The summary is built from schedules. While the web filter is off or
+        // cannot vouch for them, it must not headline the dashboard as fact.
         return VStack(alignment: .leading, spacing: 6) {
-            Text(summary.headline.uppercased())
+            Text((enforcementGap?.headline ?? summary.headline).uppercased())
                 .font(.system(size: 34, weight: .semibold, design: .default))
                 .tracking(-0.5)
                 .accessibilityAddTraits(.isHeader)
-            Text(summary.nextLine(now: now) ?? "No changes scheduled in the next week.")
+            Text(enforcementGap?.detail ?? summary.nextLine(now: now) ?? "No changes scheduled in the next week.")
                 .font(.system(.callout, design: .default, weight: .semibold))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.bottom, 16)
@@ -246,6 +281,8 @@ struct MacDashboardView<StatusContent: View>: View {
         ScheduleLanesView(
             calendarRules: calendarRules,
             now: now,
+            enforced: enforcementGap == nil,
+            unenforcedNote: enforcementGap?.note ?? GroupNowStatus.notEnforced,
             states: Dictionary(
                 dashboardRules.map { ($0.id, state(for: $0, now: now)) },
                 uniquingKeysWith: { first, _ in first }
@@ -301,7 +338,8 @@ struct MacDashboardView<StatusContent: View>: View {
                             coveredBy: coverage(now: now)[rule.id],
                             now: now,
                             allowanceExpiresAt: temporaryAllowances[rule.id],
-                            lockdownEndsAt: lockdownExpirations[rule.id]
+                            lockdownEndsAt: lockdownExpirations[rule.id],
+                            unenforcedNote: enforcementGap?.note
                         )
                     }
                     .buttonStyle(.plain)
@@ -436,6 +474,11 @@ private struct MacDashboardBlockingGroupRow: View {
     let now: Date
     let allowanceExpiresAt: Date?
     let lockdownEndsAt: Date?
+    /// Set while the web filter does not confirm it is enforcing schedules.
+    var unenforcedNote: String? = nil
+
+    /// Worded and styled as blocking only while the filter confirms it.
+    private var showsBlocking: Bool { state.isBlocking && unenforcedNote == nil }
 
     var body: some View {
         HStack(spacing: 14) {
@@ -450,9 +493,10 @@ private struct MacDashboardBlockingGroupRow: View {
                         MacRowChip(text: "RETREAT")
                     }
                 }
-                Text(GroupNowStatus.headline(state, now: now, coveredBy: coveredBy))
+                Text(GroupNowStatus.headline(state, now: now, coveredBy: coveredBy, enforced: unenforcedNote == nil,
+                                             unenforcedNote: unenforcedNote ?? GroupNowStatus.notEnforced))
                     .font(.system(.callout, design: .default, weight: .semibold))
-                    .foregroundStyle(state.isBlocking ? Color.primary : Color.secondary)
+                    .foregroundStyle(showsBlocking ? Color.primary : Color.secondary)
                 if let lockdownEndsAt {
                     LockdownStatusBadge(endsAt: lockdownEndsAt)
                 } else if let allowanceExpiresAt {
@@ -472,7 +516,7 @@ private struct MacDashboardBlockingGroupRow: View {
         .padding(.horizontal, 20)
         .frame(minHeight: 76)
         .padding(.vertical, 6)
-        .background(state.isBlocking ? MacBrutalPalette.signal.opacity(0.06) : Color.clear)
+        .background(showsBlocking ? MacBrutalPalette.signal.opacity(0.06) : Color.clear)
         .contentShape(Rectangle())
         .overlay(alignment: .bottom) {
             Rectangle().fill(MacBrutalPalette.rule.opacity(0.65)).frame(height: 1)
@@ -485,7 +529,7 @@ private struct MacDashboardBlockingGroupRow: View {
     /// every enabled group, which said nothing about the present.
     private var barColor: Color {
         switch state {
-        case .lockdown, .blocking: MacBrutalPalette.signal
+        case .lockdown, .blocking: showsBlocking ? MacBrutalPalette.signal : MacBrutalPalette.signal.opacity(0.35)
         case .paused: Color.orange
         case .upcoming: MacBrutalPalette.signal.opacity(0.35)
         case .idle, .off: MacBrutalPalette.raisedSurface

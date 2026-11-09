@@ -233,6 +233,10 @@ final class SharedInterfaceSession: ObservableObject {
         let enabled = !model.enforcement.isBlockingDisabled
         let confirmed: Bool
         switch model.enforcementHealth { case .enforcing, .idle: confirmed = enabled; default: confirmed = false }
+        // Hostname blocking is in force while only IP retry protection is
+        // incomplete, so groups are blocking even though the filter needs a look.
+        let blockingConfirmed: Bool
+        if case .limited = model.enforcementHealth { blockingConfirmed = enabled } else { blockingConfirmed = confirmed }
         let controller = model.enforcement
         let warning = controller.activationSafetyRequiresRestart || controller.recoveryWarning != nil || controller.deliveryError != nil
         let headline: String
@@ -248,7 +252,7 @@ final class SharedInterfaceSession: ObservableObject {
         #else
         let platform = "ios"
         let enabled = model.isAuthorized
-        let confirmed = enabled
+        let blockingConfirmed = enabled
         let enforcement: [String: Any] = ["state": enabled ? "active" : "disabled", "title": "Screen Time: \(model.authorizationDescription)",
             "headline": enabled ? "Screen Time on" : "Connect Screen Time",
             "detail": enabled
@@ -290,8 +294,8 @@ final class SharedInterfaceSession: ObservableObject {
             switch state {
             case .off: status = "disabled"
             case .paused: status = "suspended"
-            case .lockdown: status = confirmed && hasDeviceTargets ? "lockdown" : "unsupported"
-            case .blocking: status = confirmed && hasDeviceTargets ? "blocking" : "unsupported"
+            case .lockdown: status = blockingConfirmed && hasDeviceTargets ? "lockdown" : "unsupported"
+            case .blocking: status = blockingConfirmed && hasDeviceTargets ? "blocking" : "unsupported"
             default: status = "allowed"
             }
             value["status"] = status
@@ -301,7 +305,10 @@ final class SharedInterfaceSession: ObservableObject {
             else if !hasDeviceTargets { value["detail"] = "No apps or websites are selected for this device. Other devices keep their own targets." }
             else {
                 #if os(macOS)
-                value["detail"] = "Enforcement is not confirmed on this Mac, so nothing is being blocked."
+                // An unhealthy filter may still be blocking; only "off" means nothing is blocked.
+                value["detail"] = enabled
+                    ? "The web filter has not confirmed this schedule, so blocking is not confirmed on this Mac."
+                    : "The web filter is off, so nothing is being blocked on this Mac."
                 #else
                 value["detail"] = "Screen Time access is off, so nothing is being blocked."
                 #endif
@@ -331,7 +338,7 @@ final class SharedInterfaceSession: ObservableObject {
             summaryGroups.append(.init(name: rule.name, state: state))
             return ["id": rule.id.uuidString, "name": rule.name,
                     "now": nowObject(state, now: now, coveredBy: coverage[rule.id]),
-                    "enforced": confirmed,
+                    "enforced": blockingConfirmed,
                     "lock": Self.policyKinds[rule.lockdown.severity] ?? "inherited",
                     "delayDays": min(365, max(0, rule.lockdown.unlockDelayDays)),
                     "targets": HoldfastPresentation.targets(rule: rule)]

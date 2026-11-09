@@ -87,8 +87,12 @@ Json WorkspaceService::Handle(const Json& request) {
             snapshot["enforcement"] = {{"state", error_ != 0 ? "error" : !acknowledged ? "unknown" : filters_ > 0 ? "active" : "disabled"},
                 {"title", error_ != 0 ? "Application filters need attention" : !acknowledged ? "Applying changes" : filters_ > 0 ? "Application networking blocked" : "Application filters idle"},
                 {"detail", "Selected application networking only. Websites and all-device sync are not connected on Windows. Active WFP filters: " + std::to_string(filters_) + "."}};
-            if (!acknowledged || error_ != 0) for (auto& group : snapshot["groups"]) if (group["status"] == "blocking") {
-                group["status"] = "unsupported"; group["detail"] = "Waiting for a successful filter acknowledgement; blocking is not confirmed.";
+            // A schedule is only shown as blocking while filters are confirmed in place.
+            const bool unconfirmed = !acknowledged || error_ != 0;
+            if (unconfirmed || filters_ == 0) for (auto& group : snapshot["groups"]) if (group["status"] == "blocking") {
+                group["status"] = "unsupported";
+                group["detail"] = unconfirmed ? "Waiting for a successful filter acknowledgement; blocking is not confirmed."
+                    : "No application filters are active, so this group is not blocking right now.";
             }
         }
         reply["ok"] = true; reply["result"] = result;

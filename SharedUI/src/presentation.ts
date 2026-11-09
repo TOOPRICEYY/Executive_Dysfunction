@@ -26,11 +26,15 @@ export function nowHeadline(snapshot: Snapshot): string {
     snapshot.enforcement.state === "error"
   )
     return "Check device enforcement";
-  if (snapshot.enforcement.state === "disabled")
+  if (snapshot.enforcement.state === "disabled") {
     // On iOS nothing was paused: Screen Time access was never granted or was revoked.
-    return snapshot.platform === "ios"
-      ? "Nothing is being blocked"
-      : "Enforcement is paused";
+    if (snapshot.platform === "ios") return "Nothing is being blocked";
+    // "Paused" is only true when the host says its switch is off. A Windows
+    // service that is stopped or idle reports "disabled" with the switch on.
+    return snapshot.enforcementEnabled === false
+      ? "Enforcement is paused"
+      : "Nothing is blocked right now";
+  }
   const blocked = snapshot.groups.filter(
     (g) => g.status === "blocking" || g.status === "lockdown",
   ).length;
@@ -115,9 +119,12 @@ export function nextLine(snapshot: Snapshot): string {
   if (!enforcementConfirmed(snapshot)) {
     if (snapshot.enforcement.state !== "disabled")
       return snapshot.enforcement.detail;
-    return snapshot.platform === "ios"
-      ? "Allow Screen Time access to start blocking. Your groups and schedules are saved."
-      : "Turn enforcement on to start blocking. Your groups and schedules are saved.";
+    if (snapshot.platform === "ios")
+      return "Allow Screen Time access to start blocking. Your groups and schedules are saved.";
+    // Only tell the person to turn it on when the host says the switch is off.
+    return snapshot.enforcementEnabled === false
+      ? "Turn enforcement on to start blocking. Your groups and schedules are saved."
+      : snapshot.enforcement.detail;
   }
   if (snapshot.summary)
     return snapshot.summary.next ?? "No changes scheduled in the next week.";
@@ -167,19 +174,31 @@ export function byNow<T extends { name: string }>(
 export const isBlockingState = (s: NowState) =>
   s === "blocking" || s === "lockdown";
 
+export type UnenforcedNote = "not enforced" | "not confirmed";
+/** Why a scheduled block is not shown as blocking. "Not enforced" is a fact the
+ * host reported (enforcement is off, or nothing is selected for this device).
+ * A Mac or Windows filter that is applying, stale or in error may still be
+ * blocking, so there the honest word is "not confirmed". */
+export function unenforcedNote(snapshot: Snapshot): UnenforcedNote {
+  const state = snapshot.enforcement.state;
+  return state === "unknown" || state === "error"
+    ? "not confirmed"
+    : "not enforced";
+}
 /** A blocking or lockdown state the host does not confirm is shown as a plan, never as "Blocking now". */
 export function shownNow(
   now: GroupNow,
   enforced: boolean,
   clockNow = new Date(),
+  note: UnenforcedNote = "not enforced",
 ): GroupNow {
   if (enforced || !isBlockingState(now.state)) return now;
   const what = now.state === "lockdown" ? "Lockdown" : "Scheduled";
   return {
     ...now,
     headline: now.changesAt
-      ? `${what} until ${moment(now.changesAt, clockNow)} · not enforced`
-      : `${what} now · not enforced`,
+      ? `${what} until ${moment(now.changesAt, clockNow)} · ${note}`
+      : `${what} now · ${note}`,
   };
 }
 /** Group status is the host's per-group verdict; "unsupported" means scheduled but not enforced here. */
@@ -257,9 +276,11 @@ export function laneLabel(
   isToday: boolean,
   today: Date,
   enforced = true,
+  note: UnenforcedNote = "not enforced",
 ): string {
   if (isToday && now) {
-    if (!enforced && isBlockingState(now.state)) return "Not enforced";
+    if (!enforced && isBlockingState(now.state))
+      return note === "not confirmed" ? "Not confirmed" : "Not enforced";
     switch (now.state) {
       case "lockdown":
         return "Locked down";

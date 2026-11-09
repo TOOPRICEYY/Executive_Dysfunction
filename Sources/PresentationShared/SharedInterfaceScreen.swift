@@ -53,7 +53,10 @@ struct SharedInterfaceScreen: View {
         .sheet(isPresented: Binding(get: { session.nativePanel != nil }, set: { if !$0 { session.nativePanel = nil } })) {
             #if os(macOS)
             VStack {
-                HStack { Spacer(); Button("Close") { session.nativePanel = nil }.padding() }
+                // The lockdown and diagnostics sheets carry their own Close button.
+                if session.nativePanel != "startLockdown" && session.nativePanel != "diagnostics" {
+                    HStack { Spacer(); Button("Close") { session.nativePanel = nil }.padding() }
+                }
                 if let error = model.errorMessage { Text(error).foregroundStyle(.red).padding().accessibilityLabel("Action needed: \(error)") }
                 nativePanel
             }

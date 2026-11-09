@@ -16,6 +16,7 @@ import {
   groupEnforced,
   retreatGroupEnforced,
   enforcementConfirmed,
+  unenforcedNote,
 } from "../src/presentation.ts";
 
 test("dashboard headline respects confirmed device state and never claims preview enforcement", () => {
@@ -23,7 +24,11 @@ test("dashboard headline respects confirmed device state and never claims previe
   // Preview shows the fixture's own host-style summary (sample data only).
   assert.equal(nowHeadline(state), state.summary!.headline);
   state.platform = "macos";
+  // "Paused" needs the host to say its switch is off; "disabled" alone is not enough.
+  assert.equal(nowHeadline(state), "Nothing is blocked right now");
+  state.enforcementEnabled = false;
   assert.equal(nowHeadline(state), "Enforcement is paused");
+  assert.match(nextLine(state), /^Turn enforcement on to start blocking/);
   state.enforcement.state = "unknown";
   assert.equal(nowHeadline(state), "Check device enforcement");
   state.enforcement.state = "active";
@@ -321,4 +326,55 @@ test("history counts filter by date and group identity, not mutable name", () =>
   assert.equal(counted.length, 1);
   assert.equal(counted[0].count, 2);
   assert.deepEqual(bypassCounts([event], Date.now()), []);
+});
+
+test("Mac and Windows hosts get the same honest wording as the iPhone", () => {
+  const now = new Date(2026, 0, 5, 12, 0);
+  const blocking = {
+    state: "blocking" as const,
+    headline: "Blocking now · until 5:00 PM",
+    changesAt: new Date(2026, 0, 5, 17, 0).toISOString(),
+  };
+  // Windows with enforcement on but nothing scheduled, or with its service
+  // stopped: not "paused", and no advice to turn on a switch that is on.
+  const windows = previewSnapshot();
+  windows.platform = "windows";
+  delete windows.summary;
+  windows.enforcementEnabled = true;
+  windows.enforcement = {
+    state: "disabled",
+    title: "Application service is stopped",
+    detail: "Start the Holdfast service to enforce application blocks.",
+  };
+  assert.equal(nowHeadline(windows), "Nothing is blocked right now");
+  assert.equal(nextLine(windows), windows.enforcement.detail);
+  assert.equal(unenforcedNote(windows), "not enforced");
+  windows.enforcementEnabled = false;
+  assert.equal(nowHeadline(windows), "Enforcement is paused");
+  assert.match(nextLine(windows), /^Turn enforcement on/);
+
+  // A filter that is applying, stale or failing may still be blocking, so a
+  // schedule it cannot vouch for reads "not confirmed", never "not enforced".
+  for (const platform of ["macos", "windows"] as const) {
+    const state = previewSnapshot();
+    state.platform = platform;
+    state.enforcementEnabled = true;
+    for (const unsure of ["unknown", "error"] as const) {
+      state.enforcement.state = unsure;
+      const note = unenforcedNote(state);
+      assert.equal(note, "not confirmed");
+      assert.match(
+        shownNow(blocking, false, now, note).headline,
+        /^Scheduled until .+ · not confirmed$/,
+      );
+      assert.equal(
+        laneLabel(blocking, 300, true, now, false, note),
+        "Not confirmed",
+      );
+      assert.equal(nowHeadline(state), "Check device enforcement");
+    }
+    state.enforcement.state = "disabled";
+    assert.equal(unenforcedNote(state), "not enforced");
+    assert.equal(laneLabel(blocking, 300, true, now, false), "Not enforced");
+  }
 });

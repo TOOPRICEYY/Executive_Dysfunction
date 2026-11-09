@@ -187,6 +187,12 @@ enum GroupNowStatus {
         }
     }
 
+    /// The reason a scheduled block is not shown as blocking. "not enforced" is a
+    /// fact (enforcement is off). A Mac filter that is on but applying, stale or
+    /// behind may still be blocking, so there the honest word is "not confirmed".
+    static let notEnforced = "not enforced"
+    static let notConfirmed = "not confirmed"
+
     /// A schedule is only a plan until the device confirms it is enforcing it.
     /// While it is not, a group in a blocking window must not read "Blocking now".
     static func headline(
@@ -194,15 +200,16 @@ enum GroupNowStatus {
         now: Date,
         calendar: Calendar = .current,
         coveredBy holder: GroupCoverage.Holder?,
-        enforced: Bool
+        enforced: Bool,
+        unenforcedNote note: String = GroupNowStatus.notEnforced
     ) -> String {
         guard !enforced, state.isBlocking else {
             return headline(state, now: now, calendar: calendar, coveredBy: holder)
         }
         let what: String
         if case .lockdown = state { what = "Lockdown" } else { what = "Scheduled" }
-        return state.changesAt.map { "\(what) until \(moment($0, now: now, calendar: calendar)) · not enforced" }
-            ?? "\(what) now · not enforced"
+        return state.changesAt.map { "\(what) until \(moment($0, now: now, calendar: calendar)) · \(note)" }
+            ?? "\(what) now · \(note)"
     }
 
     private static func sentenceCased(_ value: String) -> String {
