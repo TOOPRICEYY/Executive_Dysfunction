@@ -634,3 +634,81 @@ extension CloudPreferencesTests {
         )
     }
 }
+
+extension CloudPreferencesTests {
+    private func runningRetreat(
+        start: Date,
+        end: Date,
+        severity: String
+    ) -> CloudRetreat {
+        var policy = CloudRuleLockdownPreference()
+        policy.severity = severity
+        policy.unlockDelayDays = 3
+        var retreat = CloudRetreat(
+            name: "All things",
+            goal: "Peace",
+            plannedStart: start,
+            plannedEnd: end,
+            state: .active,
+            modificationPolicy: policy
+        )
+        retreat.appendVersion(blockingGroups: [], modificationPolicy: policy, at: start)
+        return retreat
+    }
+
+    /// The early-end process is decoration if the end date can simply be
+    /// dragged backwards, so shortening passes through the same gate.
+    func testShorteningARunningRetreatCountsAsWeakeningIt() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let retreat = runningRetreat(start: start, end: start.addingTimeInterval(39 * 3_600), severity: "delayed")
+
+        XCTAssertTrue(CloudRetreatEarlyEndGate.weakensPlannedInterval(
+            retreat, plannedStart: start, plannedEnd: start.addingTimeInterval(3_600)
+        ))
+    }
+
+    /// Pushing the start past now stops enforcement just as surely.
+    func testMovingARunningRetreatsStartLaterCountsAsWeakeningIt() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let retreat = runningRetreat(start: start, end: start.addingTimeInterval(39 * 3_600), severity: "delayed")
+
+        XCTAssertTrue(CloudRetreatEarlyEndGate.weakensPlannedInterval(
+            retreat, plannedStart: start.addingTimeInterval(3_600), plannedEnd: start.addingTimeInterval(39 * 3_600)
+        ))
+    }
+
+    func testLengtheningARunningRetreatNeedsNoAuthorization() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let retreat = runningRetreat(start: start, end: start.addingTimeInterval(39 * 3_600), severity: "delayed")
+
+        XCTAssertFalse(CloudRetreatEarlyEndGate.weakensPlannedInterval(
+            retreat, plannedStart: start, plannedEnd: start.addingTimeInterval(80 * 3_600)
+        ))
+    }
+
+    /// A Retreat that has not started holds nothing, so editing its dates is
+    /// an ordinary edit.
+    func testAScheduledRetreatCanStillBeRescheduled() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        var retreat = runningRetreat(start: start, end: start.addingTimeInterval(39 * 3_600), severity: "delayed")
+        retreat.state = .scheduled
+
+        XCTAssertFalse(CloudRetreatEarlyEndGate.weakensPlannedInterval(
+            retreat, plannedStart: start, plannedEnd: start.addingTimeInterval(3_600)
+        ))
+    }
+
+    /// With no change policy the Retreat was never a commitment, so shortening
+    /// it is allowed — the gate reports the weakening, `canEndEarly` permits it.
+    func testAnUnpolicedRetreatCanBeShortenedWithoutAPassage() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let retreat = runningRetreat(start: start, end: start.addingTimeInterval(39 * 3_600), severity: "none")
+
+        XCTAssertTrue(CloudRetreatEarlyEndGate.weakensPlannedInterval(
+            retreat, plannedStart: start, plannedEnd: start.addingTimeInterval(3_600)
+        ))
+        XCTAssertTrue(CloudRetreatEarlyEndGate.canEndEarly(
+            retreat, authorizationIsUnlocked: false, appDefault: CloudRuleLockdownPreference()
+        ))
+    }
+}

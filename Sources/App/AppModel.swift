@@ -442,7 +442,10 @@ final class AppModel: ObservableObject {
         guard let policy = retreatChangePolicy(for: id) else { return .idle }
         return Lockdown.phase(
             of: retreatUnlockProcesses[id],
-            configuration: lockdownConfiguration(for: policy),
+            configuration: lockdownConfiguration(
+                for: policy,
+                endingNoLaterThan: retreats.first(where: { $0.id == id })?.plannedEnd
+            ),
             at: now
         )
     }
@@ -529,7 +532,10 @@ final class AppModel: ObservableObject {
         return TemporaryAccessPolicyComparison.warning(changePolicy: effective, temporaryPolicy: effective)
     }
 
-    private func lockdownConfiguration(for policy: CloudRetreatChangePolicy) -> LockdownConfiguration {
+    private func lockdownConfiguration(
+        for policy: CloudRetreatChangePolicy,
+        endingNoLaterThan ceiling: Date? = nil
+    ) -> LockdownConfiguration {
         var configuration = LockdownConfiguration()
         configuration.isEnabled = policy.requiresAuthorization
         configuration.unlockDelayDays = policy.unlockDelayDays
@@ -537,6 +543,10 @@ final class AppModel: ObservableObject {
         configuration.passageWordCount = policy.passageWordCount
         configuration.confirmationWindowHours = policy.confirmationWindowHours
         configuration.editWindowHours = policy.editWindowHours
+        // The wait is capped at the Retreat's own remaining time, so an early
+        // end is always reachable rather than coming due after the Retreat has
+        // already finished by itself.
+        configuration.unlockCeiling = ceiling
         return configuration
     }
 
@@ -1018,6 +1028,28 @@ final class AppModel: ObservableObject {
         var retreat: CloudRetreat
         if let id, let index = document.retreats.firstIndex(where: { $0.id == id }) {
             retreat = document.retreats[index]
+            // Shortening a running Retreat releases enforcement exactly as
+            // ending it early does, so it passes through the same gate rather
+            // than slipping past it as an ordinary edit.
+            let clampedEnd = max(plannedStart.addingTimeInterval(60), plannedEnd)
+            if CloudRetreatEarlyEndGate.weakensPlannedInterval(
+                retreat, plannedStart: plannedStart, plannedEnd: clampedEnd
+            ) {
+                let authorized: Bool
+                if case .unlocked = retreatUnlockPhase(for: retreat.id, now: now) {
+                    authorized = true
+                } else {
+                    authorized = false
+                }
+                if !CloudRetreatEarlyEndGate.canEndEarly(
+                    retreat,
+                    authorizationIsUnlocked: authorized,
+                    appDefault: retreatAppDefaultPolicy
+                ) {
+                    errorMessage = "Complete this Retreat\u{2019}s change policy before shortening it."
+                    return false
+                }
+            }
             let retreatGroups = CloudRetreatGroupVersioning.versionedGroups(
                 from: sourceBlockingGroups,
                 replacing: retreat.currentVersion?.blockingGroups ?? [],
@@ -1026,7 +1058,7 @@ final class AppModel: ObservableObject {
             retreat.name = normalizedName(name, fallback: "Retreat")
             retreat.goal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
             retreat.plannedStart = plannedStart
-            retreat.plannedEnd = max(plannedStart.addingTimeInterval(60), plannedEnd)
+            retreat.plannedEnd = clampedEnd
             retreat.appendVersion(
                 blockingGroups: retreatGroups,
                 modificationPolicy: modificationPolicy,

@@ -909,6 +909,23 @@ enum CloudRetreatEarlyEndGate {
         )
     }
 
+    /// Whether a saved interval would release a running Retreat sooner than
+    /// the one it is running under.
+    ///
+    /// Pulling the end in, or pushing the start past now, stops enforcement
+    /// exactly as ending early does — and the editor reaches both with a
+    /// stepper, no passage required. Without this the early-end process is
+    /// decoration: anyone who can edit the Retreat can simply shorten it.
+    /// Lengthening is a strengthening and never needs authorization.
+    static func weakensPlannedInterval(
+        _ retreat: CloudRetreat,
+        plannedStart: Date,
+        plannedEnd: Date
+    ) -> Bool {
+        guard retreat.state == .active else { return false }
+        return plannedEnd < retreat.plannedEnd || plannedStart > retreat.plannedStart
+    }
+
     static func canEndEarly(
         _ retreat: CloudRetreat,
         authorizationIsUnlocked: Bool,

@@ -13,31 +13,32 @@ final class LockdownTests: XCTestCase {
         allowance.expiresAt = allowance.expiresAt.addingTimeInterval(600)
         XCTAssertFalse(allowance.isDueForMonitorEnd(at: boundary))
     }
-    func testTemporaryAccessOffersOnlyTenThirtyAndSixtyMinutes() {
-        XCTAssertEqual(TemporaryAccessDuration.allCases.map(\.rawValue), [10, 30, 60])
+    func testTemporaryAccessOffersOneMinuteThroughAnHour() {
+        XCTAssertEqual(TemporaryAccessDuration.allCases.map(\.rawValue), [1, 5, 10, 30, 60])
         XCTAssertEqual(TemporaryAccessDuration.thirtyMinutes.seconds, 30 * 60)
+        XCTAssertEqual(TemporaryAccessDuration.oneMinute.seconds, 60)
     }
 
     func testTemporaryAccessCapUsesCumulativeMinutes() {
         XCTAssertTrue(TimeAllowancePolicy.canGrant(
             .thirtyMinutes,
             afterMinutes: 120,
-            maximumHours: 3
+            maximumMinutes: 180
         ))
         XCTAssertTrue(TimeAllowancePolicy.canGrant(
             .sixtyMinutes,
             afterMinutes: 120,
-            maximumHours: 3
+            maximumMinutes: 180
         ))
         XCTAssertFalse(TimeAllowancePolicy.canGrant(
             .tenMinutes,
             afterMinutes: 180,
-            maximumHours: 3
+            maximumMinutes: 180
         ))
         XCTAssertFalse(TimeAllowancePolicy.canGrant(
             .sixtyMinutes,
             afterMinutes: 150,
-            maximumHours: 3
+            maximumMinutes: 180
         ))
     }
 
@@ -510,5 +511,237 @@ final class LockdownTests: XCTestCase {
         XCTAssertTrue(PassageDiff.compare(typed: typed, passage: passage).allSatisfy {
             $0.kind == .matched
         })
+    }
+}
+
+extension LockdownTests {
+    /// The session maximum is the floor the user was asking about: it used to
+    /// bottom out at one hour, so a group could never permit a genuinely short
+    /// bypass.
+    func testSessionMaximumReachesOneMinute() {
+        XCTAssertEqual(TimeAllowancePolicy.maximumMinutesRange.lowerBound, 1)
+        XCTAssertEqual(TimeAllowancePolicy.maximumMinutesLadder.first, 1)
+        XCTAssertEqual(TimeAllowancePolicy.maximumMinutesLadder.last, 480)
+    }
+
+    /// A one-minute maximum is useless unless a grant that small exists, so the
+    /// shortest duration has to fit inside it.
+    func testOneMinuteGrantFitsAOneMinuteMaximum() {
+        XCTAssertTrue(TimeAllowancePolicy.canGrant(.oneMinute, afterMinutes: 0, maximumMinutes: 1))
+        XCTAssertFalse(TimeAllowancePolicy.canGrant(.fiveMinutes, afterMinutes: 0, maximumMinutes: 1))
+        XCTAssertFalse(TimeAllowancePolicy.canGrant(.oneMinute, afterMinutes: 1, maximumMinutes: 1))
+    }
+
+    func testShortDurationsAreOfferedAndReadNaturally() {
+        XCTAssertEqual(TemporaryAccessDuration.oneMinute.minutes, 1)
+        XCTAssertEqual(TemporaryAccessDuration.oneMinute.title, "1 minute")
+        XCTAssertEqual(TemporaryAccessDuration.fiveMinutes.title, "5 minutes")
+        XCTAssertEqual(TemporaryAccessDuration.allCases.map(\.minutes), [1, 5, 10, 30, 60])
+    }
+
+    /// Apple's shield has exactly three secondary submenu slots, so that path
+    /// cannot grow with the duration list.
+    func testShieldSubmenuStillHasExactlyThreeSlots() {
+        XCTAssertEqual(TemporaryAccessDuration.shieldSubmenuOptions.count, 3)
+    }
+
+    /// The ladder exists so eight hours stays a few presses away; every rung
+    /// must be inside the permitted range and strictly increasing.
+    func testLadderIsOrderedAndWithinRange() {
+        let ladder = TimeAllowancePolicy.maximumMinutesLadder
+        XCTAssertEqual(ladder, ladder.sorted())
+        XCTAssertEqual(Set(ladder).count, ladder.count)
+        XCTAssertTrue(ladder.allSatisfy { TimeAllowancePolicy.maximumMinutesRange.contains($0) })
+    }
+
+    func testLadderIndexSnapsDownToAReachableRung() {
+        XCTAssertEqual(TimeAllowancePolicy.maximumMinutesLadder[TimeAllowancePolicy.ladderIndex(forMinutes: 1)], 1)
+        XCTAssertEqual(TimeAllowancePolicy.maximumMinutesLadder[TimeAllowancePolicy.ladderIndex(forMinutes: 7)], 5)
+        XCTAssertEqual(TimeAllowancePolicy.maximumMinutesLadder[TimeAllowancePolicy.ladderIndex(forMinutes: 480)], 480)
+        // Out-of-range values clamp rather than trapping on an index.
+        XCTAssertEqual(TimeAllowancePolicy.maximumMinutesLadder[TimeAllowancePolicy.ladderIndex(forMinutes: 0)], 1)
+        XCTAssertEqual(TimeAllowancePolicy.maximumMinutesLadder[TimeAllowancePolicy.ladderIndex(forMinutes: 10_000)], 480)
+    }
+
+    func testMaximumIsDescribedInUnitsAPersonReads() {
+        XCTAssertEqual(TimeAllowancePolicy.describeMaximum(minutes: 1), "1 minute")
+        XCTAssertEqual(TimeAllowancePolicy.describeMaximum(minutes: 45), "45 minutes")
+        XCTAssertEqual(TimeAllowancePolicy.describeMaximum(minutes: 60), "1 hour")
+        XCTAssertEqual(TimeAllowancePolicy.describeMaximum(minutes: 90), "1 hour 30 min")
+        XCTAssertEqual(TimeAllowancePolicy.describeMaximum(minutes: 480), "8 hours")
+    }
+
+    /// A policy written before minutes existed must keep working, and writing a
+    /// sub-hour maximum must floor the legacy hour field rather than rounding it
+    /// up to an hour nobody authorised.
+    func testLegacyHourFieldRemainsTheFallbackAndFloorsOnWrite() {
+        var policy = CloudRuleLockdownPreference()
+        policy.allowsTimeExtensions = true
+        policy.maximumTimeExtensionHours = 3
+        XCTAssertNil(policy.maximumTemporaryAccessMinutes)
+        XCTAssertEqual(policy.effectiveMaximumTemporaryAccessMinutes, 180)
+
+        policy.setMaximumTemporaryAccess(minutes: 5)
+        XCTAssertEqual(policy.effectiveMaximumTemporaryAccessMinutes, 5)
+        XCTAssertEqual(policy.maximumTimeExtensionHours, 0, "A sub-hour maximum must not read as a whole hour elsewhere")
+
+        policy.setMaximumTemporaryAccess(minutes: 90)
+        XCTAssertEqual(policy.maximumTimeExtensionHours, 1)
+    }
+
+    func testMinutesSurviveACloudRoundTripAndClamp() throws {
+        var policy = CloudRuleLockdownPreference()
+        policy.setMaximumTemporaryAccess(minutes: 2)
+        let decoded = try JSONDecoder().decode(
+            CloudRuleLockdownPreference.self,
+            from: try JSONEncoder().encode(policy)
+        )
+        XCTAssertEqual(decoded.effectiveMaximumTemporaryAccessMinutes, 2)
+
+        var absurd = policy
+        absurd.maximumTemporaryAccessMinutes = 100_000
+        let clamped = try JSONDecoder().decode(
+            CloudRuleLockdownPreference.self,
+            from: try JSONEncoder().encode(absurd)
+        )
+        XCTAssertEqual(clamped.effectiveMaximumTemporaryAccessMinutes, 480)
+    }
+
+    /// Combining policies keeps the most restrictive maximum, which now has to
+    /// compare minutes rather than whole hours.
+    func testRestrictiveMaximumKeepsTheSmallestMinuteValue() {
+        var lenient = CloudRuleLockdownPreference(severity: "passageOnly")
+        lenient.allowsTimeExtensions = true
+        lenient.setMaximumTemporaryAccess(minutes: 120)
+        var strict = CloudRuleLockdownPreference(severity: "passageOnly")
+        strict.allowsTimeExtensions = true
+        strict.setMaximumTemporaryAccess(minutes: 5)
+
+        let combined = CloudRuleLockdownPreference.restrictiveMaximum([lenient, strict])
+
+        XCTAssertEqual(combined.effectiveMaximumTemporaryAccessMinutes, 5)
+    }
+}
+
+extension LockdownTests {
+    private func retreatConfiguration(
+        delayDays: Int,
+        ceiling: Date?,
+        repeats: Bool = false
+    ) -> LockdownConfiguration {
+        var configuration = LockdownConfiguration()
+        configuration.isEnabled = true
+        configuration.unlockDelayDays = delayDays
+        configuration.repeatConfirmations = repeats
+        configuration.editWindowHours = 24
+        configuration.unlockCeiling = ceiling
+        return configuration
+    }
+
+    /// The case that prompted this: a three-day wait guarding a thirty-nine
+    /// hour Retreat could never come due, so the request was unusable.
+    func testUnlockCannotOpenAfterTheRetreatHasAlreadyEnded() {
+        let started = Date(timeIntervalSince1970: 1_800_000_000)
+        let retreatEnds = started.addingTimeInterval(39 * 3_600)
+        let process = UnlockProcess(startedAt: started)
+
+        let phase = Lockdown.phase(
+            of: process,
+            configuration: retreatConfiguration(delayDays: 3, ceiling: retreatEnds),
+            at: started.addingTimeInterval(60)
+        )
+
+        guard case let .waiting(unlocksAt, _) = phase else {
+            return XCTFail("Expected the request to be waiting, got \(phase)")
+        }
+        XCTAssertEqual(unlocksAt, retreatEnds, "The wait must stop at the Retreat's own end")
+    }
+
+    func testCappedUnlockActuallyOpensAtTheCeiling() {
+        let started = Date(timeIntervalSince1970: 1_800_000_000)
+        let retreatEnds = started.addingTimeInterval(39 * 3_600)
+        let process = UnlockProcess(startedAt: started)
+
+        let phase = Lockdown.phase(
+            of: process,
+            configuration: retreatConfiguration(delayDays: 3, ceiling: retreatEnds),
+            at: retreatEnds.addingTimeInterval(1)
+        )
+
+        guard case .unlocked = phase else {
+            return XCTFail("The edit window must open once the ceiling passes, got \(phase)")
+        }
+    }
+
+    /// A ceiling must never *lengthen* a wait: it is a cap, not a schedule.
+    func testACeilingLaterThanTheDelayChangesNothing() {
+        let started = Date(timeIntervalSince1970: 1_800_000_000)
+        let process = UnlockProcess(startedAt: started)
+        let generous = started.addingTimeInterval(30 * 86_400)
+
+        let capped = Lockdown.phase(
+            of: process, configuration: retreatConfiguration(delayDays: 3, ceiling: generous),
+            at: started.addingTimeInterval(60)
+        )
+        let uncapped = Lockdown.phase(
+            of: process, configuration: retreatConfiguration(delayDays: 3, ceiling: nil),
+            at: started.addingTimeInterval(60)
+        )
+
+        XCTAssertEqual(capped, uncapped)
+    }
+
+    /// The app-wide lockdown sets no ceiling, so its behaviour is untouched.
+    func testNoCeilingLeavesTheDelayExactlyAsBefore() {
+        let started = Date(timeIntervalSince1970: 1_800_000_000)
+        let process = UnlockProcess(startedAt: started)
+
+        let phase = Lockdown.phase(
+            of: process, configuration: retreatConfiguration(delayDays: 3, ceiling: nil),
+            at: started.addingTimeInterval(60)
+        )
+
+        guard case let .waiting(unlocksAt, _) = phase else {
+            return XCTFail("Expected waiting, got \(phase)")
+        }
+        XCTAssertEqual(unlocksAt, started.addingTimeInterval(3 * 86_400))
+    }
+
+    /// With repeated confirmations, only the checkpoints that fit before the
+    /// ceiling can be required, or the process could never finish either.
+    func testCheckpointsAreReducedToThoseThatFitBeforeTheCeiling() {
+        let started = Date(timeIntervalSince1970: 1_800_000_000)
+        let retreatEnds = started.addingTimeInterval(39 * 3_600)
+        var process = UnlockProcess(startedAt: started)
+        let configuration = retreatConfiguration(delayDays: 3, ceiling: retreatEnds, repeats: true)
+
+        let due = Lockdown.phase(
+            of: process, configuration: configuration,
+            at: started.addingTimeInterval(86_400 + 60)
+        )
+        guard case let .confirmationDue(_, _, checkpoint, total) = due else {
+            return XCTFail("Expected a checkpoint to be due, got \(due)")
+        }
+        XCTAssertEqual(checkpoint, 1)
+        XCTAssertEqual(total, 1, "Only one 24-hour checkpoint fits before the Retreat ends")
+
+        process.confirmedAt.append(started.addingTimeInterval(86_400 + 120))
+        let after = Lockdown.phase(
+            of: process, configuration: configuration,
+            at: started.addingTimeInterval(86_400 + 180)
+        )
+        guard case .unlocked = after else {
+            return XCTFail("Completing the only required checkpoint must unlock, got \(after)")
+        }
+    }
+
+    /// A configuration written before the ceiling existed still decodes.
+    func testConfigurationWithoutACeilingDecodes() throws {
+        let legacy = Data(#"{"isEnabled":true,"unlockDelayDays":3,"repeatConfirmations":false,"passageWordCount":40,"confirmationWindowHours":24,"editWindowHours":24}"#.utf8)
+
+        let decoded = try JSONDecoder().decode(LockdownConfiguration.self, from: legacy)
+
+        XCTAssertNil(decoded.unlockCeiling)
+        XCTAssertEqual(decoded.unlockDelayDays, 3)
     }
 }

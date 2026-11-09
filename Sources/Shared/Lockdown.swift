@@ -12,6 +12,14 @@ struct LockdownConfiguration: Codable, Equatable {
     var confirmationWindowHours = 24
     /// How long settings remain editable after a successful unlock.
     var editWindowHours = 24
+    /// An unlock can never open later than this instant.
+    ///
+    /// Set for a Retreat's early-end process, where the delay is capped at the
+    /// Retreat's own remaining time: three days of friction guarding a
+    /// thirty-nine hour Retreat is a request that can never come due. It is
+    /// derived state, never user-set, so it stays out of `loosens` — the
+    /// app-wide configuration always leaves it nil.
+    var unlockCeiling: Date? = nil
 
     static let delayRange = 0...365
     static let passageWordRange = 20...300
@@ -349,8 +357,9 @@ enum Lockdown {
     ) -> UnlockPhase {
         guard configuration.isEnabled, let process else { return .idle }
 
-        let unlocksAt = process.startedAt
+        let requestedUnlockAt = process.startedAt
             .addingTimeInterval(TimeInterval(configuration.unlockDelayDays) * day)
+        let unlocksAt = configuration.unlockCeiling.map { min(requestedUnlockAt, $0) } ?? requestedUnlockAt
         let editDuration = TimeInterval(configuration.editWindowHours) * 60 * 60
 
         guard configuration.repeatConfirmations else {
@@ -364,7 +373,13 @@ enum Lockdown {
         // The initial passage is stored at index zero. Every completed 24-hour
         // checkpoint appends one additional timestamp, and no checkpoint can be
         // completed before its due time.
-        let requiredCheckpoints = configuration.unlockDelayDays
+        // Only the checkpoints that fit before the ceiling can be required, or
+        // the process could never finish inside the window it guards.
+        var requiredCheckpoints = configuration.unlockDelayDays
+        if let ceiling = configuration.unlockCeiling {
+            let fits = Int(ceiling.timeIntervalSince(process.startedAt) / day)
+            requiredCheckpoints = min(requiredCheckpoints, max(0, fits))
+        }
         let completedCheckpoints = max(0, process.confirmedAt.count - 1)
         if completedCheckpoints >= requiredCheckpoints {
             let completedAt = process.confirmedAt.max() ?? unlocksAt

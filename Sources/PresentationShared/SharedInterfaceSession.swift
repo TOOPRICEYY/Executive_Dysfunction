@@ -46,6 +46,31 @@ final class SharedInterfaceSession: ObservableObject {
         return try JSONSerialization.jsonObject(with: encoder.encode(value)) as! [String: Any]
     }
     private func iso(_ date: Date) -> String { ISO8601DateFormatter().string(from: date) }
+
+    static func readable(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    /// Names the date the edit window opens, and says plainly when that falls
+    /// after the Retreat has already finished on its own — otherwise the
+    /// request looks like it is progressing when it can never come due.
+    private func waitingMessage(
+        retreatID: UUID,
+        unlocksAt: Date,
+        nextConfirmationAt: Date?
+    ) -> String {
+        var message = "The retreat change policy is still waiting. "
+        if let nextConfirmationAt {
+            message += "The next checkpoint is due by \(Self.readable(nextConfirmationAt)), and the edit window opens \(Self.readable(unlocksAt))."
+        } else {
+            message += "The edit window opens \(Self.readable(unlocksAt))."
+        }
+        if let retreat = model.retreats.first(where: { $0.id == retreatID }),
+           unlocksAt >= retreat.plannedEnd {
+            message += " That is after this Retreat ends on its own (\(Self.readable(retreat.plannedEnd))), so it will finish before the window opens."
+        }
+        return message
+    }
     private func revision() throws -> String {
         // Include native-only policy fields, not merely the view model. Sorting
         // collections makes Set encoding stable without rewriting native data.
@@ -410,7 +435,21 @@ final class SharedInterfaceSession: ObservableObject {
             if !policy.requiresAuthorization { try ensure(model.finishRetreat(id)) }
             else if case .unlocked = phase { try ensure(model.finishRetreat(id)) }
             else {
-                switch phase { case .waiting: throw SharedInterfaceError("The retreat change policy is still waiting. Return when its next checkpoint or edit window opens."); default: break }
+                // The phase already knows when the window opens; saying only
+                // "still waiting" leaves no way to tell a request that is
+                // progressing from one that will never come due.
+                switch phase {
+                case let .waiting(unlocksAt, nextConfirmationAt):
+                    throw SharedInterfaceError(waitingMessage(
+                        retreatID: id, unlocksAt: unlocksAt, nextConfirmationAt: nextConfirmationAt
+                    ))
+                case let .confirmationDue(_, deadline, checkpoint, total):
+                    throw SharedInterfaceError(
+                        "Checkpoint \(checkpoint) of \(total) is due by \(Self.readable(deadline)). "
+                        + "Request the end again before then to type it."
+                    )
+                default: break
+                }
                 return try issue(title: "Unlock retreat changes", passage: CommitmentPassage.generate(wordCount: policy.passageWordCount)) { [weak self] _ in
                     guard let self else { throw SharedInterfaceError("The window was closed.") }
                     guard model.retreatChangePolicy(for: id) == policy else { throw SharedInterfaceError("The retreat policy changed. Request a new passage.") }
