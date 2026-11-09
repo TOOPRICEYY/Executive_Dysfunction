@@ -26,6 +26,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var lockdownMonitoringFailures: Set<UUID> = []
     @Published private(set) var lockdownSyncStatus = "Lockdowns use all devices"
     private let lockdownCloudStore = ICloudLockdownStore()
+    /// Spend replicates between devices even though a pause itself does not, so
+    /// a session maximum is a budget for the person rather than one per machine.
+    private let temporaryAccessCloudStore = ICloudTemporaryAccessStore(
+        ledger: UserDefaults(suiteName: SharedConfiguration.appGroupIdentifier) ?? .standard
+    )
 
     var activeTimedLockdowns: [TimedLockdownSession] { timedLockdowns.filter { $0.isActive(at: Date()) } }
     var lockdownExpirations: [UUID: Date] { TimedLockdownSession.expirations(timedLockdowns, at: Date()) }
@@ -562,11 +567,82 @@ final class AppModel: ObservableObject {
         let granted = activeTimeAllowance(for: ruleID, now: now)?.grantCount ?? 0
         let sessionWords = TimeAllowancePolicy.passageWordCount(base: base, incrementsAlreadyGranted: granted)
         if let days = rule.lockdownPolicy.temporaryAllowanceResetDays {
+            // A grant taken on another device still cost a passage, so it has
+            // to lengthen the next one here rather than handing out a fresh
+            // cheap first attempt.
+            let shared = otherDeviceAllowanceGrants(for: ruleID, resetDays: days, now: now)
+            let local = SharedConfiguration.allowanceBackoffHistory(for: ruleID)
+            let combined = TemporaryAllowanceBackoff.History(
+                startedAt: local?.startedAt ?? now,
+                grants: (local?.grants ?? 0) + shared
+            )
             return TemporaryAllowanceBackoff.wordCount(base: base,
-                history: SharedConfiguration.allowanceBackoffHistory(for: ruleID), resetDays: days, at: now,
+                history: combined, resetDays: days, at: now,
                 sessionWordCount: sessionWords)
         }
         return sessionWords
+    }
+
+    /// Minutes this person's other devices currently hold against the rule.
+    /// This device's own spend is tracked locally and is added separately.
+    func otherDeviceAllowanceMinutes(for ruleID: UUID, now: Date = Date()) -> Int {
+        temporaryAccessCloudStore.load().additionalCommittedMinutes(
+            forRule: ruleID,
+            localMinutes: activeTimeAllowance(for: ruleID, now: now)?.totalMinutesGranted ?? 0,
+            at: now
+        )
+    }
+
+    func otherDeviceAllowanceGrants(for ruleID: UUID, resetDays: Int, now: Date = Date()) -> Int {
+        temporaryAccessCloudStore.load().backoffGrants(
+            forRule: ruleID,
+            excluding: temporaryAccessCloudStore.deviceID,
+            resetDays: resetDays,
+            at: now
+        )
+    }
+
+    /// Pulls the other devices' spend. Cheap enough to call on refresh; an
+    /// unreachable iCloud simply leaves the last known replica in place.
+    func refreshSharedTemporaryAccess(now: Date = Date()) {
+        let replica = temporaryAccessCloudStore.reconcile(at: now)
+        let stored = SharedConfiguration.loadRuleTimeAllowances()
+        let locked = TimedLockdownSession.expirations(SharedConfiguration.loadTimedLockdowns(), at: now)
+        let limits = Dictionary(rules.compactMap { rule -> (UUID, Int)? in
+            guard rule.isEnabled, rule.lockdownPolicy.allowsTimeExtensions,
+                  locked[rule.id] == nil else { return nil }
+            return (rule.id, rule.lockdownPolicy.effectiveMaximumTemporaryAccessMinutes)
+        }, uniquingKeysWith: { first, _ in first })
+        var merged = replica.applyingSharedPauses(to: stored, device: temporaryAccessCloudStore.deviceID,
+            maximumMinutes: limits, at: now)
+        for id in merged.keys where EnforcementEngine.usageShieldIsConfigured(ruleID: id) {
+            merged[id]?.restoreUsageShield = true
+        }
+        if merged != stored {
+            for (id, previous) in stored where merged[id] == nil && previous.restoreUsageShield {
+                if let rule = rules.first(where: { $0.id == id && $0.isEnabled && $0.usageLimitEnabled }) {
+                    EnforcementEngine.apply(rule,
+                        to: ManagedSettingsStore(named: MonitorDescriptor.usage(ruleID: id).storeName))
+                }
+            }
+            SharedConfiguration.saveRuleTimeAllowances(merged)
+            ruleTimeAllowances = merged
+            synchronize()
+        }
+    }
+
+    private func publishTemporaryAccessSpend(for ruleID: UUID, now: Date) {
+        let allowance = SharedConfiguration.activeTimeAllowance(for: ruleID, at: now)
+        let history = SharedConfiguration.allowanceBackoffHistory(for: ruleID)
+        temporaryAccessCloudStore.record(
+            rule: ruleID,
+            minutesGranted: allowance?.totalMinutesGranted ?? 0,
+            pauseEndsAt: allowance?.expiresAt ?? .distantPast,
+            backoffGrants: history?.grants ?? 0,
+            backoffStartedAt: history?.startedAt ?? now,
+            at: now,
+            sessionGrantCount: allowance?.grantCount
+        )
     }
 
     func nextTimeAllowanceIncrement(for ruleID: UUID, now: Date = Date()) -> Int {
@@ -606,13 +682,18 @@ final class AppModel: ObservableObject {
         }
         let existing = SharedConfiguration.activeTimeAllowance(for: ruleID, at: now)
             ?? activeTimeAllowance(for: ruleID, now: now)
-        let minutesGranted = existing?.totalMinutesGranted ?? 0
+        let sharedMinutes = otherDeviceAllowanceMinutes(for: ruleID, now: now)
+        let minutesGranted = (existing?.totalMinutesGranted ?? 0) + sharedMinutes
         guard TimeAllowancePolicy.canGrant(
             duration,
             afterMinutes: minutesGranted,
-            maximumHours: rule.lockdownPolicy.maximumTimeExtensionHours
+            maximumMinutes: rule.lockdownPolicy.effectiveMaximumTemporaryAccessMinutes
         ) else {
-            errorMessage = "This pause would exceed the rule's configured maximum of \(rule.lockdownPolicy.maximumTimeExtensionHours) additional hour(s) for the current allowance session."
+            let maximum = TimeAllowancePolicy.describeMaximum(
+                minutes: rule.lockdownPolicy.effectiveMaximumTemporaryAccessMinutes)
+            errorMessage = sharedMinutes > 0
+                ? "This pause would exceed the rule's maximum of \(maximum). \(sharedMinutes) minute(s) of that is already in use on another device."
+                : "This pause would exceed the rule's maximum of \(maximum) for the current allowance session."
             return false
         }
         if existing == nil,
@@ -640,6 +721,7 @@ final class AppModel: ObservableObject {
         if let days = rule.lockdownPolicy.temporaryAllowanceResetDays {
             SharedConfiguration.recordAllowanceBackoff(for: ruleID, resetDays: days, at: now)
         }
+        publishTemporaryAccessSpend(for: ruleID, now: now)
         BypassHistoryStore.record([BypassEvent(id: UUID(), groupID: ruleID, groupName: rule.name,
             grantedAt: now, expiresAt: allowance.expiresAt, grantedMinutes: duration.minutes, source: .app, intent: intent,
             reflection: reflection)],
@@ -654,12 +736,13 @@ final class AppModel: ObservableObject {
         guard let rule = rules.first(where: { $0.id == ruleID }),
               rule.isEnabled,
               rule.lockdownPolicy.allowsTimeExtensions else { return [] }
-        let minutesGranted = activeTimeAllowance(for: ruleID, now: now)?.totalMinutesGranted ?? 0
+        let minutesGranted = (activeTimeAllowance(for: ruleID, now: now)?.totalMinutesGranted ?? 0)
+            + otherDeviceAllowanceMinutes(for: ruleID, now: now)
         return TemporaryAccessDuration.allCases.filter {
             TimeAllowancePolicy.canGrant(
                 $0,
                 afterMinutes: minutesGranted,
-                maximumHours: rule.lockdownPolicy.maximumTimeExtensionHours
+                maximumMinutes: rule.lockdownPolicy.effectiveMaximumTemporaryAccessMinutes
             )
         }
     }
@@ -740,6 +823,14 @@ final class AppModel: ObservableObject {
         guard let removed = storedAllowances.removeValue(forKey: ruleID) else { return }
         ruleTimeAllowances = storedAllowances
         SharedConfiguration.saveRuleTimeAllowances(storedAllowances)
+        // The minutes stop counting against the other devices, but the grant
+        // that bought them still cost a passage and keeps counting.
+        let history = SharedConfiguration.allowanceBackoffHistory(for: ruleID)
+        temporaryAccessCloudStore.releasePause(
+            rule: ruleID,
+            backoffGrants: history?.grants ?? 0,
+            backoffStartedAt: history?.startedAt ?? Date()
+        )
         if removed.restoreUsageShield,
            let rule = rules.first(where: { $0.id == ruleID && $0.isEnabled && $0.usageLimitEnabled }) {
             EnforcementEngine.apply(
@@ -751,6 +842,7 @@ final class AppModel: ObservableObject {
 
     func refreshAuthorizationAndEnforcement() {
         authorizationStatus = authorizationCenter.authorizationStatus
+        refreshSharedTemporaryAccess()
         refreshLockdown()
         refreshRuleLockdowns()
         refreshTimeAllowances()

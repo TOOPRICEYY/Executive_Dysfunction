@@ -20,7 +20,7 @@ export function AccessDialog({
     reflection: string,
   ): Promise<void>;
 }) {
-  const durations = [10, 30, 60].filter(
+  const durations = [1, 5, 10, 30, 60].filter(
     (v) => v <= group.temporaryPolicy.maximumMinutes,
   );
   const [minutes, setMinutes] = useState(
@@ -61,7 +61,7 @@ export function AccessDialog({
                 : [group.temporaryPolicy.maximumMinutes]
               ).map((m) => (
                 <option key={m} value={m}>
-                  {m} minutes
+                  {m === 1 ? "1 minute" : `${m} minutes`}
                 </option>
               ))}
             </select>

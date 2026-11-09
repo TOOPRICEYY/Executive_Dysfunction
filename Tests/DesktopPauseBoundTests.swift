@@ -8,11 +8,11 @@ final class DesktopPauseBoundTests: XCTestCase {
     func testAppClampsForgedExpiryToSessionMaximum() {
         let forged = now.addingTimeInterval(5 * 365 * 86_400)
         XCTAssertEqual(
-            DesktopBlockProfile.clampedPause(forged, maximumHours: 3, now: now),
+            DesktopBlockProfile.clampedPause(forged, maximumMinutes: 180, now: now),
             now.addingTimeInterval(3 * 3_600)
         )
-        XCTAssertNil(DesktopBlockProfile.clampedPause(now.addingTimeInterval(-1), maximumHours: 3, now: now))
-        XCTAssertNil(DesktopBlockProfile.clampedPause(forged, maximumHours: 0, now: now))
+        XCTAssertNil(DesktopBlockProfile.clampedPause(now.addingTimeInterval(-1), maximumMinutes: 180, now: now))
+        XCTAssertNil(DesktopBlockProfile.clampedPause(forged, maximumMinutes: 0, now: now))
     }
 
     func testFilterCapsSessionFromFirstSightingAcrossRepublishes() {
@@ -59,6 +59,43 @@ final class DesktopPauseBoundTests: XCTestCase {
         policy.rules[0].lockdown.requiresNativeTemporaryAccess = true
         XCTAssertEqual(policy.boundingPauses(from: .empty, at: now).rules[0].pausedUntil,
                        now.addingTimeInterval(600))
+    }
+
+    func testMinuteBasedNativePauseSurvivesWithZeroLegacyHours() {
+        var policy = makePolicy(pausedUntil: now.addingTimeInterval(600))
+        policy.rules[0].lockdown.allowsTimeExtensions = false
+        policy.rules[0].lockdown.requiresNativeTemporaryAccess = true
+        policy.rules[0].lockdown.maximumTimeExtensionHours = 0
+        policy.rules[0].lockdown.maximumTemporaryAccessMinutes = 30
+        let accepted = policy.boundingPauses(from: .empty, at: now)
+        XCTAssertEqual(accepted.rules[0].pausedUntil, now.addingTimeInterval(600))
+        XCTAssertTrue(accepted.activeRules(at: now).isEmpty)
+    }
+
+    func testMinuteMaximumRemainsAnchoredAcrossRepublishes() {
+        var policy = makePolicy(pausedUntil: now.addingTimeInterval(7_200))
+        policy.rules[0].lockdown.maximumTimeExtensionHours = 1
+        policy.rules[0].lockdown.maximumTemporaryAccessMinutes = 90
+        let first = policy.boundingPauses(from: .empty, at: now)
+        XCTAssertEqual(first.rules[0].pausedUntil, now.addingTimeInterval(5_400))
+        let later = policy.boundingPauses(from: first, at: now.addingTimeInterval(600))
+        XCTAssertEqual(later.rules[0].pausedUntil, first.rules[0].pausedUntil)
+    }
+
+    func testNewAuthorizedSessionDoesNotInheritYesterdayExhaustedCap() {
+        var yesterday = makePolicy(pausedUntil: nil)
+        yesterday.rules[0].pauseSessionStartedAt = now.addingTimeInterval(-86_400)
+        yesterday.rules[0].pauseAuthorizationID = "yesterday"
+        var today = makePolicy(pausedUntil: now.addingTimeInterval(600))
+        today.rules[0].pauseAuthorizationID = "today"
+        let accepted = today.boundingPauses(from: yesterday, at: now)
+        XCTAssertEqual(accepted.rules[0].pausedUntil, now.addingTimeInterval(600))
+        XCTAssertEqual(accepted.rules[0].pauseSessionStartedAt, now)
+
+        today.rules[0].pausedUntil = now.addingTimeInterval(86_400)
+        let republished = today.boundingPauses(from: accepted, at: now.addingTimeInterval(600))
+        XCTAssertEqual(republished.rules[0].pausedUntil, now.addingTimeInterval(10_800))
+        XCTAssertEqual(republished.rules[0].pauseSessionStartedAt, now)
     }
 
     private func makePolicy(pausedUntil: Date?) -> DesktopEnforcementPolicy {

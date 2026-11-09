@@ -1,6 +1,9 @@
 import Foundation
 
-/// Device-local history, independent of the lifetime/cancellation of an allowance.
+/// Per-device history, independent of the lifetime/cancellation of an
+/// allowance. Grants made on a person's other devices are added by the caller
+/// through `TemporaryAccessLedger`, so the escalation is shared even though
+/// each device records only its own grants here.
 enum TemporaryAllowanceBackoff {
     static let daysRange = 1...365
     static let maximumWords = 38_400 // Same upper bound as the legacy session policy.
@@ -44,6 +47,6 @@ enum TemporaryAllowanceBackoff {
 
     static func description(resetDays: Int?) -> String {
         guard let resetDays else { return "Each further pause in the same session doubles the passage." }
-        return "Across pauses: 1×, 2×, 3×, 4×… Resets \(resetDays) day(s) after the first use. Extending an ongoing pause still uses session doubling if that requires more words. Counted per group on this device. Maximum 38,400 words."
+        return "Across pauses: 1×, 2×, 3×, 4×… Resets \(resetDays) day(s) after the first use. Extending an ongoing pause still uses session doubling if that requires more words. Counted per group across your devices. Maximum 38,400 words."
     }
 }

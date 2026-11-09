@@ -471,7 +471,11 @@ struct MacBlockingGroupEditor: View {
                     get: { group.modificationPolicy.effectiveTemporaryAccessPassageWordCount },
                     set: { group.modificationPolicy.temporaryAccessPassageWordCount = $0 }
                 ), in: 20...300)
-                Stepper("MAXIMUM TEMPORARY ACCESS: \(group.modificationPolicy.maximumTimeExtensionHours) HOURS", value: $group.modificationPolicy.maximumTimeExtensionHours, in: 1...8)
+                Stepper(
+                    "MAXIMUM TEMPORARY ACCESS: \(TimeAllowancePolicy.describeMaximum(minutes: group.modificationPolicy.effectiveMaximumTemporaryAccessMinutes).uppercased())",
+                    value: maximumTemporaryAccessLadder($group.modificationPolicy),
+                    in: TimeAllowancePolicy.maximumLadderRange
+                )
                 TemporaryAllowanceBackoffEditor(resetDays: $group.modificationPolicy.temporaryAllowanceResetDays)
                 Text("Custom access passages and backoff are completed in Holdfast, including for blocked websites.")
                     .font(.caption).foregroundStyle(.secondary)

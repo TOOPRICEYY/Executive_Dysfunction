@@ -94,9 +94,31 @@ struct RuleLockdownPolicy: Codable, Equatable {
     var maximumTimeExtensionHours = 3
     var temporaryAllowanceResetDays: Int? = nil
     var temporaryAccessPassageWordCount: Int? = nil
+    /// The session maximum in minutes. Optional so a rule compiled before
+    /// minutes existed still decodes against the hour field above.
+    var maximumTemporaryAccessMinutes: Int? = nil
 
     var effectiveTemporaryAccessPassageWordCount: Int {
         min(300, max(20, temporaryAccessPassageWordCount ?? passageWordCount))
+    }
+
+    /// The session maximum every caller should use.
+    var effectiveMaximumTemporaryAccessMinutes: Int {
+        let resolved = maximumTemporaryAccessMinutes ?? (maximumTimeExtensionHours * 60)
+        return min(TimeAllowancePolicy.maximumMinutesRange.upperBound,
+                   max(0, resolved))
+    }
+
+    /// Sets the session maximum, keeping the legacy hour field floored in step
+    /// so an older reader never grants more than intended.
+    mutating func setMaximumTemporaryAccess(minutes: Int) {
+        let clamped = min(TimeAllowancePolicy.maximumMinutesRange.upperBound,
+                          max(TimeAllowancePolicy.maximumMinutesRange.lowerBound, minutes))
+        maximumTimeExtensionHours = clamped / 60
+        // See CloudRuleLockdownPreference: a whole-hour value stays in the
+        // legacy field so an unchanged policy is not rewritten.
+        guard clamped % 60 != 0 || maximumTemporaryAccessMinutes != nil else { return }
+        maximumTemporaryAccessMinutes = clamped
     }
 
     func configuration(appDefault: LockdownConfiguration) -> LockdownConfiguration {
@@ -137,6 +159,8 @@ extension RuleLockdownPolicy {
 }
 
 enum TemporaryAccessDuration: Int, Codable, CaseIterable, Identifiable, Sendable {
+    case oneMinute = 1
+    case fiveMinutes = 5
     case tenMinutes = 10
     case thirtyMinutes = 30
     case sixtyMinutes = 60
@@ -146,8 +170,16 @@ enum TemporaryAccessDuration: Int, Codable, CaseIterable, Identifiable, Sendable
     var seconds: TimeInterval { TimeInterval(rawValue * 60) }
 
     var title: String {
-        "\(rawValue) minutes"
+        rawValue == 1 ? "1 minute" : "\(rawValue) minutes"
     }
+
+    /// Apple's shield offers exactly three secondary submenu slots, so that
+    /// path cannot grow with this list. It keeps the longer options, which are
+    /// the ones worth reaching for from a shield; the finer grain is available
+    /// in the app and on the block page, where there is room for every choice.
+    static let shieldSubmenuOptions: [TemporaryAccessDuration] = [
+        .tenMinutes, .thirtyMinutes, .sixtyMinutes
+    ]
 }
 
 struct RuleTimeAllowance: Codable, Equatable {
@@ -238,14 +270,42 @@ struct RuleTimeAllowance: Codable, Equatable {
 enum TimeAllowancePolicy {
     static let hour: TimeInterval = 60 * 60
     static let maximumHoursRange = 1...8
+    /// The session maximum is configured in minutes so a group can permit a
+    /// genuinely short bypass. One minute is the floor; eight hours remains the
+    /// ceiling.
+    static let maximumMinutesRange = 1...480
+
+    /// The values the session-maximum control steps through. A plain
+    /// one-minute step would take hundreds of presses to cross eight hours, so
+    /// the ladder is fine where it matters and coarse where it does not.
+    static let maximumMinutesLadder = [
+        1, 2, 3, 4, 5, 10, 15, 20, 30, 45,
+        60, 90, 120, 180, 240, 300, 360, 420, 480
+    ]
+
+    /// The nearest ladder value at or below `minutes`, so a policy written with
+    /// an arbitrary value still lands on a reachable rung.
+    static func ladderIndex(forMinutes minutes: Int) -> Int {
+        let clamped = min(maximumMinutesRange.upperBound, max(maximumMinutesRange.lowerBound, minutes))
+        let index = maximumMinutesLadder.lastIndex { $0 <= clamped }
+        return index ?? 0
+    }
+
+    static func describeMaximum(minutes: Int) -> String {
+        let clamped = min(maximumMinutesRange.upperBound, max(maximumMinutesRange.lowerBound, minutes))
+        if clamped < 60 { return clamped == 1 ? "1 minute" : "\(clamped) minutes" }
+        let hours = clamped / 60
+        let remainder = clamped % 60
+        let hourText = hours == 1 ? "1 hour" : "\(hours) hours"
+        return remainder == 0 ? hourText : "\(hourText) \(remainder) min"
+    }
 
     static func canGrant(
         _ duration: TemporaryAccessDuration,
         afterMinutes alreadyGranted: Int,
-        maximumHours: Int
+        maximumMinutes: Int
     ) -> Bool {
-        let maximumMinutes = max(0, maximumHours) * 60
-        return max(0, alreadyGranted) + duration.minutes <= maximumMinutes
+        max(0, alreadyGranted) + duration.minutes <= max(0, maximumMinutes)
     }
 
     /// The first grant uses the base passage. Every consecutive grant doubles it.

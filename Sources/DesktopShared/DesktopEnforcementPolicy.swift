@@ -246,6 +246,8 @@ struct DesktopEnforcementRule: Codable, Equatable, Identifiable {
     /// current uninterrupted pause. Lets it cap a pause session at the rule's
     /// maximum no matter how often the app republishes a later expiry.
     var pauseSessionStartedAt: Date?
+    /// Stable for one locally authorized allowance session, including extensions.
+    var pauseAuthorizationID: String? = nil
     /// Planned interval for a Retreat's group, so the filter starts and ends
     /// the Retreat on time even when the app is not running. Nil for Baseline
     /// groups, which have no boundary.
@@ -289,9 +291,18 @@ struct DesktopLockdownPolicy: Codable, Equatable {
     var temporaryAllowanceResetDays: Int? = nil
     var requiresNativeTemporaryAccess: Bool? = nil
     var temporaryAccessPassageWordCount: Int? = nil
+    /// The session maximum in minutes. Optional so a policy written before
+    /// minutes existed still decodes; the hour field remains its fallback.
+    var maximumTemporaryAccessMinutes: Int? = nil
 
     var effectiveTemporaryAccessPassageWordCount: Int {
         min(300, max(20, temporaryAccessPassageWordCount ?? passageWordCount))
+    }
+
+    /// The session maximum every caller should use.
+    var effectiveMaximumTemporaryAccessMinutes: Int {
+        let resolved = maximumTemporaryAccessMinutes ?? (maximumTimeExtensionHours * 60)
+        return max(0, min(480, resolved))
     }
 
     var needsNativeTemporaryAccess: Bool {
@@ -333,6 +344,7 @@ struct DesktopBlockProfile: Equatable {
     init(
         cloudRules: [CloudRulePreference],
         temporaryPauses: [UUID: Date] = [:],
+        temporaryPauseAuthorizationIDs: [UUID: String] = [:],
         now: Date = Date()
     ) {
         rules = cloudRules.map { rule in
@@ -343,9 +355,12 @@ struct DesktopBlockProfile: Equatable {
             if desktop.lockdown.allowsTimeExtensions {
                 desktop.pausedUntil = Self.clampedPause(
                     temporaryPauses[rule.id],
-                    maximumHours: desktop.lockdown.maximumTimeExtensionHours,
+                    maximumMinutes: desktop.lockdown.effectiveMaximumTemporaryAccessMinutes,
                     now: now
                 )
+                if desktop.pausedUntil != nil {
+                    desktop.pauseAuthorizationID = temporaryPauseAuthorizationIDs[rule.id]
+                }
             }
             return desktop
         }
@@ -356,9 +371,9 @@ struct DesktopBlockProfile: Equatable {
     /// written by hand. Whatever is stored, a published pause may therefore end
     /// no later than the rule's own session maximum from now; an expired or
     /// nonsensical value publishes no pause at all.
-    static func clampedPause(_ expiry: Date?, maximumHours: Int, now: Date) -> Date? {
-        guard let expiry, expiry > now, maximumHours > 0 else { return nil }
-        let ceiling = now.addingTimeInterval(TimeInterval(maximumHours) * 3_600)
+    static func clampedPause(_ expiry: Date?, maximumMinutes: Int, now: Date) -> Date? {
+        guard let expiry, expiry > now, maximumMinutes > 0 else { return nil }
+        let ceiling = now.addingTimeInterval(TimeInterval(maximumMinutes) * 60)
         return min(expiry, ceiling)
     }
 
@@ -388,7 +403,8 @@ struct DesktopBlockProfile: Equatable {
                 allowsTimeExtensions: rule.lockdown.allowsTimeExtensions,
                 maximumTimeExtensionHours: rule.lockdown.maximumTimeExtensionHours,
                 temporaryAllowanceResetDays: rule.lockdown.temporaryAllowanceResetDays,
-                temporaryAccessPassageWordCount: rule.lockdown.temporaryAccessPassageWordCount
+                temporaryAccessPassageWordCount: rule.lockdown.temporaryAccessPassageWordCount,
+                maximumTemporaryAccessMinutes: rule.lockdown.effectiveMaximumTemporaryAccessMinutes
             )
         )
     }
@@ -501,7 +517,7 @@ enum DesktopPolicyRestrictionEvaluator {
            new.confirmationWindowHours > old.confirmationWindowHours { return false }
         if !old.permitsAnyTemporaryAccess && new.permitsAnyTemporaryAccess { return false }
         if old.permitsAnyTemporaryAccess && new.permitsAnyTemporaryAccess,
-           new.maximumTimeExtensionHours > old.maximumTimeExtensionHours { return false }
+           new.effectiveMaximumTemporaryAccessMinutes > old.effectiveMaximumTemporaryAccessMinutes { return false }
         if old.permitsAnyTemporaryAccess && new.permitsAnyTemporaryAccess,
            new.effectiveTemporaryAccessPassageWordCount < old.effectiveTemporaryAccessPassageWordCount { return false }
         if old.permitsAnyTemporaryAccess && new.permitsAnyTemporaryAccess,

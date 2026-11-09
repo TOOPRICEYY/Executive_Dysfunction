@@ -101,11 +101,11 @@ struct RuleEditorView: View {
             Toggle("Allow temporary pause from block page", isOn: $rule.lockdownPolicy.allowsTimeExtensions)
             if rule.lockdownPolicy.allowsTimeExtensions {
                 Stepper(
-                    "Maximum extra time: \(rule.lockdownPolicy.maximumTimeExtensionHours) hour(s)",
-                    value: $rule.lockdownPolicy.maximumTimeExtensionHours,
-                    in: TimeAllowancePolicy.maximumHoursRange
+                    "Maximum extra time: \(TimeAllowancePolicy.describeMaximum(minutes: rule.lockdownPolicy.effectiveMaximumTemporaryAccessMinutes))",
+                    value: maximumTemporaryAccessLadder($rule.lockdownPolicy),
+                    in: TimeAllowancePolicy.maximumLadderRange
                 )
-                Text("The block screen can offer 10, 30, or 60 minutes after the rule's confirmation passage is typed. Consecutive requests use progressively longer passages and cannot exceed this cumulative limit.")
+                Text("The block screen offers each duration that still fits inside this cumulative limit, down to a single minute. Consecutive requests use progressively longer passages.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

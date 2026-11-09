@@ -22,6 +22,9 @@ final class MacAppModel: ObservableObject {
 
     private let store = ICloudPreferencesStore()
     private let lockdownCloudStore = ICloudLockdownStore()
+    /// Spend replicates between devices even though a pause itself does not, so
+    /// a session maximum is a budget for the person rather than one per machine.
+    private let temporaryAccessCloudStore = ICloudTemporaryAccessStore(ledger: MacLockLedger.shared)
     @Published private(set) var lockdownSyncStatus = "Lockdowns use all devices"
     private let desktopPolicyStore = DesktopPolicyFileStore()
     private let desktopRevisionKey = "desktop-enforcement-policy.revision"
@@ -277,7 +280,10 @@ final class MacAppModel: ObservableObject {
 
     func refresh() {
         guard !uiPreviewMode else { return }
-        defer { reconcileSharedLockdowns() }
+        defer {
+            reconcileSharedLockdowns()
+            refreshSharedTemporaryAccess()
+        }
         do {
             store.synchronize()
             apply(try store.load())
@@ -885,12 +891,70 @@ final class MacAppModel: ObservableObject {
         at now: Date = Date()
     ) -> [TemporaryAccessDuration] {
         guard let rule = desktopRule(for: ruleID) else { return [] }
-        return MacTemporaryPauseStore.availableDurations(for: rule, at: now, defaults: MacLockLedger.shared)
+        return MacTemporaryPauseStore.availableDurations(
+            for: rule, at: now, defaults: MacLockLedger.shared,
+            otherDeviceMinutes: otherDeviceAllowanceMinutes(for: ruleID, at: now)
+        )
     }
 
     func pausePassageWordCount(for ruleID: UUID, at now: Date = Date()) -> Int {
         guard let rule = desktopRule(for: ruleID) else { return 0 }
-        return MacTemporaryPauseStore.passageWordCount(for: rule, at: now, defaults: MacLockLedger.shared)
+        return MacTemporaryPauseStore.passageWordCount(
+            for: rule, at: now, defaults: MacLockLedger.shared,
+            otherDeviceGrants: rule.lockdown.temporaryAllowanceResetDays.map {
+                otherDeviceAllowanceGrants(for: ruleID, resetDays: $0, at: now)
+            } ?? 0
+        )
+    }
+
+    /// Minutes this person's other devices currently hold against the rule.
+    func otherDeviceAllowanceMinutes(for ruleID: UUID, at now: Date = Date()) -> Int {
+        temporaryAccessCloudStore.load().additionalCommittedMinutes(
+            forRule: ruleID,
+            localMinutes: MacTemporaryPauseStore.active(for: ruleID, at: now, defaults: MacLockLedger.shared)?.totalMinutesGranted ?? 0, at: now
+        )
+    }
+
+    func otherDeviceAllowanceGrants(for ruleID: UUID, resetDays: Int, at now: Date = Date()) -> Int {
+        temporaryAccessCloudStore.load().backoffGrants(
+            forRule: ruleID, excluding: temporaryAccessCloudStore.deviceID,
+            resetDays: resetDays, at: now
+        )
+    }
+
+    /// Pulls the other devices' spend. An unreachable iCloud simply leaves the
+    /// last known replica in place.
+    func refreshSharedTemporaryAccess(at now: Date = Date()) {
+        guard !uiPreviewMode else { return }
+        let replica = temporaryAccessCloudStore.reconcile(at: now)
+        let stored = MacTemporaryPauseStore.load(defaults: MacLockLedger.shared)
+        let limits = Dictionary(rules.compactMap { rule -> (UUID, Int)? in
+            guard rule.isEnabled, rule.lockdown.allowsTimeExtensions,
+                  lockdownExpirations[rule.id] == nil else { return nil }
+            return (rule.id, rule.lockdown.effectiveMaximumTemporaryAccessMinutes)
+        }, uniquingKeysWith: { first, _ in first })
+        let merged = replica.applyingSharedPauses(to: stored, device: temporaryAccessCloudStore.deviceID,
+            maximumMinutes: limits, at: now)
+        if merged != stored {
+            MacTemporaryPauseStore.save(merged, defaults: MacLockLedger.shared)
+            publishDesktopPolicy()
+            objectWillChange.send()
+        }
+    }
+
+    private func publishTemporaryAccessSpend(for ruleID: UUID, at now: Date) {
+        guard !uiPreviewMode else { return }
+        let pause = MacTemporaryPauseStore.active(for: ruleID, at: now, defaults: MacLockLedger.shared)
+        let history = TemporaryAllowanceBackoff.history(for: ruleID, defaults: MacLockLedger.shared)
+        temporaryAccessCloudStore.record(
+            rule: ruleID,
+            minutesGranted: pause?.totalMinutesGranted ?? 0,
+            pauseEndsAt: pause?.expiresAt ?? .distantPast,
+            backoffGrants: history?.grants ?? 0,
+            backoffStartedAt: history?.startedAt ?? now,
+            at: now,
+            sessionGrantCount: pause?.grantCount
+        )
     }
 
     func allowsTemporaryPause(for ruleID: UUID) -> Bool {
@@ -933,7 +997,10 @@ final class MacAppModel: ObservableObject {
         }
         let previousPauses = MacTemporaryPauseStore.load(defaults: MacLockLedger.shared)
         let previousBackoff = MacLockLedger.shared.data(forKey: TemporaryAllowanceBackoff.defaultsKey)
-        switch MacTemporaryPauseStore.grant(duration, for: rule, at: now, defaults: MacLockLedger.shared) {
+        switch MacTemporaryPauseStore.grant(
+            duration, for: rule, at: now, defaults: MacLockLedger.shared,
+            otherDeviceMinutes: otherDeviceAllowanceMinutes(for: ruleID, at: now)
+        ) {
         case let .success(allowance):
             guard publishDesktopPolicy() else {
                 MacTemporaryPauseStore.save(previousPauses, defaults: MacLockLedger.shared)
@@ -949,6 +1016,7 @@ final class MacAppModel: ObservableObject {
                 event: "temporary_pause_granted",
                 fields: ["duration_minutes": duration.minutes]
             )
+            publishTemporaryAccessSpend(for: ruleID, at: now)
             objectWillChange.send()
             return true
         case let .failure(error):
@@ -962,6 +1030,14 @@ final class MacAppModel: ObservableObject {
         guard !uiPreviewMode else { return false }
         guard MacTemporaryPauseStore.cancel(ruleID: ruleID, defaults: MacLockLedger.shared) else { return false }
         DesktopDiagnosticTrace.record(component: "policy", event: "temporary_pause_cancelled")
+        // The minutes stop counting against the other devices; the grant that
+        // bought them still cost a passage and keeps counting.
+        let history = TemporaryAllowanceBackoff.history(for: ruleID, defaults: MacLockLedger.shared)
+        temporaryAccessCloudStore.releasePause(
+            rule: ruleID,
+            backoffGrants: history?.grants ?? 0,
+            backoffStartedAt: history?.startedAt ?? Date()
+        )
         publishDesktopPolicy()
         objectWillChange.send()
         return true
@@ -1456,7 +1532,8 @@ final class MacAppModel: ObservableObject {
         // policy change.
         var blockProfile = DesktopBlockProfile(
             cloudRules: rules,
-            temporaryPauses: MacTemporaryPauseStore.activeExpirations(at: Date(), defaults: MacLockLedger.shared)
+            temporaryPauses: MacTemporaryPauseStore.activeExpirations(at: Date(), defaults: MacLockLedger.shared),
+            temporaryPauseAuthorizationIDs: MacTemporaryPauseStore.activeAuthorizationIDs(at: Date(), defaults: MacLockLedger.shared)
         )
         // Give Retreat groups their planned interval, and include Retreats that
         // start soon, so the filter starts and ends them on time by itself.

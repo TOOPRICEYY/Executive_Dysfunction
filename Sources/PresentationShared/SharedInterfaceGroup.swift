@@ -31,7 +31,7 @@ struct SharedInterfaceGroup: Codable {
         let kind = ["none": "none", "passageOnly": "passage", "delayed": "delay", "repeatedConfirmations": "checkpoints"][p.severity] ?? "inherited"
         changePolicy = .init(kind: kind, words: p.passageWordCount, delayDays: p.unlockDelayDays)
         temporaryPolicy = .init(allowed: p.allowsTimeExtensions, words: p.effectiveTemporaryAccessPassageWordCount,
-                                maximumMinutes: p.maximumTimeExtensionHours * 60, resetDays: p.temporaryAllowanceResetDays)
+                                maximumMinutes: p.effectiveMaximumTemporaryAccessMinutes, resetDays: p.temporaryAllowanceResetDays)
     }
 
     func merging(into existing: CloudBlockingGroup?) throws -> CloudBlockingGroup {
@@ -40,8 +40,8 @@ struct SharedInterfaceGroup: Codable {
         }
         try check(!name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && name.count <= 120, "Enter a group name of at most 120 characters.")
         try check((20...300).contains(changePolicy.words) && (0...365).contains(changePolicy.delayDays), "Invalid change policy.")
-        try check((20...300).contains(temporaryPolicy.words) && (60...480).contains(temporaryPolicy.maximumMinutes)
-                  && temporaryPolicy.maximumMinutes % 60 == 0, "Choose a temporary-access maximum in whole hours, from one to eight.")
+        try check((20...300).contains(temporaryPolicy.words) && (1...480).contains(temporaryPolicy.maximumMinutes),
+                  "Choose a temporary-access maximum between one minute and eight hours.")
         try check(temporaryPolicy.resetDays.map { (1...365).contains($0) } ?? true, "Invalid backoff reset interval.")
         try check(["block", "allow"].contains(schedule.mode) && schedule.slots.count <= 128, "Invalid schedule.")
         for slot in schedule.slots {
@@ -79,7 +79,7 @@ struct SharedInterfaceGroup: Codable {
         group.modificationPolicy.passageWordCount = changePolicy.words
         group.modificationPolicy.unlockDelayDays = changePolicy.delayDays
         group.modificationPolicy.allowsTimeExtensions = temporaryPolicy.allowed
-        group.modificationPolicy.maximumTimeExtensionHours = temporaryPolicy.maximumMinutes / 60
+        group.modificationPolicy.setMaximumTemporaryAccess(minutes: temporaryPolicy.maximumMinutes)
         group.modificationPolicy.temporaryAllowanceResetDays = temporaryPolicy.resetDays
         // Preserve inheritance when it has not actually changed. Re-encoding a
         // legacy policy is not a user request to pin a formerly inherited value.

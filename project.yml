@@ -13,7 +13,7 @@ settings:
     DEVELOPMENT_TEAM: 7GXNZJMGPD
     CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1,2"
-    CURRENT_PROJECT_VERSION: 99
+    CURRENT_PROJECT_VERSION: 107
     MARKETING_VERSION: 0.1.0
 
 schemes:
@@ -116,6 +116,7 @@ targets:
       - path: Sources/DesktopShared
       - path: Sources/BlockPageShared
       - path: Sources/Shared/Lockdown.swift
+      - path: Sources/Shared/SharedTemporaryPauses.swift
       - path: Platform/AppleSharedUI/Sources/HoldfastSharedInterface/HoldfastWebView.swift
     settings:
       base:
@@ -217,6 +218,8 @@ targets:
     sources:
       - path: Sources/MonitorExtension
       - path: Sources/Shared
+        excludes:
+          - SharedTemporaryPauses.swift
       - path: Sources/CloudShared/TemporaryAllowanceBackoff.swift
       - path: Sources/CloudShared/KeyValueLedger.swift
       - path: Sources/CloudShared/CloudLockdownExitPolicy.swift
@@ -399,6 +402,8 @@ targets:
       - path: Tests/HoldfastDiagnosticReportTests.swift
       - path: Tests/HoldfastDiagnosticDocumentSectionsTests.swift
       - path: Tests/HoldfastEnforcementIdentitiesTests.swift
+      - path: Tests/TemporaryAccessLedgerTests.swift
+      - path: Sources/Shared/SharedTemporaryPauses.swift
       - path: Tests/MacTemporaryPauseStoreTests.swift
       - path: Tests/DesktopPauseBoundTests.swift
       - path: Tests/ClockTamperGuardTests.swift

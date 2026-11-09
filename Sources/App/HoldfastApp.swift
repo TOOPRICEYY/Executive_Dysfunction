@@ -11,6 +11,7 @@ struct HoldfastApp: App {
                 .environmentObject(model)
                 .onReceive(NotificationCenter.default.publisher(for: NSUbiquitousKeyValueStore.didChangeExternallyNotification)) { _ in
                     model.syncICloudPreferences()
+                    model.refreshSharedTemporaryAccess()
                 }
         }
         .onChange(of: scenePhase) { _, phase in

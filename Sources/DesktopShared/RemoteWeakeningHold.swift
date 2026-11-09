@@ -68,6 +68,7 @@ enum RemoteWeakeningHold {
             var kept = old
             // Pauses have their own gate; keep whatever the ledger says now.
             kept.pausedUntil = replacement?.pausedUntil
+            kept.pauseAuthorizationID = replacement?.pauseAuthorizationID
             kept.pauseSessionStartedAt = nil
             if let index {
                 rules[index] = kept

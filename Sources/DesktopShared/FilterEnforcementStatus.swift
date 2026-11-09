@@ -55,6 +55,8 @@ struct FilterEnforcementStatus: Codable, Equatable {
     /// Optional so older providers and controlling apps remain compatible.
     var blockPageRules: [BlockPageRuleStatus]?
     var temporaryAllowanceExpirations: [UUID: Date]?
+    /// Provider-side pause audit, keyed by rule ID, for publication mismatches.
+    var temporaryPauseAudit: [String: String]? = nil
     @BypassEventBuffer var browserBypassEvents: [BypassEvent]? = nil
     /// When the longest-running lockdown session ends, if one is running.
     var lockdownEndsAt: Date?

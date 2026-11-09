@@ -186,7 +186,7 @@ struct IOSBlockingGroupEditor: View {
                     Button("REVIEW CHANGE PROTECTION") { showUnlock = true }
                         .buttonStyle(IOSBrutalButtonStyle())
                 } else if availablePauseDurations.isEmpty {
-                    Text("THE SESSION MAXIMUM OF \(rule.lockdownPolicy.maximumTimeExtensionHours) HOUR(S) IS SPENT. IT RESETS AFTER THE CURRENT PAUSE EXPIRES.")
+                    Text("THE SESSION MAXIMUM OF \(TimeAllowancePolicy.describeMaximum(minutes: rule.lockdownPolicy.effectiveMaximumTemporaryAccessMinutes).uppercased()) IS SPENT. IT RESETS AFTER THE CURRENT PAUSE EXPIRES.")
                         .font(.system(.caption2, design: .default, weight: .medium))
                         .foregroundStyle(.secondary)
                 } else {
@@ -599,7 +599,11 @@ struct IOSTemporaryAccessPolicyEditor: View {
                     get: { policy.effectiveTemporaryAccessPassageWordCount },
                     set: { policy.temporaryAccessPassageWordCount = $0 }
                 ), in: 20...300, step: 10)
-                Stepper("MAXIMUM: \(policy.maximumTimeExtensionHours) HOURS", value: $policy.maximumTimeExtensionHours, in: 1...8)
+                Stepper(
+                    "MAXIMUM: \(TimeAllowancePolicy.describeMaximum(minutes: policy.effectiveMaximumTemporaryAccessMinutes).uppercased())",
+                    value: maximumTemporaryAccessLadder($policy),
+                    in: TimeAllowancePolicy.maximumLadderRange
+                )
                 TemporaryAllowanceBackoffEditor(resetDays: $policy.temporaryAllowanceResetDays)
             }
         }

@@ -81,9 +81,14 @@ final class ShieldActionExtension: ShieldActionDelegate {
     private func duration(for action: ShieldAction) -> TemporaryAccessDuration? {
         guard #available(iOS 26.4, *) else { return nil }
         switch action {
-        case .firstSecondarySubmenuItemPressed: return .tenMinutes
-        case .secondSecondarySubmenuItemPressed: return .thirtyMinutes
-        case .thirdSecondarySubmenuItemPressed: return .sixtyMinutes
+        // Apple gives three slots; `shieldSubmenuOptions` is the authority on
+        // which durations they carry.
+        case .firstSecondarySubmenuItemPressed:
+            return TemporaryAccessDuration.shieldSubmenuOptions[0]
+        case .secondSecondarySubmenuItemPressed:
+            return TemporaryAccessDuration.shieldSubmenuOptions[1]
+        case .thirdSecondarySubmenuItemPressed:
+            return TemporaryAccessDuration.shieldSubmenuOptions[2]
         default: return nil
         }
     }

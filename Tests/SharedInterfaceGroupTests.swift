@@ -58,9 +58,28 @@ final class SharedInterfaceGroupTests: XCTestCase {
         XCTAssertEqual(try dto.merging(into: original).modificationPolicy, original.modificationPolicy)
         XCTAssertThrowsError(try dto.merging(into: nil))
     }
-    func testTemporaryAccessCannotTruncateFractionalHours() {
-        let original = group(); var dto = SharedInterfaceGroup(original)
+    /// The maximum is configured in minutes now, so a value that is not a whole
+    /// number of hours is legitimate. Only a value outside the permitted range
+    /// is refused.
+    func testTemporaryAccessAcceptsMinutesAndRefusesOutOfRange() throws {
+        let original = group()
+        var dto = SharedInterfaceGroup(original)
+
         dto.temporaryPolicy.maximumMinutes = 90
+        XCTAssertEqual(
+            try dto.merging(into: original).modificationPolicy.effectiveMaximumTemporaryAccessMinutes,
+            90
+        )
+
+        dto.temporaryPolicy.maximumMinutes = 1
+        XCTAssertEqual(
+            try dto.merging(into: original).modificationPolicy.effectiveMaximumTemporaryAccessMinutes,
+            1
+        )
+
+        dto.temporaryPolicy.maximumMinutes = 0
+        XCTAssertThrowsError(try dto.merging(into: original))
+        dto.temporaryPolicy.maximumMinutes = 481
         XCTAssertThrowsError(try dto.merging(into: original))
     }
 }

@@ -2,10 +2,7 @@ import Foundation
 
 /// The Mac's record of locally authorized temporary pauses.
 ///
-/// A pause is device-local on purpose. The iPhone stores its allowances in its
-/// own app group rather than iCloud, and pausing a block on one machine should
-/// not lift it on another: the point of the pause is to get past a block in
-/// front of you, not to weaken the rule everywhere.
+/// Local enforcement replica of pauses authorized here or received via iCloud.
 ///
 /// The escalation rules are shared with iOS through `TimeAllowancePolicy`, so
 /// the second pause in a session costs the same doubled passage on both
@@ -15,14 +12,14 @@ enum MacTemporaryPauseStore {
 
     enum GrantError: Error, Equatable {
         case notPermitted
-        case exceedsSessionMaximum(maximumHours: Int)
+        case exceedsSessionMaximum(maximumMinutes: Int)
 
         var message: String {
             switch self {
             case .notPermitted:
                 "This Blocking Group's security policy does not allow temporary access."
-            case let .exceedsSessionMaximum(maximumHours):
-                "This pause would exceed the group's configured maximum of \(maximumHours) additional hour(s) for the current session."
+            case let .exceedsSessionMaximum(maximumMinutes):
+                "This pause would exceed the group's configured maximum of \(TimeAllowancePolicy.describeMaximum(minutes: maximumMinutes)) for the current session."
             }
         }
     }
@@ -60,6 +57,14 @@ enum MacTemporaryPauseStore {
             .mapValues(\.expiresAt)
     }
 
+    static func activeAuthorizationIDs(at now: Date, defaults: any KeyValueLedger) -> [UUID: String] {
+        load(defaults: defaults).filter { $0.value.expiresAt > now }.mapValues { pause in
+            // Granting an extension adds the same duration to expiry and spend,
+            // so this origin remains stable throughout a contiguous session.
+            String(pause.expiresAt.timeIntervalSince1970 - Double(pause.totalMinutesGranted) * 60)
+        }
+    }
+
     /// Removes records that have run out, so the session maximum resets once a
     /// pause ends rather than counting against the user forever.
     @discardableResult
@@ -74,15 +79,17 @@ enum MacTemporaryPauseStore {
     static func availableDurations(
         for rule: DesktopEnforcementRule,
         at now: Date,
-        defaults: any KeyValueLedger
+        defaults: any KeyValueLedger,
+        otherDeviceMinutes: Int = 0
     ) -> [TemporaryAccessDuration] {
         guard rule.lockdown.allowsTimeExtensions else { return [] }
-        let spent = active(for: rule.id, at: now, defaults: defaults)?.totalMinutesGranted ?? 0
+        let spent = (active(for: rule.id, at: now, defaults: defaults)?.totalMinutesGranted ?? 0)
+            + max(0, otherDeviceMinutes)
         return TemporaryAccessDuration.allCases.filter {
             TimeAllowancePolicy.canGrant(
                 $0,
                 afterMinutes: spent,
-                maximumHours: rule.lockdown.maximumTimeExtensionHours
+                maximumMinutes: rule.lockdown.effectiveMaximumTemporaryAccessMinutes
             )
         }
     }
@@ -92,15 +99,23 @@ enum MacTemporaryPauseStore {
     static func passageWordCount(
         for rule: DesktopEnforcementRule,
         at now: Date,
-        defaults: any KeyValueLedger
+        defaults: any KeyValueLedger,
+        otherDeviceGrants: Int = 0
     ) -> Int {
         let sessionWords = TimeAllowancePolicy.passageWordCount(
             base: rule.lockdown.effectiveTemporaryAccessPassageWordCount,
             incrementsAlreadyGranted: active(for: rule.id, at: now, defaults: defaults)?.grantCount ?? 0
         )
         if let days = rule.lockdown.temporaryAllowanceResetDays {
+            // A grant taken on another device still cost a passage, so it
+            // lengthens the next one here too.
+            let local = TemporaryAllowanceBackoff.history(for: rule.id, defaults: defaults)
+            let combined = TemporaryAllowanceBackoff.History(
+                startedAt: local?.startedAt ?? now,
+                grants: (local?.grants ?? 0) + max(0, otherDeviceGrants)
+            )
             return TemporaryAllowanceBackoff.wordCount(base: rule.lockdown.effectiveTemporaryAccessPassageWordCount,
-                history: TemporaryAllowanceBackoff.history(for: rule.id, defaults: defaults), resetDays: days, at: now,
+                history: combined, resetDays: days, at: now,
                 sessionWordCount: sessionWords)
         }
         return sessionWords
@@ -110,19 +125,21 @@ enum MacTemporaryPauseStore {
         _ duration: TemporaryAccessDuration,
         for rule: DesktopEnforcementRule,
         at now: Date,
-        defaults: any KeyValueLedger
+        defaults: any KeyValueLedger,
+        otherDeviceMinutes: Int = 0
     ) -> Result<RuleTimeAllowance, GrantError> {
         guard rule.lockdown.allowsTimeExtensions else { return .failure(.notPermitted) }
 
         let existing = active(for: rule.id, at: now, defaults: defaults)
-        let spent = existing?.totalMinutesGranted ?? 0
+        let localSpent = existing?.totalMinutesGranted ?? 0
+        let spent = localSpent + max(0, otherDeviceMinutes)
         guard TimeAllowancePolicy.canGrant(
             duration,
             afterMinutes: spent,
-            maximumHours: rule.lockdown.maximumTimeExtensionHours
+            maximumMinutes: rule.lockdown.effectiveMaximumTemporaryAccessMinutes
         ) else {
             return .failure(.exceedsSessionMaximum(
-                maximumHours: rule.lockdown.maximumTimeExtensionHours
+                maximumMinutes: rule.lockdown.effectiveMaximumTemporaryAccessMinutes
             ))
         }
 

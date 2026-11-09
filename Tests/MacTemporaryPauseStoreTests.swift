@@ -141,7 +141,7 @@ final class MacTemporaryPauseStoreTests: XCTestCase {
         }
         let overflow = MacTemporaryPauseStore.grant(.tenMinutes, for: subject, at: now, defaults: defaults)
 
-        XCTAssertEqual(overflow, .failure(.exceedsSessionMaximum(maximumHours: 1)))
+        XCTAssertEqual(overflow, .failure(.exceedsSessionMaximum(maximumMinutes: 60)))
         XCTAssertTrue(MacTemporaryPauseStore.availableDurations(for: subject, at: now, defaults: defaults).isEmpty)
     }
 
@@ -187,5 +187,38 @@ final class MacTemporaryPauseStoreTests: XCTestCase {
 
         XCTAssertTrue(MacTemporaryPauseStore.cancel(ruleID: subject.id, defaults: defaults))
         XCTAssertNil(MacTemporaryPauseStore.active(for: subject.id, at: now, defaults: defaults))
+    }
+}
+
+extension MacTemporaryPauseStoreTests {
+    func testAuthorizationIdentitySurvivesExtensionButChangesAfterExpiry() {
+        let now = Date(timeIntervalSince1970: 1_790_000_000.123)
+        let subject = rule()
+        _ = MacTemporaryPauseStore.grant(.tenMinutes, for: subject, at: now, defaults: defaults)
+        let first = MacTemporaryPauseStore.activeAuthorizationIDs(at: now, defaults: defaults)[subject.id]
+        XCTAssertNotNil(first)
+        _ = MacTemporaryPauseStore.grant(.tenMinutes, for: subject, at: now.addingTimeInterval(60), defaults: defaults)
+        XCTAssertEqual(MacTemporaryPauseStore.activeAuthorizationIDs(at: now, defaults: defaults)[subject.id], first)
+        let later = now.addingTimeInterval(1_800)
+        _ = MacTemporaryPauseStore.grant(.tenMinutes, for: subject, at: later, defaults: defaults)
+        XCTAssertNotEqual(MacTemporaryPauseStore.activeAuthorizationIDs(at: later, defaults: defaults)[subject.id], first)
+    }
+
+    /// The Mac honours a sub-hour session maximum, which is the whole point of
+    /// configuring one in minutes.
+    func testSubHourMaximumOffersOnlyTheDurationsThatFit() {
+        let now = Date()
+        var subject = rule(maximumHours: 1)
+        subject.lockdown.maximumTemporaryAccessMinutes = 5
+
+        let available = MacTemporaryPauseStore.availableDurations(for: subject, at: now, defaults: defaults)
+
+        XCTAssertEqual(available.map(\.minutes), [1, 5])
+        guard case .success = MacTemporaryPauseStore.grant(.oneMinute, for: subject, at: now, defaults: defaults) else {
+            return XCTFail("A one-minute pause must fit a five-minute maximum")
+        }
+        guard case .failure = MacTemporaryPauseStore.grant(.tenMinutes, for: subject, at: now, defaults: defaults) else {
+            return XCTFail("Ten minutes must not fit a five-minute maximum")
+        }
     }
 }

@@ -17,6 +17,19 @@ enum MacEnforcementSafetyStateReporter {
             if let configuration = manager.providerConfiguration {
                 report["filterSockets"] = configuration.filterSockets
                 report["filterPackets"] = configuration.filterPackets
+                if let policy = DesktopPolicyConfigurationTransport.policy(from: configuration.vendorConfiguration) {
+                    let formatter = ISO8601DateFormatter()
+                    let local = MacTemporaryPauseStore.load(defaults: MacLockLedger.shared)
+                    report["temporaryAccess"] = policy.rules.map { rule -> [String: Any] in
+                        var value: [String: Any] = ["id": rule.id.uuidString,
+                            "maximumMinutes": rule.lockdown.effectiveMaximumTemporaryAccessMinutes,
+                            "legacyHours": rule.lockdown.maximumTimeExtensionHours,
+                            "permitted": rule.lockdown.permitsAnyTemporaryAccess]
+                        value["publishedUntil"] = rule.pausedUntil.map(formatter.string)
+                        value["localUntil"] = local[rule.id].map { formatter.string(from: $0.expiresAt) }
+                        return value
+                    }
+                }
                 if let revision = DesktopPolicyConfigurationTransport.revision(from: configuration.vendorConfiguration) {
                     report["revision"] = revision
                 }

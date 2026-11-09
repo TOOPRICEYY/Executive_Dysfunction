@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 extension DesktopEnforcementPolicy {
     /// Caps every temporary pause at the rule's own session maximum, measured
@@ -12,9 +13,9 @@ extension DesktopEnforcementPolicy {
     /// Keychain, so it is the right place to remember when a pause session
     /// began. A session lasts while the app keeps claiming a pause; once the app
     /// stops claiming one (the ledger expired it), the next grant starts fresh.
-    /// Residual: if a legitimate re-grant reaches the filter with no publish in
-    /// between, it is treated as the same session and capped accordingly. That
-    /// errs toward blocking.
+    /// An authorized new session carries a different identity, so a re-grant
+    /// after expiry does not require an intervening app publish to clear the
+    /// old cap. Legacy policies without an identity retain conservative bounds.
     func boundingPauses(
         from previous: DesktopEnforcementPolicy,
         at now: Date = Date()
@@ -28,7 +29,7 @@ extension DesktopEnforcementPolicy {
             var rule = rule
             guard let claimed = rule.pausedUntil, claimed > now,
                   rule.lockdown.permitsAnyTemporaryAccess,
-                  rule.lockdown.maximumTimeExtensionHours > 0 else {
+                  rule.lockdown.effectiveMaximumTemporaryAccessMinutes > 0 else {
                 // The app no longer claims a pause: the session is over, and a
                 // later grant starts a fresh one.
                 rule.pausedUntil = nil
@@ -39,11 +40,17 @@ extension DesktopEnforcementPolicy {
             // including after the filter has already exhausted it. Otherwise a
             // hand-edited ledger that simply keeps claiming a future expiry
             // would earn a fresh maximum on every republish.
-            let start = min(previousByID[rule.id]?.pauseSessionStartedAt ?? now, now)
+            let old = previousByID[rule.id]
+            let newAuthorization = rule.pauseAuthorizationID != nil
+                && rule.pauseAuthorizationID != old?.pauseAuthorizationID
+            let start = newAuthorization ? now : min(old?.pauseSessionStartedAt ?? now, now)
             let ceiling = start.addingTimeInterval(
-                TimeInterval(rule.lockdown.maximumTimeExtensionHours) * 3_600
+                TimeInterval(rule.lockdown.effectiveMaximumTemporaryAccessMinutes) * 60
             )
             let bounded = min(claimed, ceiling)
+            if bounded < claimed {
+                Logger(subsystem: "com.GabrielPrice.ExecutiveDysfunction.WebFilter", category: "temporary-access").notice("pause_bounded rule=\(rule.id.uuidString, privacy: .public) claimed=\(claimed.timeIntervalSince1970, privacy: .public) start=\(start.timeIntervalSince1970, privacy: .public) maximumMinutes=\(rule.lockdown.effectiveMaximumTemporaryAccessMinutes, privacy: .public) now=\(now.timeIntervalSince1970, privacy: .public)")
+            }
             rule.pauseSessionStartedAt = start
             rule.pausedUntil = bounded > now ? bounded : nil
             return rule

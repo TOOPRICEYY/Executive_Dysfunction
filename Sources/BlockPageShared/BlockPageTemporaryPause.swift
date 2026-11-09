@@ -89,10 +89,12 @@ struct BlockPageTemporaryPause: Codable, Equatable, Sendable {
 }
 
 enum BlockPagePauseDuration {
-    static let allowedSeconds = [600, 1_800, 3_600]
+    static let allowedSeconds = [60, 300, 600, 1_800, 3_600]
 
     static func label(for seconds: Int) -> String? {
         switch seconds {
+        case 60: "1 minute"
+        case 300: "5 minutes"
         case 600: "10 minutes"
         case 1_800: "30 minutes"
         case 3_600: "60 minutes"

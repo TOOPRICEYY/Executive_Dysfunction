@@ -35,7 +35,8 @@ enum CloudRuleBridge {
                 allowsTimeExtensions: rule.lockdownPolicy.allowsTimeExtensions,
                 maximumTimeExtensionHours: rule.lockdownPolicy.maximumTimeExtensionHours,
                 temporaryAllowanceResetDays: rule.lockdownPolicy.temporaryAllowanceResetDays,
-                temporaryAccessPassageWordCount: rule.lockdownPolicy.temporaryAccessPassageWordCount
+                temporaryAccessPassageWordCount: rule.lockdownPolicy.temporaryAccessPassageWordCount,
+                maximumTemporaryAccessMinutes: rule.lockdownPolicy.maximumTemporaryAccessMinutes
             ),
             deviceLocalSelectionCount: rule.selectedItemCount
         )
@@ -73,9 +74,10 @@ enum CloudRuleBridge {
             confirmationWindowHours: max(1, min(48, cloud.lockdown.confirmationWindowHours)),
             editWindowHours: max(1, min(72, cloud.lockdown.editWindowHours)),
             allowsTimeExtensions: cloud.lockdown.allowsTimeExtensions,
-            maximumTimeExtensionHours: max(1, min(8, cloud.lockdown.maximumTimeExtensionHours)),
+            maximumTimeExtensionHours: max(0, min(8, cloud.lockdown.maximumTimeExtensionHours)),
             temporaryAllowanceResetDays: cloud.lockdown.temporaryAllowanceResetDays,
-            temporaryAccessPassageWordCount: cloud.lockdown.temporaryAccessPassageWordCount
+            temporaryAccessPassageWordCount: cloud.lockdown.temporaryAccessPassageWordCount,
+            maximumTemporaryAccessMinutes: cloud.lockdown.effectiveMaximumTemporaryAccessMinutes
         )
         return rule
     }

@@ -953,9 +953,35 @@ struct CloudRuleLockdownPreference: Codable, Equatable {
     var maximumTimeExtensionHours = 3
     var temporaryAllowanceResetDays: Int? = nil
     var temporaryAccessPassageWordCount: Int? = nil
+    /// The session maximum in minutes. Optional, and the hour field stays
+    /// written beside it, so a device on an older build still decodes this
+    /// policy. A maximum below an hour floors to zero hours there, which
+    /// disables temporary access rather than granting a whole one.
+    var maximumTemporaryAccessMinutes: Int? = nil
 
     var effectiveTemporaryAccessPassageWordCount: Int {
         min(300, max(20, temporaryAccessPassageWordCount ?? passageWordCount))
+    }
+
+    /// Sets the session maximum, keeping the legacy hour field floored in step.
+    /// An older device reading this policy therefore sees zero hours for any
+    /// sub-hour maximum, which disables temporary access rather than granting a
+    /// whole hour nobody authorized.
+    mutating func setMaximumTemporaryAccess(minutes: Int) {
+        let clamped = min(480, max(1, minutes))
+        maximumTimeExtensionHours = clamped / 60
+        // A whole-hour maximum is already expressible in the legacy field. Not
+        // writing the override keeps an unchanged policy byte-identical, so a
+        // rename cannot silently pin a group that was inheriting.
+        guard clamped % 60 != 0 || maximumTemporaryAccessMinutes != nil else { return }
+        maximumTemporaryAccessMinutes = clamped
+    }
+
+    /// The session maximum every caller should use. Falls back to the hour
+    /// field for policies written before minutes existed.
+    var effectiveMaximumTemporaryAccessMinutes: Int {
+        let resolved = maximumTemporaryAccessMinutes ?? (maximumTimeExtensionHours * 60)
+        return min(480, max(1, resolved))
     }
 }
 
@@ -966,6 +992,7 @@ extension CloudRuleLockdownPreference {
         case allowsTimeExtensions, maximumTimeExtensionHours
         case temporaryAllowanceResetDays
         case temporaryAccessPassageWordCount
+        case maximumTemporaryAccessMinutes
     }
 
     init(from decoder: Decoder) throws {
@@ -979,6 +1006,8 @@ extension CloudRuleLockdownPreference {
         maximumTimeExtensionHours = try values.decodeIfPresent(Int.self, forKey: .maximumTimeExtensionHours) ?? 3
         temporaryAllowanceResetDays = try values.decodeIfPresent(Int.self, forKey: .temporaryAllowanceResetDays).map { min(365, max(1, $0)) }
         temporaryAccessPassageWordCount = try values.decodeIfPresent(Int.self, forKey: .temporaryAccessPassageWordCount).map { min(300, max(20, $0)) }
+        maximumTemporaryAccessMinutes = try values.decodeIfPresent(Int.self, forKey: .maximumTemporaryAccessMinutes)
+            .map { min(480, max(1, $0)) }
     }
 
     static func restrictiveMaximum(
@@ -994,6 +1023,7 @@ extension CloudRuleLockdownPreference {
             value.maximumTimeExtensionHours = policy.maximumTimeExtensionHours
             value.temporaryAllowanceResetDays = policy.temporaryAllowanceResetDays
             value.temporaryAccessPassageWordCount = policy.temporaryAccessPassageWordCount
+            value.maximumTemporaryAccessMinutes = policy.maximumTemporaryAccessMinutes
             return value
         }
         let enabled = resolved.filter { $0.severity != "none" }
@@ -1006,10 +1036,11 @@ extension CloudRuleLockdownPreference {
                 severity: "none",
                 passageWordCount: accessPolicies.map(\.passageWordCount).max() ?? 40,
                 allowsTimeExtensions: !accessPolicies.isEmpty,
-                maximumTimeExtensionHours: accessPolicies.map(\.maximumTimeExtensionHours).min() ?? 3,
+                maximumTimeExtensionHours: (accessPolicies.map(\.effectiveMaximumTemporaryAccessMinutes).min() ?? 180) / 60,
                 temporaryAllowanceResetDays: accessPolicies.compactMap(\.temporaryAllowanceResetDays).max(),
                 temporaryAccessPassageWordCount: accessPolicies.contains { $0.temporaryAccessPassageWordCount != nil }
-                    ? accessPolicies.map(\.effectiveTemporaryAccessPassageWordCount).max() : nil
+                    ? accessPolicies.map(\.effectiveTemporaryAccessPassageWordCount).max() : nil,
+                maximumTemporaryAccessMinutes: accessPolicies.map(\.effectiveMaximumTemporaryAccessMinutes).min()
             )
         }
 
@@ -1025,10 +1056,11 @@ extension CloudRuleLockdownPreference {
             confirmationWindowHours: enabled.map(\.confirmationWindowHours).min() ?? 24,
             editWindowHours: enabled.map(\.editWindowHours).min() ?? 24,
             allowsTimeExtensions: enabled.allSatisfy(\.allowsTimeExtensions),
-            maximumTimeExtensionHours: (enabled + accessPolicies).map(\.maximumTimeExtensionHours).min() ?? 3,
+            maximumTimeExtensionHours: ((enabled + accessPolicies).map(\.effectiveMaximumTemporaryAccessMinutes).min() ?? 180) / 60,
             temporaryAllowanceResetDays: accessPolicies.compactMap(\.temporaryAllowanceResetDays).max(),
             temporaryAccessPassageWordCount: accessPolicies.contains { $0.temporaryAccessPassageWordCount != nil }
-                ? accessPolicies.map(\.effectiveTemporaryAccessPassageWordCount).max() : nil
+                ? accessPolicies.map(\.effectiveTemporaryAccessPassageWordCount).max() : nil,
+            maximumTemporaryAccessMinutes: (enabled + accessPolicies).map(\.effectiveMaximumTemporaryAccessMinutes).min()
         )
     }
 }

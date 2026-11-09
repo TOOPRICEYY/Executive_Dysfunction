@@ -25,6 +25,7 @@
 		0821FB29FFF3F7D1BB8D514A /* TemporaryAllowanceBackoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55B989BA56C920ED89839565 /* TemporaryAllowanceBackoff.swift */; };
 		085294192B60689841C93E52 /* CloudPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B33F366441C2E592E9FC2C69 /* CloudPreferences.swift */; };
 		08EAF6533E9127983D28A373 /* GroupNowStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6D5F3C0836BD070129646E1 /* GroupNowStatus.swift */; };
+		0923D66871ECA0132CB7D643 /* TemporaryAccessLedger.swift in Sources */ = {isa = PBXBuildFile; fileRef = C01430D4948E1F5C15A002CD /* TemporaryAccessLedger.swift */; };
 		09CDDFDCBE6DCE8ACDACCFA5 /* AllowanceSchedulePainterCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAD710A4223D995BF2321E0 /* AllowanceSchedulePainterCodec.swift */; };
 		0B1BCAC078FBC1C2929CCF23 /* KeyValueLedger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24738343606C25BE423E2FF1 /* KeyValueLedger.swift */; };
 		0D2261ABA25AB9E8019399CE /* MacFilterActivationAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C5DB7F2DA5314B64F3E263F /* MacFilterActivationAuthorization.swift */; };
@@ -55,6 +56,7 @@
 		221978AAF6E0484648485ED7 /* HoldfastEnforcementIdentitiesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08273F0D99AA0843E451A081 /* HoldfastEnforcementIdentitiesTests.swift */; };
 		221AE9482BD131E24C20EAFA /* TimedLockdownSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629A0A0C544392A8270D0D24 /* TimedLockdownSession.swift */; };
 		22BFE48C8EE98179D1746055 /* ScheduleLanesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66155AAE6777C427B85AD35E /* ScheduleLanesView.swift */; };
+		22E93A4C11B5E5D1E396B805 /* SharedTemporaryPauses.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDADE8CE64AAEB6339D5BBCC /* SharedTemporaryPauses.swift */; };
 		24954E9E325F5552DEFB000E /* MacFilterSmokeTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6C09F91D9639B05CB2F2E25 /* MacFilterSmokeTest.swift */; };
 		24AAC5A33C64BB298640C6CB /* DesktopRuleEditUnlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = E969142D25A82AEDC6BA4EF9 /* DesktopRuleEditUnlock.swift */; };
 		25693C13775D32C5322B6A8F /* ExternalFilterToggleGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BB2044BA00565B1BE29FD53 /* ExternalFilterToggleGateTests.swift */; };
@@ -79,6 +81,7 @@
 		2F74847CEBD9FD441D9A8EF8 /* TemporaryAllowanceBackoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55B989BA56C920ED89839565 /* TemporaryAllowanceBackoff.swift */; };
 		2FA3B0CFAFA0AFFDC4B3E3E5 /* ActivityMonitorCapacityPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1343E1BE5D484011261E90AD /* ActivityMonitorCapacityPlanTests.swift */; };
 		30EA39608D8299A1564AA364 /* CloudLockdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 897495821663F1069B0D3CFA /* CloudLockdown.swift */; };
+		332A77D11C759541364CFA0D /* ICloudTemporaryAccessStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CDB1BBCCADECA0A28275679 /* ICloudTemporaryAccessStore.swift */; };
 		3454A46AA659FFED50ADE5C2 /* ReflectionPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 765875B9EDE6E91C6F53B90E /* ReflectionPrompt.swift */; };
 		347C9D2A40B2AC737D9DE888 /* DesktopDiagnosticTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A75C8583D5246629686639B /* DesktopDiagnosticTrace.swift */; };
 		351D501B9B55734136BCBD4C /* ScheduleLanesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66155AAE6777C427B85AD35E /* ScheduleLanesView.swift */; };
@@ -122,7 +125,9 @@
 		489268B7A6E0891EA75776FE /* TamperJournalList.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCB81ADF6F5BC3E6E710E0FB /* TamperJournalList.swift */; };
 		489FDE477E90B162EE41F9E8 /* AllowanceSchedulePainterCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAD710A4223D995BF2321E0 /* AllowanceSchedulePainterCodec.swift */; };
 		48BC5A63803F34C524E98CA4 /* RuleScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4873134BEEA102AD6B0E26DA /* RuleScheduler.swift */; };
+		4970CFD9083B9F2028CC9B75 /* TemporaryAccessLedgerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61451475A9D25D72FF433D54 /* TemporaryAccessLedgerTests.swift */; };
 		4A194C2234667DBEFEE51B62 /* BlockPageHTTP.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F1DB22D5DC44A31AC1C946 /* BlockPageHTTP.swift */; };
+		4AABB508072EE9C39578037D /* TemporaryAccessMaximumControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 927DD6BA6E09AEA6AEB6F6A4 /* TemporaryAccessMaximumControl.swift */; };
 		4B8AEAE20B3647D84B2038AC /* BlockPageHostPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E1DE27C4BF4A0802CE79BD /* BlockPageHostPolicy.swift */; };
 		4BB1A74A366A65583AAADFD0 /* HoldfastDiagnosticDocumentSectionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5409B7CC26DB804DB2AAF9F2 /* HoldfastDiagnosticDocumentSectionsTests.swift */; };
 		4BCA280FC444E2656811F67A /* BlockPageHTTP.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F1DB22D5DC44A31AC1C946 /* BlockPageHTTP.swift */; };
@@ -138,6 +143,7 @@
 		521110237223441DB32EEE7F /* BlockedEndpointCorrelationCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093ADF44E328299D2B2A5253 /* BlockedEndpointCorrelationCache.swift */; };
 		527056778F71CB3CAEF5CA9F /* HoldfastDiagnosticDocumentSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 975039DDA6C7FA535D205D32 /* HoldfastDiagnosticDocumentSections.swift */; };
 		533F6C2F0F4E2BEF226C65DA /* DomainClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 127AFA821477A7646EBC8377 /* DomainClassifier.swift */; };
+		537730667466DAFAB0E989A9 /* TemporaryAccessLedger.swift in Sources */ = {isa = PBXBuildFile; fileRef = C01430D4948E1F5C15A002CD /* TemporaryAccessLedger.swift */; };
 		540528F5B7D1ADA4B5E42861 /* BlockPageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010841574DCAF624068064DB /* BlockPageRenderer.swift */; };
 		54B9E25DF48468C151D1EF03 /* DesktopTemporaryPausePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE95B69C6281E3301F64987E /* DesktopTemporaryPausePolicy.swift */; };
 		557660028636613B604D6F9C /* ActivityMonitorCapacityPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1343E1BE5D484011261E90AD /* ActivityMonitorCapacityPlanTests.swift */; };
@@ -151,6 +157,7 @@
 		5AAFA153EEC560F02AC9880D /* HoldfastDiagnosticReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3291F0759C57985A53C772 /* HoldfastDiagnosticReport.swift */; };
 		5ACAF2A8562DA8C967EC090A /* EnforcementEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 791FF77BA0006CB01DFE277A /* EnforcementEngine.swift */; };
 		5AD8E5BA0BF37E35FECFFF76 /* DesktopEnforcementPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C296B3A4519719D64503D389 /* DesktopEnforcementPolicyTests.swift */; };
+		5C3F6038AEA91A4B66F38D9C /* ICloudTemporaryAccessStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CDB1BBCCADECA0A28275679 /* ICloudTemporaryAccessStore.swift */; };
 		5C8D899E3802C970CE07A5B1 /* IOSPassageInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCD453C3B8E6AAEA8ABFDC37 /* IOSPassageInput.swift */; };
 		5CA9C543B2C1F8C19B312103 /* RetreatSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE4173FBCD3A944DBCAAE19B /* RetreatSchedule.swift */; };
 		5CBD2449F9147FFE4033AB88 /* AppModelDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62C3A25E3DCDE76839301502 /* AppModelDiagnostics.swift */; };
@@ -162,6 +169,7 @@
 		64CD81D58C17344E0C20F8CE /* HoldfastWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8CDCE7BE70FA24ACF6A03E8 /* HoldfastWebView.swift */; };
 		6511EF5C7615CC6CCA101918 /* RetreatSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE4173FBCD3A944DBCAAE19B /* RetreatSchedule.swift */; };
 		651FD00DBF1036AA5517DA4D /* Lockdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F2CCC327D6A8E31870B7CFD /* Lockdown.swift */; };
+		65506170558370BF9227F76F /* TemporaryAccessLedger.swift in Sources */ = {isa = PBXBuildFile; fileRef = C01430D4948E1F5C15A002CD /* TemporaryAccessLedger.swift */; };
 		65519227A57BFC010C2D2B31 /* HoldfastPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 328F517375DE7456A3AB9DE0 /* HoldfastPresentation.swift */; };
 		65D7DBF8AF08255CEEE79A04 /* RemoteWeakeningHoldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E0F1CB9C250EC1C0EC42422 /* RemoteWeakeningHoldTests.swift */; };
 		66254C12DE2982B05AC52D71 /* MacConfirmationPassageLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC90C613841A07C589331E8 /* MacConfirmationPassageLayoutTests.swift */; };
@@ -177,6 +185,7 @@
 		6DE23E5C8ECD94C6841A4C06 /* HoldfastDiagnosticDocumentSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 975039DDA6C7FA535D205D32 /* HoldfastDiagnosticDocumentSections.swift */; };
 		6ECA5AACC3E236CECE7A3720 /* TemporaryAllowanceBackoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55B989BA56C920ED89839565 /* TemporaryAllowanceBackoff.swift */; };
 		6EEB82FF86D4CE9D3D788737 /* PassageDiffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F5E96C007B30D7D5BD0A80E /* PassageDiffView.swift */; };
+		6F69CFBB271E2AE12E0EC1E2 /* ICloudTemporaryAccessStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CDB1BBCCADECA0A28275679 /* ICloudTemporaryAccessStore.swift */; };
 		6FEC34770716C1EE340F10DD /* BlockPageHostPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E1DE27C4BF4A0802CE79BD /* BlockPageHostPolicy.swift */; };
 		712DF9A031B2741F249EE872 /* MacAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7FEADC34D95768A25A2A5E0 /* MacAppModel.swift */; };
 		72094037CE33B2683569045C /* KeyValueLedger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24738343606C25BE423E2FF1 /* KeyValueLedger.swift */; };
@@ -221,6 +230,7 @@
 		8EA090728A9D5D1792FE697E /* TemporaryAccessExplanation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18E10F714C4852706B34520 /* TemporaryAccessExplanation.swift */; };
 		8ECA6BB24C57140853F48DCB /* PresetStartGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 452E8DF855DA56F78AE4513C /* PresetStartGrid.swift */; };
 		8EF1A06DF3EBE29DBC738108 /* WebFilterDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB77B155F9D35C52D1ED6A2D /* WebFilterDiagnostics.swift */; };
+		8F00954B8E1F694785391602 /* ICloudTemporaryAccessStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CDB1BBCCADECA0A28275679 /* ICloudTemporaryAccessStore.swift */; };
 		8F0BAA936C439762BEC57963 /* IOSTimedLockdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36728D4C85538C30B05DF001 /* IOSTimedLockdownView.swift */; };
 		8F2D408A5320B66079E00D0F /* MacFilterSameBootResetSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABA9A39D47EDA933D92935BB /* MacFilterSameBootResetSafety.swift */; };
 		9040E431508B20925FA08DC6 /* HoldfastIconVariant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1C2A6AA76370EFE2289692 /* HoldfastIconVariant.swift */; };
@@ -239,6 +249,7 @@
 		9646BB0AEBF135EF4207F512 /* ScheduleLanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DE734BDDEEA9FE8B6BF68 /* ScheduleLanes.swift */; };
 		9748050BBE8E81B7A8768E59 /* TimedLockdownSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2297B4ED7CDD06436B502718 /* TimedLockdownSessionTests.swift */; };
 		974BEA0E8E0D6E28066EB480 /* SharedInterfaceGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800E57FE1BB48133B7539CC4 /* SharedInterfaceGroup.swift */; };
+		975A44945781471CB4C7DB32 /* TemporaryAccessMaximumControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 927DD6BA6E09AEA6AEB6F6A4 /* TemporaryAccessMaximumControl.swift */; };
 		9779241EDFDFAB69E56B0CD8 /* BypassActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C98F502BAA97413981B7AFD /* BypassActivityView.swift */; };
 		9853A73B28968AB6B69AC058 /* RuleRestrictionEvaluator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B52F84BA68A56CE58C652F4 /* RuleRestrictionEvaluator.swift */; };
 		9898FCF6DDDEDA6B5FB53907 /* MacFilterStartupWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9322B2F633E5C99F18363A5B /* MacFilterStartupWatchdog.swift */; };
@@ -249,6 +260,7 @@
 		9D3D5C87B7A1B3E80BC09176 /* ReflectionPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 765875B9EDE6E91C6F53B90E /* ReflectionPrompt.swift */; };
 		9E5E9730238B91F540638DAC /* HoldfastDiagnosticReportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3834FED69E9403B73782078 /* HoldfastDiagnosticReportTests.swift */; };
 		9E74378D05804C9DD3BBB0AD /* BypassActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C98F502BAA97413981B7AFD /* BypassActivityView.swift */; };
+		9F8FAA2B2CA91A59BEF285DC /* TemporaryAccessLedgerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61451475A9D25D72FF433D54 /* TemporaryAccessLedgerTests.swift */; };
 		9FD4D4C4FB060ECB0A8B5CD4 /* SharedInterfaceGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800E57FE1BB48133B7539CC4 /* SharedInterfaceGroup.swift */; };
 		9FFAD6BBD886D73F11C6A514 /* BlockPageTypingGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D62BFF7A7A1C8E2A148E8ED1 /* BlockPageTypingGuard.swift */; };
 		A062E79CCA3E4ED0922DE058 /* CloudBlockingTargets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C81C99133339FE2257AC1D7 /* CloudBlockingTargets.swift */; };
@@ -292,6 +304,7 @@
 		B3C4E434977F2B8DD3C3A3B5 /* ShieldTemporaryAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2828B88C7E1419933B9F1CD6 /* ShieldTemporaryAccess.swift */; };
 		B499B0A8FBC10B7599528BEB /* MacWebFilterProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA96FBD0DDF34755042BAD6E /* MacWebFilterProvider.swift */; };
 		B4F17996CF1F84DFB6675B97 /* MacFilterSameBootResetSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABA9A39D47EDA933D92935BB /* MacFilterSameBootResetSafety.swift */; };
+		B55EACEAB5C754BDBBCDA6AA /* TemporaryAccessLedger.swift in Sources */ = {isa = PBXBuildFile; fileRef = C01430D4948E1F5C15A002CD /* TemporaryAccessLedger.swift */; };
 		B5C80258E5840730631181C0 /* WebFilterDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB77B155F9D35C52D1ED6A2D /* WebFilterDiagnostics.swift */; };
 		B784743A4423FAE88F88DACE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D8B62CF5610156155935D0DA /* Assets.xcassets */; };
 		B8605EAE497C4581D39A155A /* AllowanceSchedulePainterCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAD710A4223D995BF2321E0 /* AllowanceSchedulePainterCodec.swift */; };
@@ -324,6 +337,7 @@
 		C4FC386520BB0E6D5985916F /* DesktopRemovalAuthorizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93D35F96A5E8C07829D47388 /* DesktopRemovalAuthorizationTests.swift */; };
 		C57ED1D39FBD15E7F1FAEBE7 /* MacFilterActivationSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83DB865BB00ED41424754560 /* MacFilterActivationSafety.swift */; };
 		C594F07124B2A0247B3A0B17 /* PassageDiffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F5E96C007B30D7D5BD0A80E /* PassageDiffView.swift */; };
+		C638DDF99666FCE6E4B65370 /* TemporaryAccessMaximumControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 927DD6BA6E09AEA6AEB6F6A4 /* TemporaryAccessMaximumControl.swift */; };
 		C67F0037F9F8ABFFD478A999 /* TemporaryAccessExplanation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18E10F714C4852706B34520 /* TemporaryAccessExplanation.swift */; };
 		C6EC2CBAA54F577460193A5E /* CloudPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B33F366441C2E592E9FC2C69 /* CloudPreferences.swift */; };
 		C7120B3A41E9C0B35D7A2E17 /* CloudBlockingTargets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C81C99133339FE2257AC1D7 /* CloudBlockingTargets.swift */; };
@@ -384,6 +398,7 @@
 		E8EA5A58E2208441E55F7CE6 /* ScheduleLanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DE734BDDEEA9FE8B6BF68 /* ScheduleLanes.swift */; };
 		E9615E9D306752A51FE90295 /* MacConfirmationPassageLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC90C613841A07C589331E8 /* MacConfirmationPassageLayoutTests.swift */; };
 		E98EF2262367D91DBD8D0339 /* HoldfastPresetsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD65CE5485FBB8F94C96530D /* HoldfastPresetsTests.swift */; };
+		EAD2AE120D0B949316659F03 /* SharedTemporaryPauses.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDADE8CE64AAEB6339D5BBCC /* SharedTemporaryPauses.swift */; };
 		EB66E02A32588ADC5513B4EF /* IOSBlockStatusTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F313699EABA7B87C745DFF8 /* IOSBlockStatusTimeline.swift */; };
 		EB7984D832A6B60D9A5C3BB3 /* BlockPageRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010841574DCAF624068064DB /* BlockPageRenderer.swift */; };
 		EC3E83233B29CA219CBE246E /* MacFilterSmokeTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6C09F91D9639B05CB2F2E25 /* MacFilterSmokeTest.swift */; };
@@ -402,6 +417,7 @@
 		F172B21EDA6B5CD7DB7D73BA /* HoldfastDiagnosticDocumentSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 975039DDA6C7FA535D205D32 /* HoldfastDiagnosticDocumentSections.swift */; };
 		F20F3AA1FE6486FEE8EC56BD /* CloudLockdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B996FB98981A20B80949A3BB /* CloudLockdownTests.swift */; };
 		F27556A5D5B1A4D6CEB7C9DC /* NetworkPacketInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 518B38A6C09A07E4D42BE53D /* NetworkPacketInspector.swift */; };
+		F2E6277A461C8D3AF6AFEA81 /* SharedTemporaryPauses.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDADE8CE64AAEB6339D5BBCC /* SharedTemporaryPauses.swift */; };
 		F3055558928D29D00252CB49 /* IOSDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B8CC483CFC4BD68A3225291 /* IOSDesignSystem.swift */; };
 		F3BD585635A8AE1CA8358052 /* DesktopRemovalAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07F24204374587F47E2BF20 /* DesktopRemovalAuthorization.swift */; };
 		F4FBA3032C7E83A25F125813 /* BlockingSchedulePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8935C05CE3B5EF7CAAC8FBE8 /* BlockingSchedulePreview.swift */; };
@@ -567,6 +583,7 @@
 		4B52F84BA68A56CE58C652F4 /* RuleRestrictionEvaluator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleRestrictionEvaluator.swift; sourceTree = "<group>"; };
 		4C5FE44F9D3CEC70B95FF107 /* AllowanceSchedulePainterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllowanceSchedulePainterTests.swift; sourceTree = "<group>"; };
 		4C9648E40884A10BCE8012DE /* MacFilterPreparedRetryGuards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterPreparedRetryGuards.swift; sourceTree = "<group>"; };
+		4CDB1BBCCADECA0A28275679 /* ICloudTemporaryAccessStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICloudTemporaryAccessStore.swift; sourceTree = "<group>"; };
 		4D9F6ACA43526F8683CE1BA1 /* TemporaryAllowanceStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemporaryAllowanceStatusView.swift; sourceTree = "<group>"; };
 		4E2B6233C30E8EDE6A452EF5 /* GroupNowStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupNowStatusTests.swift; sourceTree = "<group>"; };
 		4F2CCC327D6A8E31870B7CFD /* Lockdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Lockdown.swift; sourceTree = "<group>"; };
@@ -589,6 +606,7 @@
 		5F793BE15E621B485744A215 /* DesktopPauseBoundTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopPauseBoundTests.swift; sourceTree = "<group>"; };
 		60237A9BF0CE16FA454D77A7 /* MacEnforcementSafetyPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacEnforcementSafetyPersistence.swift; sourceTree = "<group>"; };
 		605F722019D205398698068F /* HoldfastIconVariantTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldfastIconVariantTests.swift; sourceTree = "<group>"; };
+		61451475A9D25D72FF433D54 /* TemporaryAccessLedgerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemporaryAccessLedgerTests.swift; sourceTree = "<group>"; };
 		61F5FE9B1A277533E7B62387 /* MacFilterActivationAuthorizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterActivationAuthorizationTests.swift; sourceTree = "<group>"; };
 		629A0A0C544392A8270D0D24 /* TimedLockdownSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedLockdownSession.swift; sourceTree = "<group>"; };
 		62C3A25E3DCDE76839301502 /* AppModelDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelDiagnostics.swift; sourceTree = "<group>"; };
@@ -626,6 +644,7 @@
 		8C5DB7F2DA5314B64F3E263F /* MacFilterActivationAuthorization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterActivationAuthorization.swift; sourceTree = "<group>"; };
 		8C81C99133339FE2257AC1D7 /* CloudBlockingTargets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBlockingTargets.swift; sourceTree = "<group>"; };
 		8E0F1CB9C250EC1C0EC42422 /* RemoteWeakeningHoldTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteWeakeningHoldTests.swift; sourceTree = "<group>"; };
+		927DD6BA6E09AEA6AEB6F6A4 /* TemporaryAccessMaximumControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemporaryAccessMaximumControl.swift; sourceTree = "<group>"; };
 		92D5B57F05C4940E1F13422B /* LockdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockdownTests.swift; sourceTree = "<group>"; };
 		9322B2F633E5C99F18363A5B /* MacFilterStartupWatchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterStartupWatchdog.swift; sourceTree = "<group>"; };
 		93D35F96A5E8C07829D47388 /* DesktopRemovalAuthorizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopRemovalAuthorizationTests.swift; sourceTree = "<group>"; };
@@ -657,6 +676,7 @@
 		BD65CE5485FBB8F94C96530D /* HoldfastPresetsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldfastPresetsTests.swift; sourceTree = "<group>"; };
 		BE4173FBCD3A944DBCAAE19B /* RetreatSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetreatSchedule.swift; sourceTree = "<group>"; };
 		BFE5960EA8F55B5C0416B4E8 /* ActivityGroupSelectionPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityGroupSelectionPersistence.swift; sourceTree = "<group>"; };
+		C01430D4948E1F5C15A002CD /* TemporaryAccessLedger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemporaryAccessLedger.swift; sourceTree = "<group>"; };
 		C296B3A4519719D64503D389 /* DesktopEnforcementPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopEnforcementPolicyTests.swift; sourceTree = "<group>"; };
 		C3BEC46F1B05F95CF1510540 /* MacWorkspaceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacWorkspaceViews.swift; sourceTree = "<group>"; };
 		C69E411B509A36EDBAEFD2F4 /* MacFilterLateEnableQuarantineSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterLateEnableQuarantineSafetyTests.swift; sourceTree = "<group>"; };
@@ -685,6 +705,7 @@
 		E969142D25A82AEDC6BA4EF9 /* DesktopRuleEditUnlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopRuleEditUnlock.swift; sourceTree = "<group>"; };
 		E9DB7BAD220260C893DC7304 /* MacEnforcementSafetyStateReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacEnforcementSafetyStateReporter.swift; sourceTree = "<group>"; };
 		ED488514D1D5216072FBA266 /* WebFilterFailOpenGovernor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebFilterFailOpenGovernor.swift; sourceTree = "<group>"; };
+		EDADE8CE64AAEB6339D5BBCC /* SharedTemporaryPauses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedTemporaryPauses.swift; sourceTree = "<group>"; };
 		EE95B69C6281E3301F64987E /* DesktopTemporaryPausePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopTemporaryPausePolicy.swift; sourceTree = "<group>"; };
 		F0602362F348AA5A4A535AB3 /* MacBlockingGroupEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacBlockingGroupEditor.swift; sourceTree = "<group>"; };
 		F0C5ED3F5AA6CC840731E8F3 /* MacFilterSameBootResetSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFilterSameBootResetSafetyTests.swift; sourceTree = "<group>"; };
@@ -740,12 +761,14 @@
 				6D1C2A6AA76370EFE2289692 /* HoldfastIconVariant.swift */,
 				328F517375DE7456A3AB9DE0 /* HoldfastPresentation.swift */,
 				0718256E94695BB5AEF957B5 /* HoldfastPresets.swift */,
+				4CDB1BBCCADECA0A28275679 /* ICloudTemporaryAccessStore.swift */,
 				24738343606C25BE423E2FF1 /* KeyValueLedger.swift */,
 				765875B9EDE6E91C6F53B90E /* ReflectionPrompt.swift */,
 				BE4173FBCD3A944DBCAAE19B /* RetreatSchedule.swift */,
 				DA9DE734BDDEEA9FE8B6BF68 /* ScheduleLanes.swift */,
 				2BC6156020B548EBAACD3463 /* TamperJournal.swift */,
 				F18E10F714C4852706B34520 /* TemporaryAccessExplanation.swift */,
+				C01430D4948E1F5C15A002CD /* TemporaryAccessLedger.swift */,
 				55B989BA56C920ED89839565 /* TemporaryAllowanceBackoff.swift */,
 			);
 			path = CloudShared;
@@ -955,6 +978,7 @@
 				4B52F84BA68A56CE58C652F4 /* RuleRestrictionEvaluator.swift */,
 				4873134BEEA102AD6B0E26DA /* RuleScheduler.swift */,
 				066F156AD5B75D2110D2BAFE /* SharedConfiguration.swift */,
+				EDADE8CE64AAEB6339D5BBCC /* SharedTemporaryPauses.swift */,
 				2828B88C7E1419933B9F1CD6 /* ShieldTemporaryAccess.swift */,
 				629A0A0C544392A8270D0D24 /* TimedLockdownSession.swift */,
 			);
@@ -1015,6 +1039,7 @@
 				7B592B7D2B74DBDE0BF700B5 /* RuleSchedulerTests.swift */,
 				3D1DF4FD9688224AB6A0C126 /* SharedInterfaceGroupTests.swift */,
 				A90B714B6108495687FA15BD /* TamperJournalTests.swift */,
+				61451475A9D25D72FF433D54 /* TemporaryAccessLedgerTests.swift */,
 				5CB65C74DC1554FDF3C91F95 /* TemporaryAllowanceBackoffTests.swift */,
 				2297B4ED7CDD06436B502718 /* TimedLockdownSessionTests.swift */,
 				E42A80EB0CFDD94CDEBC9100 /* TimeWindowTests.swift */,
@@ -1054,6 +1079,7 @@
 				AE3CC242D65764416319A6C5 /* SharedInterfaceScreen.swift */,
 				A9514176A92C60422582B960 /* SharedInterfaceSession.swift */,
 				FCB81ADF6F5BC3E6E710E0FB /* TamperJournalList.swift */,
+				927DD6BA6E09AEA6AEB6F6A4 /* TemporaryAccessMaximumControl.swift */,
 				3FB8AD43163ADB6E8538601C /* TemporaryAllowanceBackoffEditor.swift */,
 				4D9F6ACA43526F8683CE1BA1 /* TemporaryAllowanceStatusView.swift */,
 			);
@@ -1487,6 +1513,7 @@
 				7EC7623EEB7EC81800D04921 /* HoldfastPresentation.swift in Sources */,
 				E72A81141516BD3054FF60AB /* HoldfastPresets.swift in Sources */,
 				C4BFFFC580A0DD16E29B17DB /* HoldfastWebView.swift in Sources */,
+				6F69CFBB271E2AE12E0EC1E2 /* ICloudTemporaryAccessStore.swift in Sources */,
 				4F7DB21286F9F7E6FB435177 /* KeyValueLedger.swift in Sources */,
 				651FD00DBF1036AA5517DA4D /* Lockdown.swift in Sources */,
 				BE88C454A4E18CB4A3BC067D /* LockdownStatusBadge.swift in Sources */,
@@ -1533,9 +1560,12 @@
 				4F906E880FFA83595D09DBA3 /* SharedInterfaceGroup.swift in Sources */,
 				8BFC5BDD9BD3341E2F6B103F /* SharedInterfaceScreen.swift in Sources */,
 				51BAD8427C02C6AF86EB1B19 /* SharedInterfaceSession.swift in Sources */,
+				EAD2AE120D0B949316659F03 /* SharedTemporaryPauses.swift in Sources */,
 				AC3584E1C663528C0EF1B586 /* TamperJournal.swift in Sources */,
 				489268B7A6E0891EA75776FE /* TamperJournalList.swift in Sources */,
 				A7C7482C18CF20EDD257B6D2 /* TemporaryAccessExplanation.swift in Sources */,
+				B55EACEAB5C754BDBBCDA6AA /* TemporaryAccessLedger.swift in Sources */,
+				975A44945781471CB4C7DB32 /* TemporaryAccessMaximumControl.swift in Sources */,
 				36DD4FD8B16E03619262D48A /* TemporaryAllowanceBackoff.swift in Sources */,
 				13D1D292250B7F04010E38FC /* TemporaryAllowanceBackoffEditor.swift in Sources */,
 				67178A89131549501E049841 /* TemporaryAllowanceStatusView.swift in Sources */,
@@ -1596,6 +1626,7 @@
 				0549F0FBDDB9F3DEDD48A2AF /* HoldfastIconVariant.swift in Sources */,
 				A8C99BAFA2C895DDB5A9CC22 /* HoldfastPresentation.swift in Sources */,
 				730EB8F7583DC8199ECAB895 /* HoldfastPresets.swift in Sources */,
+				8F00954B8E1F694785391602 /* ICloudTemporaryAccessStore.swift in Sources */,
 				0B1BCAC078FBC1C2929CCF23 /* KeyValueLedger.swift in Sources */,
 				A6DC118B5E610F5FEC8D5E57 /* MacEnforcementSafetyPersistence.swift in Sources */,
 				45D50D2B5F8DF72C1785BE99 /* MacFilterActivationAuthorization.swift in Sources */,
@@ -1618,6 +1649,7 @@
 				81ED9AB422AA8D4A0F7B43C4 /* ScheduleLanes.swift in Sources */,
 				2879BA2375D274B11A85B32D /* TamperJournal.swift in Sources */,
 				FFFBCE63A681D8FE0B786ED4 /* TemporaryAccessExplanation.swift in Sources */,
+				65506170558370BF9227F76F /* TemporaryAccessLedger.swift in Sources */,
 				2F74847CEBD9FD441D9A8EF8 /* TemporaryAllowanceBackoff.swift in Sources */,
 				3D7DA268FC3BEE5015EE5F37 /* WebFilterDiagnostics.swift in Sources */,
 				F00E14035E1DEF0B46026E1F /* WebFilterFailOpenGovernor.swift in Sources */,
@@ -1726,6 +1758,7 @@
 				4674319DFEED7200107A7CE0 /* HoldfastPresentation.swift in Sources */,
 				8225B6119D4745428B6BB55B /* HoldfastPresets.swift in Sources */,
 				E98EF2262367D91DBD8D0339 /* HoldfastPresetsTests.swift in Sources */,
+				5C3F6038AEA91A4B66F38D9C /* ICloudTemporaryAccessStore.swift in Sources */,
 				72094037CE33B2683569045C /* KeyValueLedger.swift in Sources */,
 				3C6C73A0E64575C7728FE87D /* Lockdown.swift in Sources */,
 				CD7DFA36AE72B7EEC650AA7C /* LockdownStatusBadge.swift in Sources */,
@@ -1772,10 +1805,14 @@
 				D3318575EBC0A461E75426E9 /* ScheduleLanesView.swift in Sources */,
 				974BEA0E8E0D6E28066EB480 /* SharedInterfaceGroup.swift in Sources */,
 				84E07B32D89C97BE358EF3AF /* SharedInterfaceGroupTests.swift in Sources */,
+				22E93A4C11B5E5D1E396B805 /* SharedTemporaryPauses.swift in Sources */,
 				3C9907172F68F4D538D98E73 /* TamperJournal.swift in Sources */,
 				26AF2D336DED0781DCA07F8C /* TamperJournalList.swift in Sources */,
 				C0F88DD05F1A55A638143FA5 /* TamperJournalTests.swift in Sources */,
 				C67F0037F9F8ABFFD478A999 /* TemporaryAccessExplanation.swift in Sources */,
+				0923D66871ECA0132CB7D643 /* TemporaryAccessLedger.swift in Sources */,
+				9F8FAA2B2CA91A59BEF285DC /* TemporaryAccessLedgerTests.swift in Sources */,
+				4AABB508072EE9C39578037D /* TemporaryAccessMaximumControl.swift in Sources */,
 				6ECA5AACC3E236CECE7A3720 /* TemporaryAllowanceBackoff.swift in Sources */,
 				5FD95D25C71659C9BF5FFC1A /* TemporaryAllowanceBackoffEditor.swift in Sources */,
 				A1636AF44D4D14C92D8AC767 /* TemporaryAllowanceBackoffTests.swift in Sources */,
@@ -1821,6 +1858,7 @@
 				65519227A57BFC010C2D2B31 /* HoldfastPresentation.swift in Sources */,
 				CF86148FB43882DA5B3CA139 /* HoldfastPresets.swift in Sources */,
 				64CD81D58C17344E0C20F8CE /* HoldfastWebView.swift in Sources */,
+				332A77D11C759541364CFA0D /* ICloudTemporaryAccessStore.swift in Sources */,
 				AA057E4C31FD903A56115C75 /* IOSArchitectureEditors.swift in Sources */,
 				EB66E02A32588ADC5513B4EF /* IOSBlockStatusTimeline.swift in Sources */,
 				BEF5343F36430B9687D6C285 /* IOSBlockingTargetsEditor.swift in Sources */,
@@ -1850,10 +1888,13 @@
 				9FD4D4C4FB060ECB0A8B5CD4 /* SharedInterfaceGroup.swift in Sources */,
 				FA3D1E2090332D5818C3C348 /* SharedInterfaceScreen.swift in Sources */,
 				CCC7FC7BE14CCEABB85C0CD1 /* SharedInterfaceSession.swift in Sources */,
+				F2E6277A461C8D3AF6AFEA81 /* SharedTemporaryPauses.swift in Sources */,
 				93E37ABB44A3E064E1059E2B /* ShieldTemporaryAccess.swift in Sources */,
 				6A2A5E828377D46183CAA2C9 /* TamperJournal.swift in Sources */,
 				7BCEA9575C42D2A42C7C9C54 /* TamperJournalList.swift in Sources */,
 				8EA090728A9D5D1792FE697E /* TemporaryAccessExplanation.swift in Sources */,
+				537730667466DAFAB0E989A9 /* TemporaryAccessLedger.swift in Sources */,
+				C638DDF99666FCE6E4B65370 /* TemporaryAccessMaximumControl.swift in Sources */,
 				5173FFBA4FB36A1BFED66ADE /* TemporaryAccessRequestView.swift in Sources */,
 				0821FB29FFF3F7D1BB8D514A /* TemporaryAllowanceBackoff.swift in Sources */,
 				C045DE1F710B0216DBDCDB0A /* TemporaryAllowanceBackoffEditor.swift in Sources */,
@@ -1885,6 +1926,7 @@
 				7DF281A2F4BC76F7A3C8593E /* RuleSchedulerTests.swift in Sources */,
 				5922E2B4E7357F871B3067BE /* SharedInterfaceGroupTests.swift in Sources */,
 				FA3CE558BEF16AA9234C0FBE /* TamperJournalTests.swift in Sources */,
+				4970CFD9083B9F2028CC9B75 /* TemporaryAccessLedgerTests.swift in Sources */,
 				8368557BB738C4A9314E4C21 /* TemporaryAllowanceBackoffTests.swift in Sources */,
 				BFC16BF13B61A26190BE6EA3 /* TimeWindowTests.swift in Sources */,
 				9748050BBE8E81B7A8768E59 /* TimedLockdownSessionTests.swift in Sources */,
@@ -2012,7 +2054,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 99;
+				CURRENT_PROJECT_VERSION = 107;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 7GXNZJMGPD;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -2358,7 +2400,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 99;
+				CURRENT_PROJECT_VERSION = 107;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 7GXNZJMGPD;
 				ENABLE_NS_ASSERTIONS = NO;

@@ -562,6 +562,10 @@ final class MacWebFilterProvider: NEFilterDataProvider, @unchecked Sendable {
             diagnostics: diagnostics,
             previousDiagnostics: previousDiagnostics
         )
+        let base = loadBasePolicy(at: date)
+        status.temporaryPauseAudit = Dictionary(uniqueKeysWithValues: base.rules.map { rule in
+            (rule.id.uuidString, "permitted=\(rule.lockdown.permitsAnyTemporaryAccess) maximumMinutes=\(rule.lockdown.effectiveMaximumTemporaryAccessMinutes) until=\(rule.pausedUntil?.timeIntervalSince1970 ?? 0) sessionStart=\(rule.pauseSessionStartedAt?.timeIntervalSince1970 ?? 0)")
+        })
         settingsLock.lock()
         let browserAllowances = temporaryPausePolicyRevision == policy.revision
             ? temporaryPauseExpirations.filter { $0.value > date } : [:]
