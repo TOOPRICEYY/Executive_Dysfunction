@@ -915,9 +915,26 @@ test("iphone host: settings, protection and block-screen requests are shared", a
           unlock: { phase: "idle" },
         },
       };
+      // A shield can also name a running retreat's copy of a group.
+      state.retreatGroups = [
+        {
+          id: "retreat-copy",
+          name: "Focus copy",
+          now: { state: "blocking", headline: "Blocking until Fri 09:00" },
+          lock: "delay",
+          delayDays: 3,
+          targets: "1 website",
+          temporaryPolicy: {
+            allowed: true,
+            words: 60,
+            maximumMinutes: 30,
+            resetDays: null,
+          },
+        },
+      ];
       state.accessRequest = {
         id: "req",
-        groupIDs: [state.groups[0].id],
+        groupIDs: [state.groups[0].id, "retreat-copy"],
         minutes: 10,
       };
       const sent: any[] = [];
@@ -1003,11 +1020,16 @@ test("iphone host: settings, protection and block-screen requests are shared", a
   await page.getByRole("button", { name: "Answer…" }).click();
   const access = page.getByRole("dialog", { name: /Temporary access/ });
   await expect(access.getByLabel("For how long?")).toBeDisabled();
+  await access
+    .getByLabel("Which group?")
+    .selectOption({ label: "Focus copy (retreat)" });
+  await expect(access.getByText("Base passage: 60 words.")).toBeVisible();
   await access.getByRole("textbox").fill("Reply to the one message I need");
   await access.getByRole("button", { name: "Continue to passage" }).click();
   expect((await sent()).at(-1)).toMatchObject({
     type: "answerAccessRequest",
     requestID: "req",
+    groupID: "retreat-copy",
     minutes: 10,
     reason: "conscious",
     reflection: "Reply to the one message I need",

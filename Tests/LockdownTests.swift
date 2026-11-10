@@ -735,6 +735,41 @@ extension LockdownTests {
         }
     }
 
+    /// Regression: an edit window that closed (or a missed checkpoint) while the
+    /// app stayed open was read as idle but kept on disk, and the start guards
+    /// required no saved process, so a newly typed passage started nothing.
+    func testAClosedOrCancelledProcessDoesNotBlockANewUnlock() {
+        let started = Date(timeIntervalSince1970: 1_800_000_000)
+        let process = UnlockProcess(startedAt: started)
+        let plain = retreatConfiguration(delayDays: 1, ceiling: nil)
+
+        // Waiting and open processes are live and must never be replaced.
+        XCTAssertEqual(Lockdown.liveProcess(process, configuration: plain, at: started.addingTimeInterval(3_600)), process)
+        XCTAssertEqual(Lockdown.liveProcess(process, configuration: plain, at: started.addingTimeInterval(30 * 3_600)), process)
+        // One day of waiting plus a 24-hour window: closed after 48 hours.
+        let closed = started.addingTimeInterval(49 * 3_600)
+        XCTAssertEqual(Lockdown.phase(of: process, configuration: plain, at: closed), .idle)
+        XCTAssertNil(Lockdown.liveProcess(process, configuration: plain, at: closed))
+
+        // Checkpoints: due after a day, with a 24-hour window to type it.
+        let checkpoints = retreatConfiguration(delayDays: 2, ceiling: nil, repeats: true)
+        let due = started.addingTimeInterval(25 * 3_600)
+        guard case .confirmationDue = Lockdown.phase(of: process, configuration: checkpoints, at: due) else {
+            return XCTFail("Expected the first checkpoint to be due")
+        }
+        XCTAssertEqual(Lockdown.liveProcess(process, configuration: checkpoints, at: due), process)
+        let missed = started.addingTimeInterval(49 * 3_600)
+        XCTAssertEqual(Lockdown.phase(of: process, configuration: checkpoints, at: missed), .cancelled)
+        XCTAssertNil(Lockdown.liveProcess(process, configuration: checkpoints, at: missed))
+
+        // No process at all is, as before, nothing to keep.
+        XCTAssertNil(Lockdown.liveProcess(nil, configuration: plain, at: started))
+        XCTAssertTrue(UnlockPhase.idle.isIdleOrCancelled)
+        XCTAssertTrue(UnlockPhase.cancelled.isIdleOrCancelled)
+        XCTAssertFalse(UnlockPhase.unlocked(editWindowEndsAt: closed).isIdleOrCancelled)
+        XCTAssertFalse(UnlockPhase.waiting(unlocksAt: closed, nextConfirmationAt: nil).isIdleOrCancelled)
+    }
+
     /// A configuration written before the ceiling existed still decodes.
     func testConfigurationWithoutACeilingDecodes() throws {
         let legacy = Data(#"{"isEnabled":true,"unlockDelayDays":3,"repeatConfirmations":false,"passageWordCount":40,"confirmationWindowHours":24,"editWindowHours":24}"#.utf8)

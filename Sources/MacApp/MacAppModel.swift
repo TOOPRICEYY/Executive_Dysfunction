@@ -737,7 +737,7 @@ final class MacAppModel: ObservableObject {
     func startRetreatUnlock(_ id: UUID, now: Date = ClockTamperGuard.shared.conservativeNow()) {
         guard let policy = retreatChangePolicy(for: id),
               policy.requiresAuthorization,
-              retreatUnlockProcesses[id] == nil
+              retreatUnlockPhase(for: id, now: now).isIdleOrCancelled
         else { return }
         retreatUnlockProcesses[id] = UnlockProcess(startedAt: now)
         saveRetreatUnlockProcesses()

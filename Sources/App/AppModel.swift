@@ -303,7 +303,9 @@ final class AppModel: ObservableObject {
 
     /// Called after the user has typed the commitment passage.
     func startUnlock(now: Date = Date()) {
-        guard lockdownConfiguration.isEnabled, unlockProcess == nil else { return }
+        guard lockdownConfiguration.isEnabled,
+              Lockdown.liveProcess(unlockProcess, configuration: lockdownConfiguration, at: now) == nil
+        else { return }
         storeUnlockProcess(UnlockProcess(startedAt: now))
         refreshLockdown(now: now)
     }
@@ -398,7 +400,7 @@ final class AppModel: ObservableObject {
     func startRuleUnlock(_ id: UUID, now: Date = Date()) {
         guard let rule = rules.first(where: { $0.id == id }),
               ruleLockdownConfiguration(for: rule).isEnabled,
-              ruleUnlockProcesses[id] == nil
+              Lockdown.liveProcess(ruleUnlockProcesses[id], configuration: ruleLockdownConfiguration(for: rule), at: now) == nil
         else { return }
         ruleUnlockProcesses[id] = UnlockProcess(startedAt: now)
         saveRuleUnlockProcesses()
@@ -485,7 +487,7 @@ final class AppModel: ObservableObject {
     func startRetreatUnlock(_ id: UUID, now: Date = Date()) {
         guard let policy = retreatChangePolicy(for: id),
               policy.requiresAuthorization,
-              retreatUnlockProcesses[id] == nil
+              retreatUnlockPhase(for: id, now: now).isIdleOrCancelled
         else { return }
         retreatUnlockProcesses[id] = UnlockProcess(startedAt: now)
         SharedConfiguration.saveRetreatUnlockProcesses(retreatUnlockProcesses)

@@ -1,6 +1,6 @@
-import type { Group } from "./contract.ts";
+import type { AccessChoice } from "./presentation.ts";
 
-export function temporaryPassageDescription(group: Group): string {
+export function temporaryPassageDescription(group: AccessChoice): string {
   const base = group.temporaryPolicy.words;
   const current = group.temporaryPassageWords;
   if (current === undefined)

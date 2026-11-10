@@ -379,12 +379,24 @@ final class SharedInterfaceSession: ObservableObject {
             let state = GroupNowStatus.evaluate(isEnabled: rule.isEnabled, windows: rule.windows, now: now,
                 allowanceUntil: pause(rule.id), lockdownUntil: model.lockdownExpirations[rule.id])
             summaryGroups.append(.init(name: rule.name, state: state))
-            return ["id": rule.id.uuidString, "name": rule.name,
+            var value: [String: Any] = ["id": rule.id.uuidString, "name": rule.name,
                     "now": nowObject(state, now: now, coveredBy: coverage[rule.id]),
                     "enforced": blockingConfirmed,
                     "lock": Self.policyKinds[rule.lockdown.severity] ?? "inherited",
                     "delayDays": min(365, max(0, rule.lockdown.unlockDelayDays)),
                     "targets": HoldfastPresentation.targets(rule: rule)]
+            #if os(iOS)
+            // A block screen may name this copy; the answer needs its compiled
+            // policy. `answerAccessRequest` re-checks it against `model.rules`.
+            let p = rule.lockdown
+            value["temporaryPolicy"] = ["allowed": p.allowsTimeExtensions,
+                "words": min(300, max(20, p.effectiveTemporaryAccessPassageWordCount)),
+                "maximumMinutes": min(1440, max(1, p.effectiveMaximumTemporaryAccessMinutes)),
+                "resetDays": p.temporaryAllowanceResetDays.map { min(365, max(1, $0)) } ?? NSNull()] as [String: Any]
+            let passageWords = model.timeAllowancePassageWordCount(for: rule.id)
+            if passageWords >= 20 { value["temporaryPassageWords"] = min(38_400, passageWords) }
+            #endif
+            return value
         }
         let summary = DashboardNowSummary(groups: summaryGroups)
         let presets: [[String: Any]] = HoldfastPresets.blockingPresets.map {
@@ -509,7 +521,7 @@ final class SharedInterfaceSession: ObservableObject {
     }
     private func saveRetreat(_ input: Any?) throws -> [String: Any] {
         guard let r = input as? [String: Any], let rawName = r["name"] as? String, let goal = r["goal"] as? String,
-              let start = Self.strictDate(r["startsAt"]), let end = Self.strictDate(r["endsAt"]),
+              let sentStart = Self.strictDate(r["startsAt"]), let sentEnd = Self.strictDate(r["endsAt"]),
               let texts = r["groupIDs"] as? [String], let startNow = r["startNow"] as? Bool,
               let policy = r["changePolicy"] as? [String: Any], let kind = policy["kind"] as? String,
               let words = policy["words"] as? Int, let delayDays = policy["delayDays"] as? Int else {
@@ -518,7 +530,7 @@ final class SharedInterfaceSession: ObservableObject {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, name.count <= 120 else { throw SharedInterfaceError("Enter a retreat name of at most 120 characters.") }
         guard goal.count <= 2_000 else { throw SharedInterfaceError("Keep the purpose under 2,000 characters.") }
-        guard end > start else { throw SharedInterfaceError("The retreat has to end after it starts.") }
+        guard sentEnd > sentStart else { throw SharedInterfaceError("The retreat has to end after it starts.") }
         let now = Date()
         var existing: CloudRetreat?
         if let value = r["id"] {
@@ -529,6 +541,8 @@ final class SharedInterfaceSession: ObservableObject {
             }
             existing = retreat
         }
+        let start = SharedInterfaceInstant.keepingStored(sentStart, stored: existing?.plannedStart)
+        let end = SharedInterfaceInstant.keepingStored(sentEnd, stored: existing?.plannedEnd)
         // Starting is offered for a new retreat or a draft, as in the native editors.
         if startNow {
             guard existing == nil || existing?.state == .draft else {
@@ -576,6 +590,11 @@ final class SharedInterfaceSession: ObservableObject {
             : (existing?.state == .scheduled || existing?.state == .active ? "Retreat changes saved." : "Retreat draft saved.")
         generation += 1; challenges.removeAll()
         return ["snapshot": try snapshot(), "message": message]
+    }
+    /// A typed passage must leave an unlock in progress or open; never report
+    /// success for one that started nothing.
+    private func ensureStarted(_ phase: UnlockPhase) throws {
+        if phase.isIdleOrCancelled { throw SharedInterfaceError(model.errorMessage ?? "The unlock could not be started. Request it again.") }
     }
     private func ensure(_ success: Bool) throws {
         if !success { throw SharedInterfaceError(model.errorMessage ?? "The native policy did not authorize this change.") }
@@ -880,6 +899,7 @@ final class SharedInterfaceSession: ObservableObject {
                     guard model.retreatChangePolicy(for: id) == policy else { throw SharedInterfaceError("The retreat policy changed. Request a new passage.") }
                     if case .confirmationDue = model.retreatUnlockPhase(for: id) { model.confirmRetreatUnlock(id) }
                     else { model.startRetreatUnlock(id) }
+                    try ensureStarted(model.retreatUnlockPhase(for: id))
                     if finish, case .unlocked = model.retreatUnlockPhase(for: id) { try ensure(model.finishRetreat(id)) }
                 }
             }
@@ -943,6 +963,7 @@ final class SharedInterfaceSession: ObservableObject {
                     guard let current = model.rules.first(where: { $0.id == id }), model.ruleLockdownConfiguration(for: current) == expectedPolicy else { throw SharedInterfaceError("The change policy changed. Request a new passage.") }
                     if case .confirmationDue = model.ruleUnlockPhase(for: id) { model.confirmRuleUnlock(id) }
                     else { model.startRuleUnlock(id) }
+                    try ensureStarted(model.ruleUnlockPhase(for: id))
                 }
                 #endif
             case "requestTemporaryAccess":
@@ -1018,6 +1039,7 @@ final class SharedInterfaceSession: ObservableObject {
                     guard let self else { throw SharedInterfaceError("The window was closed.") }
                     guard model.lockdownConfiguration == expected else { throw SharedInterfaceError("Change protection changed. Request a new passage.") }
                     model.startUnlock()
+                    try ensureStarted(model.currentUnlockPhase())
                 }
             }
         case "cancelAppUnlock":

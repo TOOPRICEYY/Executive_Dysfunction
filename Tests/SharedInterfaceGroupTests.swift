@@ -134,4 +134,32 @@ final class SharedInterfaceGroupTests: XCTestCase {
         dto.temporaryPolicy.maximumMinutes = 481
         XCTAssertThrowsError(try dto.merging(into: original))
     }
+    /// Regression: the shared screen sends dates in whole seconds, so a
+    /// running retreat's `Date()`-precise end came back a fraction earlier and
+    /// a plain rename was refused as shortening it.
+    func testWholeSecondEchoOfAStoredRetreatDateIsTheStoredDate() {
+        var retreat = CloudRetreat()
+        retreat.state = .active
+        retreat.plannedStart = Date(timeIntervalSince1970: 1_800_000_000.25)
+        retreat.plannedEnd = Date(timeIntervalSince1970: 1_800_086_400.875)
+        let wire = ISO8601DateFormatter()
+        let sentStart = wire.date(from: wire.string(from: retreat.plannedStart))!
+        let sentEnd = wire.date(from: wire.string(from: retreat.plannedEnd))!
+        XCTAssertTrue(CloudRetreatEarlyEndGate.weakensPlannedInterval(retreat, plannedStart: sentStart, plannedEnd: sentEnd),
+                      "Without snapping, the echoed end reads as shortening")
+
+        let start = SharedInterfaceInstant.keepingStored(sentStart, stored: retreat.plannedStart)
+        let end = SharedInterfaceInstant.keepingStored(sentEnd, stored: retreat.plannedEnd)
+        XCTAssertEqual(start, retreat.plannedStart)
+        XCTAssertEqual(end, retreat.plannedEnd)
+        XCTAssertFalse(CloudRetreatEarlyEndGate.weakensPlannedInterval(retreat, plannedStart: start, plannedEnd: end))
+
+        // A real change of a second or more is passed through untouched, so
+        // shortening still reaches the change policy.
+        let earlier = retreat.plannedEnd.addingTimeInterval(-60)
+        XCTAssertEqual(SharedInterfaceInstant.keepingStored(earlier, stored: retreat.plannedEnd), earlier)
+        XCTAssertTrue(CloudRetreatEarlyEndGate.weakensPlannedInterval(retreat, plannedStart: start, plannedEnd: earlier))
+        // A new retreat has nothing stored to keep.
+        XCTAssertEqual(SharedInterfaceInstant.keepingStored(sentEnd, stored: nil), sentEnd)
+    }
 }

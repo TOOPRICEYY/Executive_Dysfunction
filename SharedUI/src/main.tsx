@@ -24,6 +24,7 @@ import {
   CaretUp,
 } from "@phosphor-icons/react";
 import { when } from "./view-format.ts";
+import { accessRequestChoices } from "./presentation.ts";
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type {
@@ -300,10 +301,7 @@ function App({ connection }: { connection: Adapter | null }) {
     : undefined;
   const requestGroups =
     accessRequest && snapshot
-      ? snapshot.groups.filter(
-          (g) =>
-            accessRequest.groupIDs.includes(g.id) && g.temporaryPolicy.allowed,
-        )
+      ? accessRequestChoices(snapshot, accessRequest.groupIDs)
       : [];
   const enforcementTitle =
     snapshot?.platform === "ios"

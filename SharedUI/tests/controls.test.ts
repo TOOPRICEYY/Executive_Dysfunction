@@ -189,3 +189,65 @@ test("snapshots with the new optional sections validate, and malformed ones do n
     false,
   );
 });
+
+test("a block-screen request naming a running retreat's copy can be answered", async () => {
+  // Regression: only `groups` was searched, so a request for a retreat copy
+  // (sent in `retreatGroups`) left the Answer button disabled.
+  const { accessRequestChoices } = await import("../src/presentation.ts");
+  const s = structuredClone(previewSnapshot());
+  s.groups[0].temporaryPolicy.allowed = true;
+  const copy = {
+    id: "retreat-copy",
+    name: s.groups[0].name,
+    now: { state: "blocking" as const, headline: "Blocking" },
+    lock: "delay" as const,
+    delayDays: 3,
+    targets: "1 website",
+    temporaryPolicy: {
+      allowed: true,
+      words: 60,
+      maximumMinutes: 30,
+      resetDays: null,
+    },
+    temporaryPassageWords: 80,
+  };
+  const closed = {
+    ...copy,
+    id: "closed-copy",
+    temporaryPolicy: { ...copy.temporaryPolicy, allowed: false },
+  };
+  const bare = { ...copy, id: "bare-copy" } as any;
+  delete bare.temporaryPolicy;
+  s.retreatGroups = [copy, closed, bare];
+  assert.ok(isSnapshot(s));
+
+  const only = accessRequestChoices(s, ["retreat-copy"]);
+  assert.deepEqual(only, [
+    {
+      id: "retreat-copy",
+      name: `${copy.name} (retreat)`,
+      temporaryPolicy: copy.temporaryPolicy,
+      temporaryPassageWords: 80,
+    },
+  ]);
+  // Both kinds together: the baseline group first, each named distinctly.
+  assert.deepEqual(
+    accessRequestChoices(s, [s.groups[0].id, "retreat-copy"]).map((g) => g.id),
+    [s.groups[0].id, "retreat-copy"],
+  );
+  // Copies that refuse temporary access, or say nothing about it, are not offered.
+  assert.deepEqual(accessRequestChoices(s, ["closed-copy", "bare-copy"]), []);
+  // Unnamed groups never appear.
+  assert.deepEqual(accessRequestChoices(s, ["elsewhere"]), []);
+
+  for (const mutate of [
+    (r: any) => (r.temporaryPolicy = { allowed: "yes" }),
+    (r: any) => (r.temporaryPolicy.words = 5),
+    (r: any) => (r.temporaryPolicy.resetDays = 0),
+    (r: any) => (r.temporaryPassageWords = 3),
+  ]) {
+    const bad: any = structuredClone(s);
+    mutate(bad.retreatGroups[0]);
+    assert.equal(isSnapshot(bad), false);
+  }
+});
