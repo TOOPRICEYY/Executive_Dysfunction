@@ -19,6 +19,12 @@ struct SharedInterfaceScreen: View {
             if let assets = Bundle.main.resourceURL?.appendingPathComponent("SharedUI"),
                FileManager.default.fileExists(atPath: assets.appendingPathComponent("index.html").path) {
                 HoldfastWebView(assets: assets) { data in try await session.handle(data) }
+                    #if os(iOS)
+                    // The bundle pads for the status bar and home indicator itself
+                    // (viewport-fit=cover), so it draws edge to edge. The keyboard
+                    // still resizes the view.
+                    .ignoresSafeArea(.container)
+                    #endif
             } else {
                 ContentUnavailableView("Shared interface missing", systemImage: "exclamationmark.triangle",
                     description: Text("Build SharedUI before packaging. Advanced native controls remain available; enforcement has not been changed."))
@@ -26,10 +32,17 @@ struct SharedInterfaceScreen: View {
                     .padding()
             }
         }
+        // Matches the bundle's --bg, so nothing flashes before the page paints.
+        .background(canvas.ignoresSafeArea())
         .preferredColorScheme(appearanceTheme == "dark" ? .dark : .light)
         .sheet(isPresented: $session.showAdvancedControls) {
-            VStack {
-                HStack { Spacer(); Button("Close") { session.showAdvancedControls = false }.padding() }
+            VStack(spacing: 0) {
+                HStack {
+                    Text("Advanced native controls").font(.headline)
+                    Spacer()
+                    Button("Close") { session.showAdvancedControls = false }
+                }
+                .padding()
                 #if os(macOS)
                 MacContentView().environmentObject(session.model).frame(minWidth: 1240, minHeight: 700)
                 #else
@@ -38,13 +51,20 @@ struct SharedInterfaceScreen: View {
             }
         }
         .sheet(isPresented: Binding(get: { session.nativePanel != nil }, set: { if !$0 { session.nativePanel = nil } })) {
+            #if os(macOS)
             VStack {
-                HStack { Spacer(); Button("Close") { session.nativePanel = nil }.padding() }
+                // The lockdown and diagnostics sheets carry their own Close button.
+                if session.nativePanel != "startLockdown" && session.nativePanel != "diagnostics" {
+                    HStack { Spacer(); Button("Close") { session.nativePanel = nil }.padding() }
+                }
                 if let error = model.errorMessage { Text(error).foregroundStyle(.red).padding().accessibilityLabel("Action needed: \(error)") }
                 nativePanel
             }
-            #if os(macOS)
             .frame(minWidth: 900, minHeight: 650)
+            #else
+            // Each iOS panel carries its own navigation bar, dismiss button and
+            // error reporting; a second "Close" row above it only adds noise.
+            nativePanel
             #endif
         }
         #if os(iOS)
@@ -59,6 +79,12 @@ struct SharedInterfaceScreen: View {
         }
         .onDisappear { session.finishPicker(accept: false) }
         #endif
+    }
+
+    private var canvas: Color {
+        appearanceTheme == "dark"
+            ? Color(red: 9 / 255, green: 11 / 255, blue: 11 / 255)
+            : Color(red: 244 / 255, green: 241 / 255, blue: 233 / 255)
     }
 
     @ViewBuilder private var nativePanel: some View {
@@ -80,9 +106,22 @@ struct SharedInterfaceScreen: View {
         #else
         switch session.nativePanel {
         case "startLockdown": IOSTimedLockdownView().environmentObject(session.model)
-        case "diagnostics": NavigationStack { IOSDiagnosticsView().environmentObject(session.model) }
+        case "diagnostics":
+            NavigationStack {
+                IOSDiagnosticsView()
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { session.nativePanel = nil } } }
+                    .iosModelErrorAlert()
+            }
+            .environmentObject(session.model)
         case "createRetreat": IOSRetreatEditor(initialRetreat: CloudRetreat(), isNew: true).environmentObject(session.model)
-        default: ContentView().environmentObject(session.model)
+        // Screen Time access, iCloud and hardening live in the native settings.
+        case "settings": SettingsView().environmentObject(session.model)
+        default:
+            VStack(spacing: 0) {
+                HStack { Spacer(); Button("Close") { session.nativePanel = nil }.padding() }
+                ContentView().environmentObject(session.model)
+            }
         }
         #endif
     }

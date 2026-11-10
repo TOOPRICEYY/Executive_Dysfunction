@@ -114,6 +114,13 @@ final class SharedInterfaceSession: ObservableObject {
         #endif
     }
     private static let policyKinds = ["none": "none", "passageOnly": "passage", "delayed": "delay", "repeatedConfirmations": "checkpoints"]
+    /// The models report sync as a sentence; the shared contract needs a state as well.
+    static func syncState(_ status: String) -> String {
+        let text = status.lowercased()
+        if text.contains("fail") || text.contains("rejected") { return "unavailable" }
+        if text == "not synced" || text.contains("pending") || text.contains("awaiting") || text.contains("proposed") { return "pending" }
+        return "current"
+    }
     /// Host-evaluated "what is this doing now". The renderer never derives this from a schedule.
     /// Works out, before any row is written, which group is actually holding
     /// each group's sites. A row cannot answer this alone: the answer depends
@@ -226,6 +233,10 @@ final class SharedInterfaceSession: ObservableObject {
         let enabled = !model.enforcement.isBlockingDisabled
         let confirmed: Bool
         switch model.enforcementHealth { case .enforcing, .idle: confirmed = enabled; default: confirmed = false }
+        // Hostname blocking is in force while only IP retry protection is
+        // incomplete, so groups are blocking even though the filter needs a look.
+        let blockingConfirmed: Bool
+        if case .limited = model.enforcementHealth { blockingConfirmed = enabled } else { blockingConfirmed = confirmed }
         let controller = model.enforcement
         let warning = controller.activationSafetyRequiresRestart || controller.recoveryWarning != nil || controller.deliveryError != nil
         let headline: String
@@ -241,10 +252,12 @@ final class SharedInterfaceSession: ObservableObject {
         #else
         let platform = "ios"
         let enabled = model.isAuthorized
-        let confirmed = enabled
+        let blockingConfirmed = enabled
         let enforcement: [String: Any] = ["state": enabled ? "active" : "disabled", "title": "Screen Time: \(model.authorizationDescription)",
             "headline": enabled ? "Screen Time on" : "Connect Screen Time",
-            "detail": "Status reflects the native rules and Screen Time authorization. System monitor timing can be approximate; foreground reconciliation uses the exact time."]
+            "detail": enabled
+                ? "Status reflects the native rules and Screen Time authorization. System monitor timing can be approximate; foreground reconciliation uses the exact time."
+                : "Allow Screen Time access so Holdfast can block on this device. Your groups and schedules stay saved."]
         let sync = model.cloudSyncStatus
         #endif
         var summaryGroups: [DashboardNowSummary.Group] = []
@@ -281,14 +294,25 @@ final class SharedInterfaceSession: ObservableObject {
             switch state {
             case .off: status = "disabled"
             case .paused: status = "suspended"
-            case .lockdown: status = confirmed && hasDeviceTargets ? "lockdown" : "unsupported"
-            case .blocking: status = confirmed && hasDeviceTargets ? "blocking" : "unsupported"
+            case .lockdown: status = blockingConfirmed && hasDeviceTargets ? "lockdown" : "unsupported"
+            case .blocking: status = blockingConfirmed && hasDeviceTargets ? "blocking" : "unsupported"
             default: status = "allowed"
             }
             value["status"] = status
             let holder = coverage[group.id]
             let sentence = GroupNowStatus.headline(state, now: now, coveredBy: holder)
-            value["detail"] = status == "unsupported" ? (!hasDeviceTargets ? "This group has no selected targets available on this device. Other devices keep their own targets." : "Scheduled to block; enforcement is not confirmed. \(sentence)") : sentence
+            if status != "unsupported" { value["detail"] = sentence }
+            else if !hasDeviceTargets { value["detail"] = "No apps or websites are selected for this device. Other devices keep their own targets." }
+            else {
+                #if os(macOS)
+                // An unhealthy filter may still be blocking; only "off" means nothing is blocked.
+                value["detail"] = enabled
+                    ? "The web filter has not confirmed this schedule, so blocking is not confirmed on this Mac."
+                    : "The web filter is off, so nothing is being blocked on this Mac."
+                #else
+                value["detail"] = "Screen Time access is off, so nothing is being blocked."
+                #endif
+            }
             value["canEdit"] = isUnlocked(group.id)
             value["now"] = nowObject(state, now: now, coveredBy: holder)
             if let until = model.lockdownExpirations[group.id], until > now { value["lockdownUntil"] = iso(until) }
@@ -314,6 +338,7 @@ final class SharedInterfaceSession: ObservableObject {
             summaryGroups.append(.init(name: rule.name, state: state))
             return ["id": rule.id.uuidString, "name": rule.name,
                     "now": nowObject(state, now: now, coveredBy: coverage[rule.id]),
+                    "enforced": blockingConfirmed,
                     "lock": Self.policyKinds[rule.lockdown.severity] ?? "inherited",
                     "delayDays": min(365, max(0, rule.lockdown.unlockDelayDays)),
                     "targets": HoldfastPresentation.targets(rule: rule)]
@@ -336,7 +361,7 @@ final class SharedInterfaceSession: ObservableObject {
             "capabilities": ["editGroups", "temporaryAccess", "pickApplications", "retreats", "lockdown", "diagnostics", "enforcementControl", "appearance", "advancedControls", "presets"],
             "appearance": appearance,
             "enforcementEnabled": enabled, "enforcement": enforcement,
-            "sync": ["state": "pending", "detail": sync], "groups": groups, "retreats": retreats, "bypasses": events, "lockdown": NSNull(),
+            "sync": ["state": Self.syncState(sync), "detail": sync], "groups": groups, "retreats": retreats, "bypasses": events, "lockdown": NSNull(),
             "summary": ["headline": summary.headline, "next": summary.nextLine(now: now) ?? NSNull()] as [String: Any],
             "retreatGroups": retreatGroups, "schedule": ["days": scheduleDays(now: now)], "presets": presets]
         if let end = model.lockdownExpirations.values.max() {
@@ -382,10 +407,10 @@ final class SharedInterfaceSession: ObservableObject {
             try challenge.action(typed); generation += 1
             return ["snapshot": try snapshot(), "message": "Request processed by the native policy. Check the updated status for waiting periods or enforcement acknowledgement."]
         }
-        if type == "diagnostics" { nativePanel = "diagnostics"; return ["message": "Native diagnostics opened."] }
+        if type == "diagnostics" { nativePanel = "diagnostics"; return [:] }
         if type == "openAdvancedControls" {
             showAdvancedControls = true
-            return ["message": "Advanced native controls opened."]
+            return [:]
         }
         if type == "pickApplications" {
             guard let text = c["groupID"] as? String, let id = UUID(uuidString: text) else { throw SharedInterfaceError("Invalid group.") }
@@ -405,7 +430,7 @@ final class SharedInterfaceSession: ObservableObject {
         }
         guard c["revision"] as? String == (try revision()) else { throw SharedInterfaceError("Settings changed. Close this dialog and reopen it before saving.") }
         model.errorMessage = nil
-        if type == "createRetreat" || type == "startLockdown" { nativePanel = type; return ["message": "Native configuration opened. Existing all-device policy checks remain in force."] }
+        if type == "createRetreat" || type == "startLockdown" { nativePanel = type; return [:] }
         if type == "setEnforcement" {
             #if os(macOS)
             if c["enabled"] as? Bool == true { model.installDesktopEnforcement(); try ensure(model.errorMessage == nil) }
@@ -419,8 +444,15 @@ final class SharedInterfaceSession: ObservableObject {
             #else
             // Disabling Screen Time is a distinct native recovery workflow;
             // it must not be conflated with the Mac's web-only switch.
-            if c["enabled"] as? Bool == true { await model.requestAuthorization(); try ensure(model.isAuthorized) }
-            else { nativePanel = "settings"; return ["message": "Use the native Screen Time recovery controls in Settings."] }
+            if c["enabled"] as? Bool == true {
+                await model.requestAuthorization()
+                if !model.isAuthorized {
+                    // Say what happened in plain words here; the raw system error stays in diagnostics.
+                    model.errorMessage = nil
+                    throw SharedInterfaceError("Screen Time access was not granted, so nothing is being blocked yet. You can try again at any time.")
+                }
+            }
+            else { nativePanel = "settings"; return [:] }
             #endif
         } else if type == "installPreset" {
             guard let id = c["presetID"] as? String, let preset = HoldfastPresets.blockingPresets.first(where: { $0.id == id }) else { throw SharedInterfaceError("Unknown preset.") }

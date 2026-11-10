@@ -291,8 +291,8 @@ struct IOSDashboardView: View {
                         }
                         IOSObjectRow(
                             title: group.name,
-                            headline: GroupNowStatus.headline(state, now: now, coveredBy: coverage[group.id]),
-                            headlineIsActive: state.isBlocking,
+                            headline: GroupNowStatus.headline(state, now: now, coveredBy: coverage[group.id], enforced: model.isAuthorized),
+                            headlineIsActive: state.isBlocking && model.isAuthorized,
                             detail: HoldfastPresentation.targets(group.targets),
                             color: rowColor(state),
                             statuses: [lockStatus(group.modificationPolicy)]
@@ -375,7 +375,8 @@ struct IOSDashboardView: View {
 
     private func rowColor(_ state: GroupNowState) -> Color {
         switch state {
-        case .lockdown, .blocking: IOSBrutalPalette.signal
+        // Without Screen Time access nothing is held, so the row must not look live.
+        case .lockdown, .blocking: model.isAuthorized ? IOSBrutalPalette.signal : IOSBrutalPalette.signal.opacity(0.35)
         case .paused: .orange
         case .upcoming: IOSBrutalPalette.signal.opacity(0.35)
         case .idle, .off: IOSBrutalPalette.raised
@@ -388,6 +389,7 @@ struct IOSDashboardView: View {
             ScheduleLanesView(
                 calendarRules: model.dashboardCalendarRules,
                 now: context.date,
+                enforced: model.isAuthorized,
                 states: Dictionary(
                     model.baseline.blockingGroups.map { ($0.id, nowState($0, now: context.date)) },
                     uniquingKeysWith: { first, _ in first }

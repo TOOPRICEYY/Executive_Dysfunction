@@ -51,13 +51,18 @@ const pageIcons = {
 };
 function App({ connection }: { connection: Adapter | null }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [page, setPage] = useState<Page>("Status");
+  const [page, showPage] = useState<Page>("Status");
   const [error, setError] = useState(
     connection
       ? ""
       : "This window is not connected to a Holdfast host. Open the installed app, or explicitly start the isolated UI preview.",
   );
   const [notice, setNotice] = useState("");
+  // A notice belongs to the screen it appeared on; do not carry it to the next.
+  const setPage = (next: Page) => {
+    setNotice("");
+    showPage(next);
+  };
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [editor, setEditor] = useState<Group | null>(null);
@@ -98,12 +103,15 @@ function App({ connection }: { connection: Adapter | null }) {
     window.addEventListener("holdfast-appearance", change);
     return () => window.removeEventListener("holdfast-appearance", change);
   }, [connection, snapshot?.capabilities.includes("appearance")]);
+  const reading = useRef(false);
+  const readFailed = useRef(false);
   const request = async (command: Command): Promise<Reply | null> => {
     if (!connection || busyRef.current) return null;
     busyRef.current = true;
     requestSequence.current++;
     setBusy(true);
     setError("");
+    readFailed.current = false;
     setNotice("");
     try {
       const reply = await connection.send(command);
@@ -120,42 +128,49 @@ function App({ connection }: { connection: Adapter | null }) {
     } catch (e) {
       if (mounted.current)
         setError(e instanceof Error ? e.message : "The request failed.");
+      // A later background read that succeeds may retire a failed status read.
+      if (command.type === "snapshot") readFailed.current = true;
       return null;
     } finally {
       busyRef.current = false;
       if (mounted.current) setBusy(false);
     }
   };
+  // Background status reads never disable a control, drop a tap or clear a
+  // message someone is reading. On a phone the first touch after the app comes
+  // forward also fires "focus"; a blocking read there swallowed that tap.
+  const read = async () => {
+    if (!connection || document.hidden || busyRef.current || reading.current)
+      return;
+    // Never let a late read overwrite a mutation.
+    const sequence = requestSequence.current;
+    reading.current = true;
+    try {
+      const reply = await connection.send({ type: "snapshot" });
+      if (
+        !mounted.current ||
+        sequence !== requestSequence.current ||
+        !reply.snapshot
+      )
+        return;
+      setSnapshot(reply.snapshot);
+      if (readFailed.current) setError("");
+      readFailed.current = false;
+    } catch {
+      if (!mounted.current || sequence !== requestSequence.current) return;
+      readFailed.current = true;
+      setError(
+        "Live status could not be refreshed. Blocking state is unconfirmed; reconnect before making changes.",
+      );
+    } finally {
+      reading.current = false;
+    }
+  };
   useEffect(() => {
     mounted.current = true;
     void request({ type: "snapshot" });
-    const refresh = () => {
-      if (!document.hidden && !busyRef.current)
-        void request({ type: "snapshot" });
-    };
-    // Only read status in the background. Never let a late read overwrite a mutation.
-    let polling = false;
-    const timer = setInterval(async () => {
-      if (!connection || document.hidden || busyRef.current || polling) return;
-      const sequence = requestSequence.current;
-      polling = true;
-      try {
-        const reply = await connection.send({ type: "snapshot" });
-        if (
-          mounted.current &&
-          sequence === requestSequence.current &&
-          reply.snapshot
-        )
-          setSnapshot(reply.snapshot);
-      } catch {
-        if (mounted.current && sequence === requestSequence.current)
-          setError(
-            "Live status could not be refreshed. Blocking state is unconfirmed; reconnect before making changes.",
-          );
-      } finally {
-        polling = false;
-      }
-    }, 5000);
+    const refresh = () => void read();
+    const timer = setInterval(refresh, 5000);
     window.addEventListener("focus", refresh);
     return () => {
       mounted.current = false;
@@ -242,9 +257,11 @@ function App({ connection }: { connection: Adapter | null }) {
       )}
       {compact ? (
         <header className="top-bar">
-          <span className="top-title">
-            {page === "Status" ? "Dashboard" : page}
-          </span>
+          {page === "Status" ? (
+            <span className="top-title">Dashboard</span>
+          ) : (
+            <h1 className="top-title">{page}</h1>
+          )}
           {page === "Status" && snapshot && (
             <div className="plus-menu">
               <button
@@ -344,12 +361,12 @@ function App({ connection }: { connection: Adapter | null }) {
         </aside>
       )}
       <main id="main">
-        {page !== "Status" && (
+        {page !== "Status" && !compact && (
           <header className="page-heading">
             <h1>{page}</h1>
           </header>
         )}
-        {page === "Status" && !snapshot && (
+        {page === "Status" && !snapshot && !compact && (
           <header className="page-heading">
             <h1>Dashboard</h1>
           </header>

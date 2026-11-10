@@ -49,6 +49,37 @@ final class MacWorkspaceLayoutTests: XCTestCase {
                     LockdownStatusBadge(endsAt: end).padding(16)
                 })
     }
+    func testDashboardOnlyClaimsBlockingWhileTheWebFilterConfirmsIt() {
+        let off = MacDashboardEnforcementGap.current(blockingDisabled: true, health: .enforcing(revision: 4, domains: 3, rules: 1))
+        XCTAssertEqual(off?.headline, "Web filter is off")
+        XCTAssertEqual(off?.note, GroupNowStatus.notEnforced)
+        // On and healthy, or blocking hostnames with only IP retry protection incomplete.
+        XCTAssertNil(MacDashboardEnforcementGap.current(blockingDisabled: false, health: .enforcing(revision: 4, domains: 3, rules: 1)))
+        XCTAssertNil(MacDashboardEnforcementGap.current(blockingDisabled: false, health: .idle(revision: 4)))
+        XCTAssertNil(MacDashboardEnforcementGap.current(blockingDisabled: false, health: .limited(revision: 4, missing: ["example.com"])))
+        // On, but the filter cannot vouch for the current rules: it may still be blocking.
+        for health in [FilterEnforcementSummary.Health.notReporting, .stale(seconds: 90),
+                       .behind(published: 5, enforcing: 4), .applying(revision: 5)] {
+            let gap = MacDashboardEnforcementGap.current(blockingDisabled: false, health: health)
+            XCTAssertEqual(gap?.headline, "Check the web filter")
+            XCTAssertEqual(gap?.detail, FilterEnforcementSummary.description(for: health))
+            XCTAssertEqual(gap?.note, GroupNowStatus.notConfirmed)
+        }
+    }
+    @MainActor
+    func testDashboardWithTheWebFilterOffRendersInBothThemes() throws {
+        var rule = CloudRulePreference(name: "Social feeds")
+        rule.isEnabled = true
+        let start = Date().addingTimeInterval(-600)
+        let end = start.addingTimeInterval(3_600)
+        for scheme in [ColorScheme.light, .dark] {
+            try capture("dashboard-filter-off-\(scheme)", scheme: scheme, content:
+                MacDashboardView(activeRules: [rule], calendarRules: [BlockStatusCalendarRule(rule: rule, forcedIntervals: [DateInterval(start: start, end: end)])],
+                    baselineRules: [rule], retreats: [], lockdownExpirations: [rule.id: end],
+                    enforcementGap: .current(blockingDisabled: true, health: .notReporting),
+                    onEdit: { _ in }, onAdd: {}, onOpenRetreats: {}, onOpenRetreat: { _ in }) { EmptyView() })
+        }
+    }
     @MainActor
     func testTemporaryAllowanceAppearsInDashboardAndEditSummary() throws {
         var rule = CloudRulePreference(name: "Social feeds")

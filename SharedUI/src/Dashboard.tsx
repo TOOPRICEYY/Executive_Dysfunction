@@ -18,6 +18,8 @@ import {
   bypassCounts,
   clock,
   daySegments,
+  enforcementConfirmed,
+  groupEnforced,
   groupNow,
   isBlockingState,
   laneLabel,
@@ -26,7 +28,11 @@ import {
   nextLine,
   nowHeadline,
   presetLock,
+  retreatGroupEnforced,
   sameDay,
+  shownNow,
+  unenforcedNote,
+  type UnenforcedNote,
   targetSummary,
 } from "./presentation.ts";
 import { duration } from "./view-format.ts";
@@ -105,17 +111,19 @@ function LockChip({
 
 export function GroupRow({
   group: g,
+  note,
   onEdit,
 }: {
   group: Group;
+  note?: UnenforcedNote;
   onEdit(): void;
 }) {
-  const now = groupNow(g);
-  // Styled as blocking only when the host also confirms enforcement.
-  const enforced = isBlockingState(now.state) && g.status !== "unsupported";
+  // Worded and styled as blocking only when the host also confirms enforcement.
+  const now = shownNow(groupNow(g), groupEnforced(g), undefined, note);
+  const enforced = isBlockingState(now.state) && groupEnforced(g);
   return (
     <button
-      className={`object-row now-${now.state}${enforced ? " is-blocking" : ""}`}
+      className={`object-row now-${now.state}${enforced ? " is-blocking" : ""}${isBlockingState(now.state) && !enforced ? " not-enforced" : ""}`}
       onClick={onEdit}
       aria-label={`Edit ${g.name}`}
     >
@@ -158,14 +166,20 @@ export function GroupRow({
 }
 function RetreatGroupRow({
   group: g,
+  enforced,
+  note,
   onOpen,
 }: {
   group: RetreatGroup;
+  enforced: boolean;
+  note?: UnenforcedNote;
   onOpen(): void;
 }) {
+  const now = shownNow(g.now, enforced, undefined, note);
+  const blocking = isBlockingState(now.state);
   return (
     <button
-      className={`object-row now-${g.now.state}${isBlockingState(g.now.state) ? " is-blocking" : ""}`}
+      className={`object-row now-${now.state}${blocking && enforced ? " is-blocking" : ""}${blocking && !enforced ? " not-enforced" : ""}`}
       onClick={onOpen}
       aria-label={`Open retreat for ${g.name}`}
     >
@@ -177,7 +191,7 @@ function RetreatGroupRow({
           </strong>
           <span className="chip">Retreat</span>
         </span>
-        <span className="row-headline">{g.now.headline}</span>
+        <span className="row-headline">{now.headline}</span>
         <small>{g.targets}</small>
       </span>
       <LockChip kind={g.lock} delayDays={g.delayDays} />
@@ -279,6 +293,7 @@ export function ScheduleLanes({
   const now = useNow(60_000);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const sources = lanesFor(snapshot);
+  const note = unenforcedNote(snapshot);
   const hostDay = snapshot.schedule?.days.find((d) =>
     sameDay(
       new Date(d.start),
@@ -398,15 +413,25 @@ export function ScheduleLanes({
             </div>
           </div>
           {ordered.map((lane) => {
-            const label = laneLabel(lane.now, lane.minutes, isToday, now);
+            const label = laneLabel(
+              lane.now,
+              lane.minutes,
+              isToday,
+              now,
+              lane.enforced,
+              note,
+            );
             const active =
-              isToday && lane.now && isBlockingState(lane.now.state);
+              isToday &&
+              lane.enforced &&
+              lane.now &&
+              isBlockingState(lane.now.state);
             return (
               <button
                 key={lane.id}
                 className="schedule-lane"
                 onClick={() => onSelect(lane.id)}
-                aria-label={`${lane.name}. ${isToday && lane.now ? lane.now.headline : label}`}
+                aria-label={`${lane.name}. ${isToday && lane.now ? shownNow(lane.now, lane.enforced, now, note).headline : label}`}
               >
                 <span className="lane-name">
                   <strong>{lane.name}</strong>
@@ -484,6 +509,17 @@ function StatusBanner({
       : snapshot.platform === "windows"
         ? "Device controls"
         : "Filter controls";
+  const enforcementLabel = snapshot.enforcementEnabled
+    ? snapshot.platform === "macos"
+      ? "Turn web filter off…"
+      : "Disable with passage…"
+    : snapshot.platform === "macos"
+      ? "Install / turn on web filter"
+      : snapshot.platform === "ios"
+        ? "Allow Screen Time access"
+        : "Enable blocking";
+  // The one thing that makes blocking work is never hidden behind the details toggle.
+  const needsTurnOn = !!onEnforcement && !snapshot.enforcementEnabled;
   return (
     <section
       className={`status-banner tone-${e.state}${compact ? " compact" : ""}`}
@@ -491,6 +527,11 @@ function StatusBanner({
     >
       <div className="status-main">
         <h2>{e.headline ?? e.title}</h2>
+        {needsTurnOn && (
+          <button className="banner-cta" disabled={busy} onClick={onEnforcement}>
+            {enforcementLabel}
+          </button>
+        )}
         <div className="status-badges">
           {snapshot.sync.detail &&
             snapshot.sync.state !== "current" &&
@@ -499,7 +540,10 @@ function StatusBanner({
                 {snapshot.sync.detail}
               </span>
             )}
-          <span className="badge">{groupsOn} groups on</span>
+          <span className="badge">
+            {groupsOn} {groupsOn === 1 ? "group" : "groups"}{" "}
+            {enforcementConfirmed(snapshot) ? "on" : "ready"}
+          </span>
           {running > 0 && (
             <span className="badge">
               {running} {running === 1 ? "retreat" : "retreats"} running
@@ -519,17 +563,9 @@ function StatusBanner({
           <p>{e.detail}</p>
           {e.title !== (e.headline ?? e.title) && <p>{e.title}</p>}
           <div className="actions">
-            {onEnforcement && (
+            {onEnforcement && !needsTurnOn && (
               <button disabled={busy} onClick={onEnforcement}>
-                {snapshot.enforcementEnabled
-                  ? snapshot.platform === "macos"
-                    ? "Turn web filter off…"
-                    : "Disable with passage…"
-                  : snapshot.platform === "macos"
-                    ? "Install / turn on web filter"
-                    : snapshot.platform === "ios"
-                      ? "Allow Screen Time access"
-                      : "Enable blocking"}
+                {enforcementLabel}
               </button>
             )}
             {onAdvanced && (
@@ -678,12 +714,13 @@ export function Dashboard({
   const match = (name: string) =>
     !search || name.toLowerCase().includes(search.toLowerCase());
   const presets = onPreset ? (snapshot.presets ?? []) : [];
-  const blocking =
-    snapshot.enforcement.state === "active" &&
-    [
-      ...groups.filter((g) => g.status !== "unsupported").map(groupNow),
-      ...retreatGroups.map((r) => r.now),
-    ].some((n) => isBlockingState(n.state));
+  const note = unenforcedNote(snapshot);
+  const blocking = [
+    ...groups.filter(groupEnforced).map(groupNow),
+    ...retreatGroups
+      .filter((r) => retreatGroupEnforced(r, snapshot))
+      .map((r) => r.now),
+  ].some((n) => isBlockingState(n.state));
 
   const groupsPanel = (
     <section className="object-panel" aria-label="Blocking Groups">
@@ -720,12 +757,23 @@ export function Dashboard({
           {groups
             .filter((g) => match(g.name))
             .map((g) => (
-              <GroupRow key={g.id} group={g} onEdit={() => edit(g)} />
+              <GroupRow
+                key={g.id}
+                group={g}
+                note={note}
+                onEdit={() => edit(g)}
+              />
             ))}
           {retreatGroups
             .filter((g) => match(g.name))
             .map((g) => (
-              <RetreatGroupRow key={g.id} group={g} onOpen={onRetreats} />
+              <RetreatGroupRow
+                key={g.id}
+                group={g}
+                enforced={retreatGroupEnforced(g, snapshot)}
+                note={note}
+                onOpen={onRetreats}
+              />
             ))}
           {!!search &&
             ![...groups, ...retreatGroups].some((g) => match(g.name)) && (

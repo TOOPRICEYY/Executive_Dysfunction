@@ -9,6 +9,11 @@ import SwiftUI
 struct ScheduleLanesView: View {
     let calendarRules: [BlockStatusCalendarRule]
     let now: Date
+    /// False while the device is not enforcing anything: lanes then show the
+    /// plan without claiming a group is blocking.
+    var enforced = true
+    /// Shown in place of "BLOCKING" while `enforced` is false.
+    var unenforcedNote = GroupNowStatus.notEnforced
     var states: [UUID: GroupNowState] = [:]
     var accent: Color = .accentColor
     /// Text-safe version of the accent (bright fills can be unreadable as text).
@@ -152,8 +157,8 @@ struct ScheduleLanesView: View {
     private func subtitle(_ lane: ScheduleLanes.Lane) -> String {
         if let state = lane.state {
             switch state {
-            case .lockdown: return "LOCKED DOWN"
-            case .blocking: return "BLOCKING"
+            case .lockdown: return enforced ? "LOCKED DOWN" : unenforcedNote.uppercased()
+            case .blocking: return enforced ? "BLOCKING" : unenforcedNote.uppercased()
             case .paused: return "PAUSED"
             case let .upcoming(at):
                 if calendar.isDate(at, inSameDayAs: now) { return "LATER TODAY" }
@@ -166,7 +171,7 @@ struct ScheduleLanesView: View {
     }
 
     private func accessibilitySummary(_ lane: ScheduleLanes.Lane) -> String {
-        if let state = lane.state { return GroupNowStatus.headline(state, now: now) }
+        if let state = lane.state { return GroupNowStatus.headline(state, now: now, coveredBy: nil, enforced: enforced, unenforcedNote: unenforcedNote) }
         return lane.intervals.isEmpty
             ? "Free"
             : lane.intervals.map {

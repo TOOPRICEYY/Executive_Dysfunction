@@ -225,3 +225,142 @@ test("refresh cannot silently rebase a pending edit onto a newer native revision
     ),
   ).toBe("before-refresh");
 });
+test("dialogs open at the top, notices stay on their page and each page has one title", async ({
+  page,
+}) => {
+  await page.goto("/?preview=1");
+  await page.getByRole("button", { name: "Edit Social feeds" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  // A long editor used to open scrolled part-way down with a ring on "Close".
+  expect(await dialog.evaluate((el) => el.scrollTop)).toBe(0);
+  await expect(dialog).toBeFocused();
+  await page.getByLabel("Name", { exact: true }).fill("Quiet evenings");
+  await page.getByRole("button", { name: "Save group" }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "No device settings changed",
+  );
+  // A saved-but-unenforced group must not read as blocking anywhere.
+  await expect(page.getByText("Saved in this preview only")).toBeVisible();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Settings");
+});
+test("a background status read never swallows the tap that follows it", async ({
+  page,
+}) => {
+  await page.addInitScript((state) => {
+    state.capabilities.push("lockdown");
+    const listeners = new Set<(event: { data: unknown }) => void>();
+    let reads = 0;
+    const host = window as any;
+    host.sentCommands = [];
+    host.chrome ??= {};
+    host.chrome.webview = {
+      addEventListener(
+        _: string,
+        listener: (event: { data: unknown }) => void,
+      ) {
+        listeners.add(listener);
+      },
+      removeEventListener(
+        _: string,
+        listener: (event: { data: unknown }) => void,
+      ) {
+        listeners.delete(listener);
+      },
+      postMessage(request: any) {
+        host.sentCommands.push(request.command.type);
+        const reply: any = { version: 1, id: request.id, ok: true };
+        const read = request.command.type === "snapshot";
+        reply.result = read ? { snapshot: structuredClone(state) } : {};
+        // Only the first read is instant; later reads are slow, like a phone
+        // waking its native engine.
+        setTimeout(
+          () => listeners.forEach((listener) => listener({ data: reply })),
+          read && ++reads > 1 ? 1500 : 0,
+        );
+      },
+    };
+  }, previewSnapshot());
+  await page.goto("/");
+  const lockdown = page.getByRole("button", { name: "Lockdown", exact: true });
+  await expect(lockdown).toBeEnabled();
+  // The first touch after the app comes forward fires "focus" before "click".
+  await page.evaluate(() => dispatchEvent(new Event("focus")));
+  await expect(lockdown).toBeEnabled();
+  await lockdown.click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).sentCommands))
+    .toContain("startLockdown");
+});
+// The same bundle runs inside the Mac app and the Windows app. A filter that is
+// on but has not confirmed the current rules may still be blocking, so those
+// hosts read "not confirmed" rather than "not enforced".
+for (const platform of ["macos", "windows"] as const) {
+  test(`${platform} host: an unconfirmed filter never reads as blocking`, async ({
+    page,
+  }) => {
+    await page.addInitScript(
+      ({ state, platform }) => {
+        state.platform = platform;
+        delete state.summary;
+        state.enforcementEnabled = true;
+        state.enforcement = {
+          state: "unknown",
+          title: "Applying changes",
+          detail: "The filter is applying the latest rules.",
+        };
+        for (const group of state.groups) {
+          group.status = "unsupported";
+          group.detail = "Blocking is not confirmed on this device.";
+        }
+        state.groups[0].now = {
+          state: "blocking",
+          headline: "Blocking now · until 5:00 PM",
+          changesAt: new Date(Date.now() + 3600000).toISOString(),
+        };
+        const listeners = new Set<(event: { data: unknown }) => void>();
+        const host = window as any;
+        host.chrome ??= {};
+        host.chrome.webview = {
+          addEventListener(_: string, fn: (event: { data: unknown }) => void) {
+            listeners.add(fn);
+          },
+          removeEventListener(
+            _: string,
+            fn: (event: { data: unknown }) => void,
+          ) {
+            listeners.delete(fn);
+          },
+          postMessage(request: any) {
+            const reply = {
+              version: 1,
+              id: request.id,
+              ok: true,
+              result: { snapshot: structuredClone(state) },
+            };
+            queueMicrotask(() =>
+              listeners.forEach((fn) => fn({ data: reply })),
+            );
+          },
+        };
+      },
+      { state: previewSnapshot(), platform },
+    );
+    await page.goto("/");
+    await expect(page.getByText("Check device enforcement")).toBeVisible();
+    await expect(
+      page.getByText("The filter is applying the latest rules.").first(),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/^Scheduled until .+ · not confirmed$/).first(),
+    ).toBeVisible();
+    await expect(page.getByText(/^Blocking now/)).toHaveCount(0);
+    await expect(page.getByText(/· not enforced$/)).toHaveCount(0);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(page.viewportSize()!.width);
+  });
+}

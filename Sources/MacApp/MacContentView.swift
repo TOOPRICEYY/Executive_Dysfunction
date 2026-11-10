@@ -102,6 +102,9 @@ struct MacContentView: View {
                 retreats: model.retreats,
                 temporaryAllowances: model.temporaryAllowanceExpirations,
                 lockdownExpirations: model.lockdownExpirations,
+                enforcementGap: MacDashboardEnforcementGap.current(
+                    blockingDisabled: model.enforcement.isBlockingDisabled,
+                    health: model.enforcementHealth),
                 onEdit: editBlockingGroup,
                 onAdd: { editingBlockingGroup = CloudBlockingGroup() },
                 onAddPreset: { model.installPreset($0) },
