@@ -90,6 +90,7 @@ final class HoldfastWorkspaceUITests: XCTestCase {
         tab("Settings").tap()
         let open = button("Open diagnostics")
         XCTAssertTrue(open.waitForExistence(timeout: 5))
+        revealAboveTabBar(open)
         open.tap()
         XCTAssertTrue(text("Diagnostic report").waitForExistence(timeout: 10), "The diagnostics dialog did not open")
         XCTAssertFalse(app.navigationBars["Diagnostics"].exists, "The native diagnostics sheet opened as well")
@@ -106,31 +107,44 @@ final class HoldfastWorkspaceUITests: XCTestCase {
         XCTAssertTrue(tab("Settings").isHittable)
     }
 
-    /// The native editors are reached through a sheet. If the environment object
-    /// does not reach it, the app traps the moment it is presented.
-    func testAdvancedControlsSheetPresentsAndCloses() {
+    /// The native settings and the "Advanced native controls" window are
+    /// retired: what they held is in the shared Settings page, and no entry
+    /// point to the native window remains.
+    func testNativeSettingsLiveInTheSharedSettingsPage() {
         tab("Settings").tap()
-        let open = button("Advanced native controls")
-        XCTAssertTrue(open.waitForExistence(timeout: 5))
-        open.tap()
-        XCTAssertTrue(app.staticTexts["Advanced native controls"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.tabBars.buttons["Dashboard"].waitForExistence(timeout: 5), "The native workspace did not present")
+        XCTAssertTrue(text("Protection").waitForExistence(timeout: 5), "The protection settings are missing")
+        XCTAssertFalse(button("Advanced native controls").exists, "The retired native window still has an entry point")
+        XCTAssertTrue(text("App-wide change protection").exists, "App-wide change protection is missing")
+        XCTAssertTrue(app.webViews.checkBoxes.matching(NSPredicate(format: "label ==[c] %@", "Prevent app deletion")).firstMatch.exists
+            || app.webViews.switches.matching(NSPredicate(format: "label ==[c] %@", "Prevent app deletion")).firstMatch.exists
+            || text("Prevent app deletion").exists, "App-deletion protection is missing")
+        XCTAssertTrue(button("Sync now").exists, "iCloud sync is missing")
+        // The simulator cannot grant Screen Time access, so the way to ask stays here too.
+        XCTAssertTrue(button("Allow Screen Time access").exists)
+        XCTAssertFalse(app.navigationBars["Settings"].exists, "The native settings sheet opened")
+        attach(named: "shared-settings")
+        tab("Dashboard").tap()
+        button("Screen Time").tap()
+        XCTAssertFalse(button("Advanced controls").exists, "The dashboard still opens the retired native window")
         XCTAssertEqual(app.state, .runningForeground)
-        attach(named: "advanced-controls")
-        app.buttons["Close"].tap()
-        XCTAssertTrue(tab("Settings").waitForExistence(timeout: 5))
     }
 
+    /// Creating a retreat is part of the shared interface now. No native
+    /// editor opens, and nothing can be saved before it is named and given a group.
     func testRetreatEditorPresentsAndDismisses() {
         tab("Retreats").tap()
         let new = button("New retreat")
         XCTAssertTrue(new.waitForExistence(timeout: 5))
         new.tap()
-        XCTAssertTrue(app.navigationBars["RETREAT"].waitForExistence(timeout: 5), "The retreat editor did not present")
-        XCTAssertFalse(app.buttons["Close"].exists, "The sheet has a second dismiss button above its own")
-        attach(named: "retreat-editor")
-        app.buttons["Cancel"].tap()
-        XCTAssertTrue(tab("Retreats").waitForExistence(timeout: 5))
+        let save = button("Save draft")
+        XCTAssertTrue(save.waitForExistence(timeout: 5), "The retreat dialog did not open")
+        XCTAssertTrue(text("Blocking Groups").exists, "The retreat dialog has no group choice")
+        XCTAssertFalse(app.navigationBars["RETREAT"].exists, "The native retreat editor opened as well")
+        XCTAssertFalse(save.isEnabled, "An unnamed retreat with no group must not save")
+        attach(named: "retreat-dialog")
+        button("Cancel").tap()
+        XCTAssertTrue(waitForDisappearance(of: save), "The retreat dialog did not close")
+        XCTAssertTrue(tab("Retreats").isHittable)
     }
 
     /// A refused or unavailable Screen Time request has to say so in plain words
@@ -181,6 +195,15 @@ final class HoldfastWorkspaceUITests: XCTestCase {
         XCTAssertTrue(preset.waitForExistence(timeout: 5), "The add menu offers no Work hours preset")
         preset.tap()
         XCTAssertTrue(row.waitForExistence(timeout: 10), "The Work hours preset was not added")
+    }
+
+    /// The tab bar is fixed over the page; a control under it takes the tab's tap.
+    private func revealAboveTabBar(_ element: XCUIElement) {
+        let bar = tab("Dashboard").frame.minY
+        for _ in 0..<5 where element.frame.maxY > bar - 8 {
+            app.webViews.firstMatch.swipeUp(velocity: .slow)
+        }
+        XCTAssertLessThan(element.frame.maxY, bar, "\(element) stays under the tab bar")
     }
 
     private func waitForDisappearance(of element: XCUIElement, timeout: TimeInterval = 5) -> Bool {

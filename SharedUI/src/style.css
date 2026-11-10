@@ -1256,6 +1256,16 @@
   .status-controls p {
     margin: 0;
   }
+  .retreat-dates {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 18px;
+  }
+  .retreat-dates input {
+    /* Date inputs size to their own content otherwise, and overflow phones. */
+    min-width: 0;
+    max-width: 100%;
+  }
   .lockdown-session {
     display: flex;
     align-items: center;
@@ -1850,6 +1860,54 @@
   }
   .lock-card button {
     flex-shrink: 0;
+  }
+  .lock-card > .actions {
+    flex: 0 1 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .category-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 4px 16px;
+  }
+  .held-list,
+  .journal ul {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0;
+    display: grid;
+    gap: 8px;
+  }
+  .held-list li,
+  .journal li {
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+  .journal li strong,
+  .journal li small {
+    display: block;
+  }
+  .journal h3 {
+    font-size: 13px;
+    margin: 12px 0 4px;
+  }
+  .banner.access-request {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .banner.access-request .actions,
+  .settings .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .settings h3 {
+    font-size: 14px;
   }
   .segmented {
     display: inline-flex;

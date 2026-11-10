@@ -1,10 +1,12 @@
 import SwiftUI
 #if os(iOS)
 import FamilyControls
+import UIKit
 #endif
 
-/// The packaged web bundle is the same build as Windows. Only OS pickers,
-/// diagnostics and the existing advanced editors are native during migration.
+/// The packaged web bundle is the same build as Windows. Only OS-owned
+/// surfaces are native: pickers, open/save panels, the share sheet and the
+/// Screen Time prompt. The native editors open only if the bundle is missing.
 struct SharedInterfaceScreen: View {
     @StateObject private var session: SharedInterfaceSession
     @ObservedObject private var model: SharedInterfaceNativeModel
@@ -82,6 +84,10 @@ struct SharedInterfaceScreen: View {
             }
         }
         .onDisappear { session.finishPicker(accept: false) }
+        // The system share sheet decides where an exported report goes.
+        .sheet(isPresented: Binding(get: { session.sharing != nil }, set: { if !$0 { session.sharing = nil; session.model.discardExportedDiagnostics() } })) {
+            IOSShareSheet(items: session.sharing ?? [])
+        }
         #endif
     }
 
@@ -119,8 +125,6 @@ struct SharedInterfaceScreen: View {
             }
             .environmentObject(session.model)
         case "createRetreat": IOSRetreatEditor(initialRetreat: CloudRetreat(), isNew: true).environmentObject(session.model)
-        // Screen Time access, iCloud and hardening live in the native settings.
-        case "settings": SettingsView().environmentObject(session.model)
         default:
             VStack(spacing: 0) {
                 HStack { Spacer(); Button("Close") { session.nativePanel = nil }.padding() }
@@ -130,3 +134,13 @@ struct SharedInterfaceScreen: View {
         #endif
     }
 }
+
+#if os(iOS)
+private struct IOSShareSheet: UIViewControllerRepresentable {
+    let items: [URL]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+#endif

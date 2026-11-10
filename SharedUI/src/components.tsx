@@ -1,8 +1,10 @@
 import type React from "react";
 import { useEffect, useRef, useId } from "react";
-import type { Group } from "./contract.ts";
+import { LockKey, LockOpen } from "@phosphor-icons/react";
+import type { Group, UnlockState } from "./contract.ts";
 import { clock, days, daySegments } from "./presentation.ts";
-import { labels, duration } from "./view-format.ts";
+import { labels, duration, when } from "./view-format.ts";
+import { unlockView } from "./controls.ts";
 
 export function SectionHeading({
   title,
@@ -143,6 +145,86 @@ export function Modal({
       </header>
       {children}
     </dialog>
+  );
+}
+/** Asks once before a step the native screens also confirmed. */
+export function ConfirmDialog({
+  title,
+  message,
+  confirm,
+  danger = false,
+  busy = false,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  message: string;
+  confirm: string;
+  danger?: boolean;
+  busy?: boolean;
+  onCancel(): void;
+  onConfirm(): void;
+}) {
+  return (
+    <Modal title={title} onClose={onCancel} busy={busy}>
+      <div className="dialog-content">
+        <p>{message}</p>
+      </div>
+      <div className="dialog-actions">
+        <button type="button" disabled={busy} onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className={danger ? "danger" : "primary"}
+          disabled={busy}
+          onClick={onConfirm}
+        >
+          {confirm}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+/** An unlock the host tracks, with the next step it allows. */
+export function UnlockCard({
+  unlock,
+  detail,
+  busy,
+  onRequest,
+  onCancel,
+}: {
+  unlock: UnlockState | undefined;
+  detail: string;
+  busy: boolean;
+  onRequest?: () => void;
+  onCancel?: () => void;
+}) {
+  const view = unlockView(unlock, when);
+  const open = unlock?.phase === "unlocked";
+  const Icon = open ? LockOpen : LockKey;
+  return (
+    <div className="lock-card">
+      <Icon size={20} weight="bold" aria-hidden="true" />
+      <div>
+        <strong>{view.title}</strong>
+        <p>{detail}</p>
+      </div>
+      {(view.request && onRequest) || (view.cancel && onCancel) ? (
+        <div className="actions">
+          {view.request && onRequest && (
+            <button type="button" disabled={busy} onClick={onRequest}>
+              {view.request}
+            </button>
+          )}
+          {view.cancel && onCancel && (
+            <button type="button" disabled={busy} onClick={onCancel}>
+              {view.cancel}
+            </button>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 export function NumberField({

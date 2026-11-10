@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
 import type { DiagnosticsReport } from "./contract.ts";
 import { Modal } from "./components.tsx";
+import { when } from "./view-format.ts";
 
 /** The device's own diagnostic report. The host builds it; this only shows it. */
 export function DiagnosticsDialog({
   load,
   copy,
+  exportReport,
   onClose,
 }: {
   load(names: boolean): Promise<DiagnosticsReport | null>;
   /** Asks the host to put the report on the clipboard; resolves to its confirmation. */
   copy(names: boolean): Promise<string | null>;
+  /** Asks the host to write the report to files through its own save surface. */
+  exportReport?: (names: boolean) => Promise<string | null>;
   onClose(): void;
 }) {
   const [names, setNames] = useState(false);
@@ -64,6 +68,29 @@ export function DiagnosticsDialog({
                 ))}
               </ul>
             )}
+            {report.journal && (
+              <section className="journal" aria-label="Tamper journal">
+                <h3>Tamper journal</h3>
+                {report.journal.length ? (
+                  <ul>
+                    {report.journal.map((j, i) => (
+                      <li key={i}>
+                        <strong>{j.title}</strong>
+                        <small>
+                          {when(j.at)}
+                          {j.detail && ` · ${j.detail}`}
+                        </small>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>
+                    Nothing recorded. Emergency disables, clock changes and the
+                    filter being switched off outside Holdfast appear here.
+                  </p>
+                )}
+              </section>
+            )}
             <pre className="diagnostic-text" tabIndex={0}>
               {report.text}
             </pre>
@@ -83,6 +110,20 @@ export function DiagnosticsDialog({
         >
           Copy report
         </button>
+        {exportReport && (
+          <button
+            type="button"
+            disabled={!report}
+            onClick={async () =>
+              setStatus(
+                (await exportReport(names)) ??
+                  "The report could not be exported.",
+              )
+            }
+          >
+            Export files…
+          </button>
+        )}
         <button type="button" className="primary" onClick={onClose}>
           Close
         </button>

@@ -267,6 +267,12 @@ final class AppModel: ObservableObject {
         return true
     }
 
+    /// The settings-lockdown phase right now, without the bookkeeping
+    /// `refreshLockdown` does, so reading it never changes anything.
+    func currentUnlockPhase(now: Date = Date()) -> UnlockPhase {
+        Lockdown.phase(of: unlockProcess, configuration: lockdownConfiguration, at: now)
+    }
+
     func refreshLockdown(now: Date = Date()) {
         let phase = Lockdown.phase(of: unlockProcess, configuration: lockdownConfiguration, at: now)
         switch phase {
@@ -1026,30 +1032,11 @@ final class AppModel: ObservableObject {
         }
         let now = Date()
         var retreat: CloudRetreat
+        var authorizedEditID: UUID?
         if let id, let index = document.retreats.firstIndex(where: { $0.id == id }) {
             retreat = document.retreats[index]
-            // Shortening a running Retreat releases enforcement exactly as
-            // ending it early does, so it passes through the same gate rather
-            // than slipping past it as an ordinary edit.
+            let original = retreat
             let clampedEnd = max(plannedStart.addingTimeInterval(60), plannedEnd)
-            if CloudRetreatEarlyEndGate.weakensPlannedInterval(
-                retreat, plannedStart: plannedStart, plannedEnd: clampedEnd
-            ) {
-                let authorized: Bool
-                if case .unlocked = retreatUnlockPhase(for: retreat.id, now: now) {
-                    authorized = true
-                } else {
-                    authorized = false
-                }
-                if !CloudRetreatEarlyEndGate.canEndEarly(
-                    retreat,
-                    authorizationIsUnlocked: authorized,
-                    appDefault: retreatAppDefaultPolicy
-                ) {
-                    errorMessage = "Complete this Retreat\u{2019}s change policy before shortening it."
-                    return false
-                }
-            }
             let retreatGroups = CloudRetreatGroupVersioning.versionedGroups(
                 from: sourceBlockingGroups,
                 replacing: retreat.currentVersion?.blockingGroups ?? [],
@@ -1065,6 +1052,33 @@ final class AppModel: ObservableObject {
                 at: now
             )
             if startImmediately { retreat.start(at: now) }
+            // Shortening a running Retreat, dropping or loosening one of its
+            // groups, or lowering its change policy all release enforcement
+            // exactly as ending it early does, so they pass the same gate
+            // rather than slipping past it as an ordinary edit.
+            if CloudRetreatEarlyEndGate.weakensActiveRetreat(
+                original, proposed: retreat,
+                activityGroups: document.activityGroups,
+                appDefault: retreatAppDefaultPolicy
+            ) {
+                let authorized: Bool
+                if case .unlocked = retreatUnlockPhase(for: original.id, now: now) {
+                    authorized = true
+                } else {
+                    authorized = false
+                }
+                guard CloudRetreatEarlyEndGate.canEndEarly(
+                    original,
+                    authorizationIsUnlocked: authorized,
+                    appDefault: retreatAppDefaultPolicy
+                ) else {
+                    errorMessage = "Complete this Retreat\u{2019}s change policy before removing its groups, loosening its protection or shortening it."
+                    return false
+                }
+                if CloudRetreatEarlyEndGate.policy(for: original, appDefault: retreatAppDefaultPolicy).requiresAuthorization {
+                    authorizedEditID = original.id
+                }
+            }
             document.retreats[index] = retreat
         } else {
             let retreatGroups = CloudRetreatGroupVersioning.versionedGroups(
@@ -1092,7 +1106,8 @@ final class AppModel: ObservableObject {
             document,
             status: startImmediately
                 ? (retreat.state == .scheduled ? "Retreat scheduled" : "Retreat active")
-                : (retreat.state == .draft ? "Retreat draft saved" : "Retreat changes saved")
+                : (retreat.state == .draft ? "Retreat draft saved" : "Retreat changes saved"),
+            authorizedRetreatEditID: authorizedEditID
         )
     }
 
@@ -1130,28 +1145,11 @@ final class AppModel: ObservableObject {
         return committed
     }
 
-    func recreateRetreat(_ source: CloudRetreat) {
-        var copy = source
-        copy.id = UUID()
-        copy.name = "\(source.name) — New"
-        copy.state = .draft
-        copy.plannedStart = Date()
-        let priorDuration = max(60, source.plannedEnd.timeIntervalSince(source.plannedStart))
-        copy.plannedEnd = copy.plannedStart.addingTimeInterval(priorDuration)
-        copy.modifiedAt = Date()
-        copy.runs = []
-        copy.versions = source.currentVersion.map { version in
-            [CloudRetreatVersion(
-                number: 1,
-                createdAt: Date(),
-                blockingGroups: version.blockingGroups,
-                modificationPolicy: version.modificationPolicy
-            )]
-        } ?? []
-        copy.currentVersionNumber = copy.versions.isEmpty ? 0 : 1
+    @discardableResult
+    func recreateRetreat(_ source: CloudRetreat) -> Bool {
         var document = cloudDocument
-        document.retreats.append(copy)
-        _ = commitArchitectureDocument(document, status: "Retreat recreated as draft")
+        document.retreats.append(source.recreatedDraft())
+        return commitArchitectureDocument(document, status: "Retreat recreated as draft")
     }
 
     private func bootstrapPortableArchitecture() {
@@ -1173,7 +1171,8 @@ final class AppModel: ObservableObject {
         _ source: CloudPreferencesDocument,
         status: String,
         allowingDisabledAdditionID: UUID? = nil,
-        authorizedEarlyEndRetreatID: UUID? = nil
+        authorizedEarlyEndRetreatID: UUID? = nil,
+        authorizedRetreatEditID: UUID? = nil
     ) -> Bool {
         let isSafeDisabledAddition = allowingDisabledAdditionID.map {
             isOnlyDisabledBlockingGroupAddition(source, id: $0)
@@ -1186,6 +1185,11 @@ final class AppModel: ObservableObject {
         let acceptedRules: [BlockingRule]
         if let authorizedEarlyEndRetreatID,
            isOnlyAuthorizedEarlyRetreatEnd(source, id: authorizedEarlyEndRetreatID) {
+            acceptedRules = proposedRules
+        } else if let authorizedRetreatEditID,
+                  isOnlyRetreatChange(source, id: authorizedRetreatEditID) {
+            // The Retreat's own change policy was satisfied for this edit;
+            // its copies are not separately locked on top of it.
             acceptedRules = proposedRules
         } else if architectureChangeIsAllowed(
             proposedRules,
@@ -1236,6 +1240,18 @@ final class AppModel: ObservableObject {
         else { return false }
         var expected = cloudDocument
         expected.retreats[existingIndex].finish(early: true, at: proposedRetreat.modifiedAt)
+        return proposed == expected
+    }
+
+    /// True when `proposed` differs from the saved document only in this one
+    /// running Retreat, so an authorization for it cannot release anything else.
+    private func isOnlyRetreatChange(_ proposed: CloudPreferencesDocument, id: UUID) -> Bool {
+        guard let proposedRetreat = proposed.retreats.first(where: { $0.id == id }),
+              let index = cloudDocument.retreats.firstIndex(where: { $0.id == id }),
+              cloudDocument.retreats[index].state == .active
+        else { return false }
+        var expected = cloudDocument
+        expected.retreats[index] = proposedRetreat
         return proposed == expected
     }
 
