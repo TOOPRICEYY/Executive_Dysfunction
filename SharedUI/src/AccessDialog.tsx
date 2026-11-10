@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Group } from "./contract.ts";
+import type { AccessChoice } from "./presentation.ts";
 import { Modal } from "./components.tsx";
 import { temporaryPassageDescription } from "./temporary-passage.ts";
 
@@ -13,9 +13,9 @@ export function AccessDialog({
   onClose,
   onSubmit,
 }: {
-  group: Group;
+  group: AccessChoice;
   /** Groups the request may apply to (a block-screen request); the first is preselected. */
-  choices?: Group[];
+  choices?: AccessChoice[];
   /** The duration the block screen already chose. */
   fixedMinutes?: number;
   intro?: string;

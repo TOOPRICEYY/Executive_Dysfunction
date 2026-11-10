@@ -42,6 +42,20 @@ export interface RetreatForm {
   groupIDs: string[];
   changePolicy: ChangePolicy;
   startNow: boolean;
+  /**
+   * The saved instants an existing retreat opened with. A date input holds
+   * whole minutes only, so a field left as opened sends this back exactly;
+   * re-deriving it would move a running retreat's end earlier by its seconds,
+   * which the host rightly treats as shortening it.
+   */
+  saved?: { startsAt: string; endsAt: string };
+}
+
+/** The instant a date field stands for: the saved one while it is unchanged. */
+function instant(form: RetreatForm, field: "start" | "end"): string | null {
+  const saved = form.saved?.[field === "start" ? "startsAt" : "endsAt"];
+  if (saved !== undefined && form[field] === toLocalInput(saved)) return saved;
+  return fromLocalInput(form[field]);
 }
 
 /** Matches the native default for a new retreat: wait three days, then type 40 words. */
@@ -75,6 +89,7 @@ export function retreatFormFrom(retreat: Retreat): RetreatForm {
       delayDays: 3,
     },
     startNow: false,
+    saved: { startsAt: retreat.startsAt, endsAt: retreat.endsAt },
   };
 }
 
@@ -82,8 +97,8 @@ export function retreatFormFrom(retreat: Retreat): RetreatForm {
 export function retreatProblem(form: RetreatForm): string {
   if (!form.name.trim()) return "Name the retreat.";
   if (!form.groupIDs.length) return "Choose at least one Blocking Group.";
-  const start = fromLocalInput(form.start);
-  const end = fromLocalInput(form.end);
+  const start = instant(form, "start");
+  const end = instant(form, "end");
   if (!start || !end) return "Choose when the retreat starts and ends.";
   if (Date.parse(end) <= Date.parse(start))
     return "The retreat has to end after it starts.";
@@ -108,8 +123,8 @@ export function retreatDraft(form: RetreatForm): RetreatDraft {
     ...(form.id ? { id: form.id } : {}),
     name: form.name.trim(),
     goal: form.goal.trim(),
-    startsAt: fromLocalInput(form.start)!,
-    endsAt: fromLocalInput(form.end)!,
+    startsAt: instant(form, "start")!,
+    endsAt: instant(form, "end")!,
     groupIDs: form.groupIDs,
     changePolicy: {
       kind,

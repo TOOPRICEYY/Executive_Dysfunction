@@ -344,3 +344,38 @@ export function moment(
   if (sameDay(d, t)) return `tomorrow ${time}`;
   return `${d.toLocaleDateString([], { weekday: "short" })} ${time}`;
 }
+/** What answering temporary access needs from a group or a retreat's copy. */
+export type AccessChoice = Pick<
+  Group,
+  "id" | "name" | "temporaryPolicy" | "temporaryPassageWords"
+>;
+/**
+ * The groups a block-screen request may be answered for: those it names that
+ * still allow temporary access. On iOS a shield can name a running retreat's
+ * copy, which arrives in `retreatGroups`, not `groups`. The host re-checks all
+ * of it before granting anything.
+ */
+export function accessRequestChoices(
+  snapshot: Snapshot,
+  groupIDs: string[],
+): AccessChoice[] {
+  const named = new Set(groupIDs);
+  const out: AccessChoice[] = snapshot.groups.filter(
+    (g) => named.has(g.id) && g.temporaryPolicy.allowed,
+  );
+  for (const r of snapshot.retreatGroups ?? ([] as RetreatGroup[]))
+    if (
+      named.has(r.id) &&
+      r.temporaryPolicy?.allowed &&
+      !out.some((g) => g.id === r.id)
+    )
+      out.push({
+        id: r.id,
+        name: `${r.name} (retreat)`,
+        temporaryPolicy: r.temporaryPolicy,
+        ...(r.temporaryPassageWords === undefined
+          ? {}
+          : { temporaryPassageWords: r.temporaryPassageWords }),
+      });
+  return out;
+}

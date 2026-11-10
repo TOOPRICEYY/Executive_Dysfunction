@@ -155,3 +155,15 @@ struct SharedInterfaceError: LocalizedError {
     init(_ message: String) { self.message = message }
     var errorDescription: String? { message }
 }
+
+/// Dates cross the shared screen as ISO-8601 with whole seconds, while a
+/// native retreat keeps `Date()` precision. A date sent back within a second
+/// of the stored one is that stored date unchanged, so it must not read as a
+/// shorter run (`weakensPlannedInterval`). Snapping only ever restores the
+/// stored value, so it can never loosen anything.
+enum SharedInterfaceInstant {
+    static func keepingStored(_ proposed: Date, stored: Date?) -> Date {
+        guard let stored, abs(proposed.timeIntervalSince(stored)) < 1 else { return proposed }
+        return stored
+    }
+}

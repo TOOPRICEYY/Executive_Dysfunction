@@ -146,3 +146,51 @@ test("the contract checks the optional retreat editing fields", () => {
     assert.equal(isSnapshot(copy), false);
   }
 });
+
+test("an unchanged date is sent back exactly as saved, seconds included", () => {
+  // Regression: natively created retreats keep seconds; re-deriving the end
+  // from the minute-only input moved a running retreat's end earlier, and the
+  // host refused a plain rename as shortening it.
+  const retreat = {
+    id: "r1",
+    name: "Reset",
+    startsAt: "2026-11-10T09:30:42Z",
+    endsAt: "2026-12-10T09:30:42Z",
+    state: "active" as const,
+    version: 1,
+    groupNames: ["News"],
+    changePolicyLabel: "delayed",
+    canRequestEnd: true,
+    canEdit: true,
+    goal: "",
+    changePolicy: { kind: "delay" as const, words: 40, delayDays: 3 },
+    groupIDs: ["copy"],
+    groupChoices: [{ id: "copy", name: "News" }],
+  };
+  const form = retreatFormFrom(retreat);
+  const renamed = retreatDraft({ ...form, name: "Reset, renamed" });
+  assert.equal(renamed.startsAt, retreat.startsAt);
+  assert.equal(renamed.endsAt, retreat.endsAt);
+  assert.equal(retreatProblem(form), "");
+
+  // A field the person did change is sent as typed (whole minutes).
+  const later = new Date(2026, 11, 20, 18, 0);
+  const extended = retreatDraft({
+    ...form,
+    end: toLocalInput(later.toISOString()),
+  });
+  assert.equal(extended.endsAt, later.toISOString().replace(".000Z", "Z"));
+  assert.equal(extended.startsAt, retreat.startsAt);
+  // Changing it and changing it back is unchanged again.
+  assert.equal(
+    retreatDraft({ ...form, end: toLocalInput(retreat.endsAt) }).endsAt,
+    retreat.endsAt,
+  );
+  // A new retreat has nothing saved to keep.
+  const fresh = newRetreatForm(new Date(2026, 10, 10, 9, 30, 15));
+  assert.equal(fresh.saved, undefined);
+  assert.equal(
+    retreatDraft({ ...fresh, name: "x", groupIDs: ["g"] }).endsAt,
+    fromLocalInput(fresh.end),
+  );
+});

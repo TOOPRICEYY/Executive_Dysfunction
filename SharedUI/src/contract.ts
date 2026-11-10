@@ -132,6 +132,13 @@ export interface RetreatGroup {
   lock: ChangePolicy["kind"];
   delayDays: number;
   targets: string;
+  /**
+   * With `accessRequests`: the copy's effective temporary-access policy, so a
+   * block-screen request that names it can be answered. Absent: not offered.
+   */
+  temporaryPolicy?: TemporaryPolicy;
+  /** As `Group.temporaryPassageWords`, for this copy. */
+  temporaryPassageWords?: number;
 }
 /** Concrete blocked intervals for one local day, evaluated by the host (DST, retreats, lockdowns). */
 export interface ScheduleDay {
@@ -560,7 +567,11 @@ export function isSnapshot(value: unknown): value is Snapshot {
             (r.enforced === undefined || typeof r.enforced === "boolean") &&
             policyKinds.includes(r.lock) &&
             integer(r.delayDays, 0, 365) &&
-            typeof r.targets === "string",
+            typeof r.targets === "string" &&
+            (r.temporaryPolicy === undefined ||
+              isTemporaryPolicy(r.temporaryPolicy)) &&
+            (r.temporaryPassageWords === undefined ||
+              integer(r.temporaryPassageWords, 20, 38400)),
         ))) &&
     (s.schedule === undefined ||
       (!!s.schedule &&
@@ -760,11 +771,17 @@ export function isGroup(g: unknown): g is Group {
         integer(s.endMinutes, 0, 1440),
     ) &&
     isChangePolicy(v.changePolicy) &&
-    !!v.temporaryPolicy &&
-    typeof v.temporaryPolicy.allowed === "boolean" &&
-    integer(v.temporaryPolicy.words, 20, 300) &&
-    integer(v.temporaryPolicy.maximumMinutes, 1, 1440) &&
-    (v.temporaryPolicy.resetDays === null ||
-      integer(v.temporaryPolicy.resetDays, 1, 365))
+    isTemporaryPolicy(v.temporaryPolicy)
+  );
+}
+function isTemporaryPolicy(t: unknown): t is TemporaryPolicy {
+  const v = t as TemporaryPolicy;
+  return (
+    !!v &&
+    typeof v === "object" &&
+    typeof v.allowed === "boolean" &&
+    integer(v.words, 20, 300) &&
+    integer(v.maximumMinutes, 1, 1440) &&
+    (v.resetDays === null || integer(v.resetDays, 1, 365))
   );
 }

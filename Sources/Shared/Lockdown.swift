@@ -344,10 +344,32 @@ enum UnlockPhase: Equatable {
     case cancelled
     /// The wait is over; editing is open until the window closes.
     case unlocked(editWindowEndsAt: Date)
+
+    /// Nothing is in progress or open: a new unlock may start (see `Lockdown.liveProcess`).
+    var isIdleOrCancelled: Bool {
+        switch self {
+        case .idle, .cancelled: return true
+        default: return false
+        }
+    }
 }
 
 enum Lockdown {
     static let day: TimeInterval = 24 * 60 * 60
+
+    /// The saved process, or nil when it no longer holds anything: its edit
+    /// window closed or a checkpoint was missed. `phase` already reads such a
+    /// process as idle (or cancelled) without deleting it, and only the
+    /// periodic refresh used to delete it, so starting a new unlock must treat
+    /// it as absent; otherwise a freshly typed passage would start nothing.
+    /// A replacement process restarts the whole wait, so this never shortens one.
+    static func liveProcess(
+        _ process: UnlockProcess?,
+        configuration: LockdownConfiguration,
+        at now: Date
+    ) -> UnlockProcess? {
+        phase(of: process, configuration: configuration, at: now).isIdleOrCancelled ? nil : process
+    }
 
     static func phase(
         of process: UnlockProcess?,
