@@ -13,7 +13,27 @@ export type Capability =
   | "appearance"
   | "advancedControls"
   | "enforcementControl"
-  | "presets";
+  | "presets"
+  /** The host starts a lockdown from `startLockdown` with groups and hours. */
+  | "lockdownForm"
+  /** The host answers `diagnostics` with the report instead of opening its own window. */
+  | "diagnosticsReport";
+/** A recovery step only the host can decide to offer, e.g. clearing a safety lock. */
+export interface EnforcementAction {
+  id: string;
+  label: string;
+  detail?: string;
+  /** In progress on the host; shown disabled. */
+  running?: boolean;
+}
+export interface DiagnosticsReport {
+  text: string;
+  findings: {
+    severity: "critical" | "warning" | "note";
+    message: string;
+    hint?: string;
+  }[];
+}
 export interface Slot {
   id: string;
   weekdays: number[];
@@ -141,6 +161,9 @@ export interface Snapshot {
     detail: string;
     /** Short banner word(s), e.g. "WEB FILTER ON". Falls back to title. */
     headline?: string;
+    /** Why blocking cannot be turned on right now, in the host's words. */
+    problem?: string;
+    actions?: EnforcementAction[];
   };
   /** Host summary (DashboardNowSummary). Absent: the UI shows a neutral heading. */
   summary?: { headline: string; next: string | null };
@@ -152,13 +175,20 @@ export interface Snapshot {
   groups: Group[];
   retreats: Retreat[];
   bypasses: Bypass[];
-  lockdown: null | { endsAt: string; groupNames: string[]; detail: string };
+  lockdown: null | {
+    endsAt: string;
+    groupNames: string[];
+    detail: string;
+    /** Each running session, so one can be ended early by its typed passage. */
+    sessions?: { id: string; endsAt: string; groupNames: string[] }[];
+  };
 }
 export type Command =
   | { type: "snapshot" }
   | { type: "openAdvancedControls" }
   | { type: "setAppearance"; key: "theme" | "accent"; value: string }
   | { type: "setEnforcement"; revision: string; enabled: boolean }
+  | { type: "enforcementAction"; revision: string; id: string }
   | { type: "submitChallenge"; challengeID: string; typed: string }
   | { type: "cancelTemporaryAccess"; revision: string; groupID: string }
   | { type: "saveGroup"; revision: string; group: Group }
@@ -174,10 +204,17 @@ export type Command =
   | { type: "requestGroupUnlock"; revision: string; groupID: string }
   | { type: "requestRetreatEnd"; revision: string; retreatID: string }
   | { type: "createRetreat"; revision: string }
-  | { type: "startLockdown"; revision: string }
+  /** Without groups and hours the host opens its own lockdown window. */
+  | {
+      type: "startLockdown";
+      revision: string;
+      groupIDs?: string[];
+      hours?: number;
+    }
+  | { type: "endLockdown"; revision: string; sessionID: string }
   | { type: "installPreset"; revision: string; presetID: string }
   | { type: "pickApplications"; groupID: string }
-  | { type: "diagnostics" };
+  | { type: "diagnostics"; names?: boolean; copy?: boolean };
 export interface Reply {
   snapshot?: Snapshot;
   applications?: string[];
@@ -185,6 +222,7 @@ export interface Reply {
   selectionToken?: string;
   message?: string;
   challenge?: Challenge;
+  diagnostics?: DiagnosticsReport;
 }
 export interface Challenge {
   id: string;
@@ -205,6 +243,21 @@ export function isChallenge(value: unknown): value is Challenge {
     c.passage.length <= 400000 &&
     typeof c.expiresAt === "string" &&
     Number.isFinite(Date.parse(c.expiresAt))
+  );
+}
+export function isDiagnosticsReport(value: unknown): value is DiagnosticsReport {
+  if (!value || typeof value !== "object") return false;
+  const r = value as DiagnosticsReport;
+  return (
+    typeof r.text === "string" &&
+    Array.isArray(r.findings) &&
+    r.findings.every(
+      (f) =>
+        !!f &&
+        ["critical", "warning", "note"].includes(f.severity) &&
+        typeof f.message === "string" &&
+        (f.hint === undefined || typeof f.hint === "string"),
+    )
   );
 }
 export interface Adapter {
@@ -288,6 +341,18 @@ export function isSnapshot(value: unknown): value is Snapshot {
     ) &&
     (s.enforcement.headline === undefined ||
       typeof s.enforcement.headline === "string") &&
+    (s.enforcement.problem === undefined ||
+      typeof s.enforcement.problem === "string") &&
+    (s.enforcement.actions === undefined ||
+      (Array.isArray(s.enforcement.actions) &&
+        s.enforcement.actions.every(
+          (a) =>
+            !!a &&
+            typeof a.id === "string" &&
+            typeof a.label === "string" &&
+            (a.detail === undefined || typeof a.detail === "string") &&
+            (a.running === undefined || typeof a.running === "boolean"),
+        ))) &&
     (s.summary === undefined ||
       (!!s.summary &&
         typeof s.summary.headline === "string" &&
@@ -340,7 +405,16 @@ export function isSnapshot(value: unknown): value is Snapshot {
         isDate(s.lockdown.endsAt) &&
         typeof s.lockdown.detail === "string" &&
         Array.isArray(s.lockdown.groupNames) &&
-        s.lockdown.groupNames.every((n) => typeof n === "string")))
+        s.lockdown.groupNames.every((n) => typeof n === "string") &&
+        (s.lockdown.sessions === undefined ||
+          (Array.isArray(s.lockdown.sessions) &&
+            s.lockdown.sessions.every(
+              (v) =>
+                !!v &&
+                typeof v.id === "string" &&
+                isDate(v.endsAt) &&
+                strings(v.groupNames),
+            )))))
   );
 }
 const integer = (n: unknown, min: number, max: number) =>

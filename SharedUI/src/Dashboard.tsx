@@ -484,6 +484,7 @@ function StatusBanner({
   busy,
   compact,
   onEnforcement,
+  onAction,
   onAdvanced,
   onDiagnostics,
   open,
@@ -493,6 +494,7 @@ function StatusBanner({
   busy: boolean;
   compact: boolean;
   onEnforcement?: () => void;
+  onAction?: (id: string) => void;
   onAdvanced?: () => void;
   onDiagnostics?: () => void;
   open: boolean;
@@ -527,7 +529,7 @@ function StatusBanner({
     >
       <div className="status-main">
         <h2>{e.headline ?? e.title}</h2>
-        {needsTurnOn && (
+        {needsTurnOn && !e.problem && (
           <button className="banner-cta" disabled={busy} onClick={onEnforcement}>
             {enforcementLabel}
           </button>
@@ -558,6 +560,25 @@ function StatusBanner({
           </button>
         </div>
       </div>
+      {(e.problem || !!e.actions?.length) && (
+        // Never behind the details toggle: this is why blocking will not start.
+        <div className="status-controls status-problem" role="alert">
+          {e.problem && <p>{e.problem}</p>}
+          <div className="actions">
+            {e.actions?.map((a) => (
+              <button
+                key={a.id}
+                className="primary"
+                title={a.detail}
+                disabled={busy || a.running || !onAction}
+                onClick={() => onAction?.(a.id)}
+              >
+                {a.running ? `${a.label}…` : a.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {open && (
         <div className="status-controls">
           <p>{e.detail}</p>
@@ -681,6 +702,7 @@ export function Dashboard({
   onLockdown,
   onHistory,
   onEnforcement,
+  onAction,
   onAdvanced,
   onDiagnostics,
   controlsOpen,
@@ -696,6 +718,7 @@ export function Dashboard({
   onLockdown?: () => void;
   onHistory(id: string): void;
   onEnforcement?: () => void;
+  onAction?: (id: string) => void;
   onAdvanced?: () => void;
   onDiagnostics?: () => void;
   controlsOpen: boolean;
@@ -875,6 +898,7 @@ export function Dashboard({
         busy={busy}
         compact={compact}
         onEnforcement={onEnforcement}
+        onAction={onAction}
         onAdvanced={onAdvanced}
         onDiagnostics={onDiagnostics}
         open={controlsOpen}

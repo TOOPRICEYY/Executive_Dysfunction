@@ -1256,6 +1256,46 @@
   .status-controls p {
     margin: 0;
   }
+  .lockdown-session {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 6px;
+  }
+  .status-problem {
+    border-top-color: var(--danger, #b3261e);
+  }
+  .diagnostic-text {
+    margin: 0;
+    padding: 12px;
+    max-height: 46vh;
+    overflow: auto;
+    font: 11px/1.45 var(--mono);
+    white-space: pre;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  .diagnostic-findings {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 6px;
+  }
+  .diagnostic-findings small {
+    display: block;
+  }
+  .diagnostic-findings strong {
+    font: 800 10px var(--mono);
+    text-transform: uppercase;
+  }
+  .diagnostic-critical,
+  .diagnostic-findings .severity-critical strong {
+    color: var(--danger, #b3261e);
+  }
   .status-banner.compact .status-main {
     min-height: 0;
     padding: 10px 12px;

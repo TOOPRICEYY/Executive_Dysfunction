@@ -69,34 +69,41 @@ final class HoldfastWorkspaceUITests: XCTestCase {
         XCTAssertTrue(tab("Dashboard").isHittable)
     }
 
-    func testTimedLockdownHasOneDismissControlAndCannotStartWithoutScreenTime() {
+    /// Starting a lockdown is part of the shared interface now. No native
+    /// sheet opens, and nothing can start before a group is chosen.
+    func testLockdownOpensInTheSharedInterfaceAndCannotStartEmpty() {
         button("Lockdown").tap()
-        XCTAssertTrue(app.navigationBars["Lockdown"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["Close"].exists, "The sheet has a second dismiss button above its own")
-        let start = app.buttons["confirm-timed-lockdown"]
-        for _ in 0..<4 where !start.isHittable { app.swipeUp() }
-        XCTAssertTrue(start.exists)
-        XCTAssertFalse(start.isEnabled, "A simulator without Screen Time must not pretend to start enforcement")
-        attach(named: "timed-lockdown-setup")
-        app.buttons["Done"].tap()
-        XCTAssertTrue(tab("Dashboard").waitForExistence(timeout: 5))
+        XCTAssertTrue(text("Start a lockdown").waitForExistence(timeout: 5), "The lockdown dialog did not open")
+        XCTAssertFalse(app.navigationBars["Lockdown"].exists, "The native lockdown sheet opened as well")
+        let start = button("Start lockdown")
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        XCTAssertFalse(start.isEnabled, "A lockdown must not start with no group selected")
+        attach(named: "lockdown-dialog")
+        button("Cancel").tap()
+        XCTAssertTrue(waitForDisappearance(of: start), "The lockdown dialog did not close")
+        XCTAssertTrue(tab("Dashboard").isHittable)
     }
 
-    /// The diagnostics screen has to render its findings on the device, and it
-    /// is presented outside the app's navigation, so it must bring its own way
-    /// out.
-    func testDiagnosticsReportRendersWithOneDismissControl() {
+    /// The report is built by the device and shown by the shared interface.
+    /// It has to arrive with real content, not an empty dialog.
+    func testDiagnosticsReportRendersInTheSharedInterface() {
         tab("Settings").tap()
         let open = button("Open diagnostics")
         XCTAssertTrue(open.waitForExistence(timeout: 5))
         open.tap()
-        XCTAssertTrue(app.navigationBars["Diagnostics"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Findings"].waitForExistence(timeout: 10), "The report did not produce a findings section")
-        XCTAssertFalse(app.buttons["Close"].exists, "The sheet has a second dismiss button above its own")
+        XCTAssertTrue(text("Diagnostic report").waitForExistence(timeout: 10), "The diagnostics dialog did not open")
+        XCTAssertFalse(app.navigationBars["Diagnostics"].exists, "The native diagnostics sheet opened as well")
+        let copy = button("Copy report")
+        XCTAssertTrue(copy.waitForExistence(timeout: 10))
+        let enabled = NSPredicate(format: "isEnabled == true")
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: enabled, object: copy)], timeout: 15), .completed,
+            "The device did not return a report")
+        XCTAssertTrue(text(containing: "finding").exists || text(containing: "No inconsistencies").exists,
+            "The report has no findings summary")
         attach(named: "diagnostics-report")
-        app.navigationBars["Diagnostics"].buttons["Done"].tap()
-        XCTAssertTrue(tab("Settings").waitForExistence(timeout: 5))
-        XCTAssertFalse(text(containing: "opened").exists, "Opening a sheet should not leave a notice behind")
+        button("Close").tap()
+        XCTAssertTrue(waitForDisappearance(of: copy), "The diagnostics dialog did not close")
+        XCTAssertTrue(tab("Settings").isHittable)
     }
 
     /// The native editors are reached through a sheet. If the environment object
