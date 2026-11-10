@@ -1,0 +1,53 @@
+name: CI
+
+# The shared React screens are rendered by the iOS, macOS and Windows hosts.
+# This checks the bundle itself and that the Windows host still compiles and
+# passes its tests against it. The Apple hosts need Screen Time and Network
+# Extension signing and are built and tested locally.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shared-ui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: SharedUI
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: SharedUI/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: SharedUI/package-lock.json
+      - name: Build the shared interface
+        working-directory: SharedUI
+        run: |
+          npm ci
+          npm run build
+      - name: Build and test the Windows host (x64)
+        shell: pwsh
+        run: ./Platform/Windows/scripts/Build.ps1 -Architecture x64 -SharedUI
