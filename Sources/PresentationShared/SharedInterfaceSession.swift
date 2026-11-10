@@ -363,17 +363,28 @@ final class SharedInterfaceSession: ObservableObject {
             ["id": $0.id, "name": $0.name, "summary": $0.summary, "lock": Self.policyKinds[$0.severity] ?? "inherited"]
         }
         let retreats: [[String: Any]] = model.retreats.map { r in
-            ["id": r.id.uuidString, "name": r.name, "startsAt": iso(r.plannedStart), "endsAt": iso(r.plannedEnd),
+            var value: [String: Any] = ["id": r.id.uuidString, "name": r.name, "startsAt": iso(r.plannedStart), "endsAt": iso(r.plannedEnd),
              "state": r.state == .endedEarly ? "cancelled" : r.state.rawValue,
              "version": r.currentVersionNumber, "groupNames": r.currentVersion?.blockingGroups.map(\.name) ?? [],
              "changePolicyLabel": r.modificationPolicy.severity, "canRequestEnd": r.state == .active]
+            let editable = Self.isEditable(r, now: now)
+            value["canEdit"] = editable
+            if editable {
+                let policy = Self.retreatPolicy(r)
+                value["goal"] = r.goal
+                value["changePolicy"] = ["kind": Self.policyKinds[policy.severity] ?? "inherited",
+                    "words": min(300, max(20, policy.passageWordCount)), "delayDays": min(365, max(0, policy.unlockDelayDays))]
+                value["groupIDs"] = r.currentVersion?.blockingGroups.map(\.id.uuidString) ?? []
+                value["groupChoices"] = retreatChoices(r).map { ["id": $0.id.uuidString, "name": $0.name] }
+            }
+            return value
         }
         let events: [[String: Any]] = BypassHistoryStore.read(defaults: historyDefaults).document.events.map { event in
             return ["id": event.id.uuidString, "groupID": event.groupID.uuidString, "groupName": event.groupName,
                 "startedAt": iso(event.grantedAt), "endsAt": iso(event.expiresAt), "reason": event.intent == nil ? "unspecified" : event.intent == .consciousIntervention ? "conscious" : "edulgence"]
         }
         var result: [String: Any] = ["schema": 1, "revision": try revision(), "platform": platform,
-            "capabilities": ["editGroups", "temporaryAccess", "pickApplications", "retreats", "lockdown", "diagnostics", "enforcementControl", "appearance", "advancedControls", "presets", "lockdownForm", "diagnosticsReport"],
+            "capabilities": ["editGroups", "temporaryAccess", "pickApplications", "retreats", "lockdown", "diagnostics", "enforcementControl", "appearance", "advancedControls", "presets", "lockdownForm", "diagnosticsReport", "retreatForm"],
             "appearance": appearance,
             "enforcementEnabled": enabled, "enforcement": enforcement,
             "sync": ["state": Self.syncState(sync), "detail": sync], "groups": groups, "retreats": retreats, "bypasses": events, "lockdown": NSNull(),
@@ -400,6 +411,101 @@ final class SharedInterfaceSession: ObservableObject {
         challenges = [id: Challenge(passage: passage, revision: try revision(), expiry: expiry, action: action)]
         return ["challenge": ["id": id, "title": title, "passage": passage, "expiresAt": iso(expiry),
             "detail": "Type the passage. You have 30 minutes; a policy change invalidates it. Native rules determine when the request takes effect."]]
+    }
+    /// Only a draft, or a retreat that has not started, changes from the shared
+    /// form. A running one is held by its change policy; shortening it, ending
+    /// it or swapping its groups stays with the native controls and their gate.
+    private static func isEditable(_ retreat: CloudRetreat, now: Date) -> Bool {
+        (retreat.state == .draft || retreat.state == .scheduled) && !retreat.isActive(at: now)
+    }
+    private static func retreatPolicy(_ retreat: CloudRetreat) -> CloudRuleLockdownPreference {
+        retreat.currentVersion?.modificationPolicy ?? retreat.modificationPolicy
+    }
+    /// The groups a retreat can be built from, exactly as the native editors
+    /// offer them: its own copies first, so saving keeps them rather than
+    /// re-copying the Blocking Group, then groups it does not hold yet.
+    private func retreatChoices(_ retreat: CloudRetreat?) -> [CloudBlockingGroup] {
+        guard let retreat else { return model.baseline.blockingGroups }
+        let historical = retreat.currentVersion?.blockingGroups ?? []
+        return historical + model.baseline.blockingGroups.filter { baseline in
+            !historical.contains { CloudRetreatGroupVersioning.represents($0, baselineGroup: baseline) }
+        }
+    }
+    /// ISO-8601 with a zone, with or without fractional seconds. Nothing looser.
+    static func strictDate(_ value: Any?) -> Date? {
+        guard let text = value as? String else { return nil }
+        let formatter = ISO8601DateFormatter()
+        if let date = formatter.date(from: text) { return date }
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: text)
+    }
+    private func saveRetreat(_ input: Any?) throws -> [String: Any] {
+        guard let r = input as? [String: Any], let rawName = r["name"] as? String, let goal = r["goal"] as? String,
+              let start = Self.strictDate(r["startsAt"]), let end = Self.strictDate(r["endsAt"]),
+              let texts = r["groupIDs"] as? [String], let startNow = r["startNow"] as? Bool,
+              let policy = r["changePolicy"] as? [String: Any], let kind = policy["kind"] as? String,
+              let words = policy["words"] as? Int, let delayDays = policy["delayDays"] as? Int else {
+            throw SharedInterfaceError("Invalid retreat.")
+        }
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name.count <= 120 else { throw SharedInterfaceError("Enter a retreat name of at most 120 characters.") }
+        guard goal.count <= 2_000 else { throw SharedInterfaceError("Keep the purpose under 2,000 characters.") }
+        guard end > start else { throw SharedInterfaceError("The retreat has to end after it starts.") }
+        let now = Date()
+        var existing: CloudRetreat?
+        if let value = r["id"] {
+            guard let text = value as? String, let id = UUID(uuidString: text),
+                  let retreat = model.retreats.first(where: { $0.id == id }) else { throw SharedInterfaceError("This retreat no longer exists.") }
+            guard Self.isEditable(retreat, now: now) else {
+                throw SharedInterfaceError("This retreat has already started or finished, so it cannot be changed here.")
+            }
+            existing = retreat
+        }
+        // Starting is offered for a new retreat or a draft, as in the native editors.
+        if startNow {
+            guard existing == nil || existing?.state == .draft else { throw SharedInterfaceError("This retreat is already scheduled.") }
+            guard end > now else { throw SharedInterfaceError("That retreat would already be over. Choose a later end.") }
+        }
+        let choices = retreatChoices(existing)
+        let ids = texts.compactMap(UUID.init(uuidString:))
+        guard !ids.isEmpty, ids.count == texts.count, Set(ids).count == ids.count else {
+            throw SharedInterfaceError("Choose at least one Blocking Group.")
+        }
+        let groups = try ids.map { id in
+            guard let group = choices.first(where: { $0.id == id }) else {
+                throw SharedInterfaceError("A chosen Blocking Group no longer exists. Reopen the retreat and choose again.")
+            }
+            return group
+        }
+        let previous = existing.map(Self.retreatPolicy)
+        var lock: CloudRuleLockdownPreference
+        if kind == "inherited" {
+            // Only an existing app-default policy may stay inherited.
+            guard let previous, previous.severity == "appDefault" else { throw SharedInterfaceError("Invalid change policy.") }
+            lock = previous
+        } else {
+            let severities = ["none": "none", "passage": "passageOnly", "delay": "delayed", "checkpoints": "repeatedConfirmations"]
+            guard let severity = severities[kind], (20...300).contains(words), (0...365).contains(delayDays) else {
+                throw SharedInterfaceError("Invalid change policy.")
+            }
+            lock = previous ?? CloudRuleLockdownPreference(severity: severity)
+            lock.severity = severity
+            lock.passageWordCount = words
+            lock.unlockDelayDays = kind == "delay" || kind == "checkpoints" ? delayDays : 0
+        }
+        #if os(macOS)
+        model.saveRetreat(id: existing?.id, name: name, goal: goal, plannedStart: start, plannedEnd: end,
+            sourceBlockingGroups: groups, modificationPolicy: lock, startImmediately: startNow)
+        try ensure(model.errorMessage == nil)
+        #else
+        try ensure(model.saveRetreat(id: existing?.id, name: name, goal: goal, plannedStart: start, plannedEnd: end,
+            sourceBlockingGroups: groups, modificationPolicy: lock, startImmediately: startNow))
+        #endif
+        let message = startNow
+            ? (start > now ? "Retreat scheduled." : "Retreat started.")
+            : (existing?.state == .scheduled ? "Retreat changes saved." : "Retreat draft saved.")
+        generation += 1; challenges.removeAll()
+        return ["snapshot": try snapshot(), "message": message]
     }
     private func ensure(_ success: Bool) throws {
         if !success { throw SharedInterfaceError(model.errorMessage ?? "The native policy did not authorize this change.") }
@@ -472,6 +578,7 @@ final class SharedInterfaceSession: ObservableObject {
         guard c["revision"] as? String == (try revision()) else { throw SharedInterfaceError("Settings changed. Close this dialog and reopen it before saving.") }
         model.errorMessage = nil
         if type == "createRetreat" { nativePanel = type; return [:] }
+        if type == "saveRetreat" { return try saveRetreat(c["retreat"]) }
         if type == "startLockdown" {
             guard let texts = c["groupIDs"] as? [String], let hours = c["hours"] as? Int else { nativePanel = type; return [:] }
             let ids = Set(texts.compactMap(UUID.init(uuidString:)))

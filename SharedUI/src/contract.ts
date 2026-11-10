@@ -17,7 +17,9 @@ export type Capability =
   /** The host starts a lockdown from `startLockdown` with groups and hours. */
   | "lockdownForm"
   /** The host answers `diagnostics` with the report instead of opening its own window. */
-  | "diagnosticsReport";
+  | "diagnosticsReport"
+  /** The host saves a whole retreat from `saveRetreat` instead of opening its own editor. */
+  | "retreatForm";
 /** A recovery step only the host can decide to offer, e.g. clearing a safety lock. */
 export interface EnforcementAction {
   id: string;
@@ -139,6 +141,30 @@ export interface Retreat {
   groupNames: string[];
   changePolicyLabel: string;
   canRequestEnd: boolean;
+  /** The host lets this retreat be changed from `saveRetreat` now (a draft or not yet started). */
+  canEdit?: boolean;
+  /** Present when `canEdit`, so the editor can open on what is saved. */
+  goal?: string;
+  changePolicy?: ChangePolicy;
+  /** Selected ids, all of them from `groupChoices`. */
+  groupIDs?: string[];
+  /**
+   * The groups an edit may choose from: this retreat's own copies, then
+   * Blocking Groups it does not hold yet. A new retreat chooses from `groups`.
+   */
+  groupChoices?: { id: string; name: string }[];
+}
+/** A whole retreat to save. Without `id` it is new. The host re-validates all of it. */
+export interface RetreatDraft {
+  id?: string;
+  name: string;
+  goal: string;
+  startsAt: string;
+  endsAt: string;
+  groupIDs: string[];
+  changePolicy: ChangePolicy;
+  /** Start (or schedule, when `startsAt` is later) instead of keeping a draft. */
+  startNow: boolean;
 }
 export interface Bypass {
   id: string;
@@ -203,7 +229,9 @@ export type Command =
     }
   | { type: "requestGroupUnlock"; revision: string; groupID: string }
   | { type: "requestRetreatEnd"; revision: string; retreatID: string }
+  /** Without `retreatForm` the host opens its own retreat editor. */
   | { type: "createRetreat"; revision: string }
+  | { type: "saveRetreat"; revision: string; retreat: RetreatDraft }
   /** Without groups and hours the host opens its own lockdown window. */
   | {
       type: "startLockdown";
@@ -325,7 +353,17 @@ export function isSnapshot(value: unknown): value is Snapshot {
           r.state,
         ) &&
         Number.isInteger(r.version) &&
-        typeof r.canRequestEnd === "boolean",
+        typeof r.canRequestEnd === "boolean" &&
+        (r.canEdit === undefined || typeof r.canEdit === "boolean") &&
+        (r.goal === undefined || typeof r.goal === "string") &&
+        (r.changePolicy === undefined || isChangePolicy(r.changePolicy)) &&
+        (r.groupIDs === undefined || strings(r.groupIDs)) &&
+        (r.groupChoices === undefined ||
+          (Array.isArray(r.groupChoices) &&
+            r.groupChoices.every(
+              (c) =>
+                !!c && typeof c.id === "string" && typeof c.name === "string",
+            ))),
     ) &&
     Array.isArray(s.bypasses) &&
     s.bypasses.every(
@@ -424,6 +462,15 @@ const strings = (v: unknown): v is string[] =>
 const isDate = (v: unknown) =>
   typeof v === "string" && Number.isFinite(Date.parse(v));
 const policyKinds = ["none", "passage", "delay", "checkpoints", "inherited"];
+function isChangePolicy(p: unknown): p is ChangePolicy {
+  if (!p || typeof p !== "object") return false;
+  const v = p as ChangePolicy;
+  return (
+    policyKinds.includes(v.kind) &&
+    integer(v.words, 20, 300) &&
+    integer(v.delayDays, 0, 365)
+  );
+}
 function isNow(n: unknown): n is GroupNow {
   if (!n || typeof n !== "object") return false;
   const v = n as GroupNow;
@@ -488,10 +535,7 @@ export function isGroup(g: unknown): g is Group {
         integer(s.startMinutes, 0, 1439) &&
         integer(s.endMinutes, 0, 1440),
     ) &&
-    !!v.changePolicy &&
-    policyKinds.includes(v.changePolicy.kind) &&
-    integer(v.changePolicy.words, 20, 300) &&
-    integer(v.changePolicy.delayDays, 0, 365) &&
+    isChangePolicy(v.changePolicy) &&
     !!v.temporaryPolicy &&
     typeof v.temporaryPolicy.allowed === "boolean" &&
     integer(v.temporaryPolicy.words, 20, 300) &&

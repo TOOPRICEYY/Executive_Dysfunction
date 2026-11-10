@@ -499,3 +499,138 @@ test("mac host: safety reset, diagnostics and lockdown stay in the shared screen
   expect(last).toMatchObject({ type: "startLockdown", hours: 12 });
   expect(last.groupIDs).toHaveLength(1);
 });
+
+// Creating and changing a retreat used to open a native editor. Hosts that
+// advertise retreatForm get the whole retreat back as one command.
+test("retreats are created and edited in the shared screens", async ({
+  page,
+}) => {
+  await page.addInitScript(
+    ({ state }) => {
+      state.platform = "ios";
+      delete state.summary;
+      state.capabilities = [...state.capabilities, "retreats", "retreatForm"];
+      state.retreats.push({
+        id: "draft",
+        name: "Exam week",
+        startsAt: "2030-03-01T08:00:00Z",
+        endsAt: "2030-03-08T08:00:00Z",
+        state: "draft",
+        version: 1,
+        groupNames: ["News copy"],
+        changePolicyLabel: "passageOnly",
+        canRequestEnd: false,
+        canEdit: true,
+        goal: "Revise",
+        changePolicy: { kind: "passage", words: 60, delayDays: 0 },
+        groupIDs: ["news-copy"],
+        groupChoices: [
+          { id: "news-copy", name: "News copy" },
+          { id: "video", name: "Video" },
+        ],
+      });
+      const sent: any[] = [];
+      const listeners = new Set<(event: { data: unknown }) => void>();
+      const host = window as any;
+      host.__sent = sent;
+      host.chrome ??= {};
+      host.chrome.webview = {
+        addEventListener(_: string, fn: (event: { data: unknown }) => void) {
+          listeners.add(fn);
+        },
+        removeEventListener(_: string, fn: (event: { data: unknown }) => void) {
+          listeners.delete(fn);
+        },
+        postMessage(request: any) {
+          const command = request.command;
+          if (command.type !== "snapshot") sent.push(command);
+          const result: any = { snapshot: structuredClone(state) };
+          if (command.type === "saveRetreat")
+            result.message = "Retreat draft saved.";
+          const reply = { version: 1, id: request.id, ok: true, result };
+          queueMicrotask(() => listeners.forEach((fn) => fn({ data: reply })));
+        },
+      };
+    },
+    { state: previewSnapshot() },
+  );
+  await page.goto("/");
+  const sent = () => page.evaluate(() => (window as any).__sent);
+  await page.getByRole("button", { name: "Retreats" }).first().click();
+
+  // A running retreat is held by its policy and offers no edit here.
+  await expect(
+    page.getByRole("button", { name: "Edit A quieter month" }),
+  ).toHaveCount(0);
+
+  await page.getByRole("button", { name: "New retreat" }).click();
+  const dialog = page.getByRole("dialog", { name: "New retreat" });
+  const save = dialog.getByRole("button", { name: "Save draft" });
+  await expect(save).toBeDisabled();
+  await dialog.getByLabel("Name", { exact: true }).fill("  Quiet weekend ");
+  await expect(save).toBeDisabled();
+  await dialog.getByRole("checkbox", { name: /Social feeds/ }).check();
+  await dialog.getByPlaceholder("What should this make room for?").fill("Read a book");
+  await dialog.getByLabel("Starts", { exact: true }).fill("2030-01-02T09:30");
+  await dialog.getByLabel("Ends", { exact: true }).fill("2030-01-02T09:00");
+  await expect(save).toBeDisabled();
+  await expect(dialog.getByText("The retreat has to end after it starts.")).toBeVisible();
+  await dialog.getByLabel("Ends", { exact: true }).fill("2030-01-04T18:00");
+  await dialog.getByRole("combobox").selectOption("checkpoints");
+  await dialog.getByLabel("Unlock wait (days)").fill("5");
+  await dialog.getByLabel("Passage (words)").fill("120");
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(page.viewportSize()!.width);
+  expect(
+    await dialog.evaluate((d) => d.scrollWidth - d.clientWidth),
+  ).toBeLessThanOrEqual(0);
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByText("Retreat draft saved.")).toBeVisible();
+  const utc = (y: number, m: number, d: number, h: number, mi: number) =>
+    page.evaluate(
+      ([y, m, d, h, mi]) =>
+        new Date(y, m, d, h, mi).toISOString().replace(".000Z", "Z"),
+      [y, m, d, h, mi],
+    );
+  expect((await sent()).at(-1)).toEqual({
+    type: "saveRetreat",
+    revision: "preview-1",
+    retreat: {
+      name: "Quiet weekend",
+      goal: "Read a book",
+      startsAt: await utc(2030, 0, 2, 9, 30),
+      endsAt: await utc(2030, 0, 4, 18, 0),
+      groupIDs: ["social"],
+      changePolicy: { kind: "checkpoints", words: 120, delayDays: 5 },
+      startNow: false,
+    },
+  });
+
+  // A draft opens on what is saved, choosing among the host's own copies.
+  await page.getByRole("button", { name: "Edit Exam week" }).click();
+  const edit = page.getByRole("dialog", { name: "Edit retreat" });
+  await expect(edit.getByLabel("Name", { exact: true })).toHaveValue("Exam week");
+  await expect(edit.getByPlaceholder("What should this make room for?")).toHaveValue("Revise");
+  await expect(edit.getByRole("checkbox", { name: /News copy/ })).toBeChecked();
+  await expect(edit.getByRole("checkbox", { name: /Social feeds/ })).toHaveCount(0);
+  await expect(edit.getByRole("combobox")).toHaveValue("passage");
+  await edit.getByRole("checkbox", { name: /Video/ }).check();
+  await edit.getByRole("checkbox", { name: /Start it now|Schedule it now/ }).check();
+  await edit.getByRole("button", { name: "Schedule retreat" }).click();
+  await expect(edit).toHaveCount(0);
+  expect((await sent()).at(-1)).toMatchObject({
+    type: "saveRetreat",
+    retreat: {
+      id: "draft",
+      name: "Exam week",
+      startsAt: "2030-03-01T08:00:00Z",
+      endsAt: "2030-03-08T08:00:00Z",
+      groupIDs: ["news-copy", "video"],
+      changePolicy: { kind: "passage", words: 60, delayDays: 0 },
+      startNow: true,
+    },
+  });
+});

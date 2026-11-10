@@ -4,6 +4,12 @@ import { AccessDialog } from "./AccessDialog.tsx";
 import { ChallengeDialog } from "./ChallengeDialog.tsx";
 import { LockdownDialog } from "./LockdownDialog.tsx";
 import { DiagnosticsDialog } from "./DiagnosticsDialog.tsx";
+import { RetreatDialog } from "./RetreatDialog.tsx";
+import {
+  newRetreatForm,
+  retreatFormFrom,
+  type RetreatForm,
+} from "./retreat-form.ts";
 import { History } from "./History.tsx";
 import { Settings, readPreference, ThemeSwitch } from "./Settings.tsx";
 import { Dashboard, useCompact } from "./Dashboard.tsx";
@@ -29,6 +35,7 @@ import type {
   Snapshot,
   Challenge,
   Preset,
+  Retreat,
 } from "./contract.ts";
 import { isDiagnosticsReport } from "./contract.ts";
 import { nativeAdapter } from "./bridge.ts";
@@ -74,6 +81,11 @@ function App({ connection }: { connection: Adapter | null }) {
   const [history, setHistory] = useState<string | null>(null);
   const [lockdownOpen, setLockdownOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [retreatForm, setRetreatForm] = useState<{
+    form: RetreatForm;
+    revision: string;
+    retreat?: Retreat;
+  } | null>(null);
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const challengeAction = useRef<Command | null>(null);
   const requestSequence = useRef(0);
@@ -212,8 +224,28 @@ function App({ connection }: { connection: Adapter | null }) {
       : undefined;
   const newRetreat =
     supports("retreats") && snapshot
-      ? () =>
-          void request({ type: "createRetreat", revision: snapshot.revision })
+      ? supports("retreatForm")
+        ? () => {
+            setError("");
+            setRetreatForm({
+              form: newRetreatForm(),
+              revision: snapshot.revision,
+            });
+          }
+        : () =>
+            void request({ type: "createRetreat", revision: snapshot.revision })
+      : undefined;
+  // Only what the host marks editable (a draft, or one not started yet).
+  const editRetreat =
+    supports("retreatForm") && snapshot
+      ? (retreat: Retreat) => {
+          setError("");
+          setRetreatForm({
+            form: retreatFormFrom(retreat),
+            revision: snapshot.revision,
+            retreat,
+          });
+        }
       : undefined;
   const preset =
     supports("presets") && snapshot
@@ -491,6 +523,17 @@ function App({ connection }: { connection: Adapter | null }) {
                         <small>{r.groupNames.join(" · ") || "No groups"}</small>
                         <small>Changes: {r.changePolicyLabel}</small>
                       </span>
+                      {editRetreat &&
+                        r.canEdit &&
+                        (r.state === "draft" || r.state === "scheduled") && (
+                          <button
+                            aria-label={`Edit ${r.name}`}
+                            disabled={busy}
+                            onClick={() => editRetreat(r)}
+                          >
+                            Edit
+                          </button>
+                        )}
                       {["active", "scheduled"].includes(r.state) && (
                         <button
                           disabled={
@@ -648,6 +691,41 @@ function App({ connection }: { connection: Adapter | null }) {
               })
             )
               setLockdownOpen(false);
+          }}
+        />
+      )}
+      {retreatForm && snapshot && (
+        <RetreatDialog
+          snapshot={snapshot}
+          initial={retreatForm.form}
+          choices={retreatForm.retreat?.groupChoices ?? snapshot.groups}
+          status={
+            retreatForm.retreat?.state === "draft" ||
+            retreatForm.retreat?.state === "scheduled"
+              ? retreatForm.retreat.state
+              : undefined
+          }
+          busy={busy}
+          error={error}
+          onClose={() => setRetreatForm(null)}
+          onSubmit={async (retreat) => {
+            // An edit keeps the revision it opened on, so a change made in
+            // between is refused by the host rather than silently overwritten.
+            // A new retreat has nothing to overwrite; the host still checks
+            // every group it names.
+            if (
+              await request({
+                type: "saveRetreat",
+                revision: retreatForm.retreat
+                  ? retreatForm.revision
+                  : snapshot.revision,
+                retreat,
+              })
+            ) {
+              setRetreatForm(null);
+              // Keep the host's confirmation visible on the page it describes.
+              showPage("Retreats");
+            }
           }}
         />
       )}

@@ -121,16 +121,22 @@ final class HoldfastWorkspaceUITests: XCTestCase {
         XCTAssertTrue(tab("Settings").waitForExistence(timeout: 5))
     }
 
+    /// Creating a retreat is part of the shared interface now. No native
+    /// editor opens, and nothing can be saved before it is named and given a group.
     func testRetreatEditorPresentsAndDismisses() {
         tab("Retreats").tap()
         let new = button("New retreat")
         XCTAssertTrue(new.waitForExistence(timeout: 5))
         new.tap()
-        XCTAssertTrue(app.navigationBars["RETREAT"].waitForExistence(timeout: 5), "The retreat editor did not present")
-        XCTAssertFalse(app.buttons["Close"].exists, "The sheet has a second dismiss button above its own")
-        attach(named: "retreat-editor")
-        app.buttons["Cancel"].tap()
-        XCTAssertTrue(tab("Retreats").waitForExistence(timeout: 5))
+        let save = button("Save draft")
+        XCTAssertTrue(save.waitForExistence(timeout: 5), "The retreat dialog did not open")
+        XCTAssertTrue(text("Blocking Groups").exists, "The retreat dialog has no group choice")
+        XCTAssertFalse(app.navigationBars["RETREAT"].exists, "The native retreat editor opened as well")
+        XCTAssertFalse(save.isEnabled, "An unnamed retreat with no group must not save")
+        attach(named: "retreat-dialog")
+        button("Cancel").tap()
+        XCTAssertTrue(waitForDisappearance(of: save), "The retreat dialog did not close")
+        XCTAssertTrue(tab("Retreats").isHittable)
     }
 
     /// A refused or unavailable Screen Time request has to say so in plain words
