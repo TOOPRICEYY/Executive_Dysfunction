@@ -433,7 +433,17 @@ final class SharedInterfaceSession: ObservableObject {
         if type == "createRetreat" || type == "startLockdown" { nativePanel = type; return [:] }
         if type == "setEnforcement" {
             #if os(macOS)
-            if c["enabled"] as? Bool == true { model.installDesktopEnforcement(); try ensure(model.errorMessage == nil) }
+            if c["enabled"] as? Bool == true {
+                model.installDesktopEnforcement(); try ensure(model.errorMessage == nil)
+                // A refused install only sets the controller's own error. Without
+                // this the button would appear to do nothing.
+                if model.enforcement.isBlockingDisabled, model.enforcement.activationSafetyRequiresRestart {
+                    throw SharedInterfaceError("The web filter is safety locked after a failed start, so it was not turned on. Open Advanced controls and press Reset Enforcement Without Restart, or restart this Mac, then try again.")
+                }
+                if model.enforcement.isBlockingDisabled, let reason = model.enforcement.deliveryError {
+                    throw SharedInterfaceError(reason)
+                }
+            }
             else {
                 let challenge = model.makeDesktopBlockingDisableChallenge()
                 return try issue(title: "Disable web blocking", passage: challenge.requiredPassage) { [weak self] typed in
