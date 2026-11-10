@@ -32,6 +32,58 @@ final class SharedInterfaceGroupTests: XCTestCase {
         XCTAssertEqual(revised.timeWindow.id, original.timeWindow.id)
         XCTAssertEqual(revised.name, "Renamed")
     }
+    /// The shared editor now carries what only the native editors had: the
+    /// allow-only mode, website categories, usage limits and the lock windows.
+    func testSharedEditorDetailsMergeAndAbsentOnesStayUntouched() throws {
+        let original = group()
+        var dto = SharedInterfaceGroup(original)
+        XCTAssertEqual(dto.mode, "block")
+        XCTAssertEqual(dto.categories, ["social"])
+        XCTAssertEqual(dto.budget?.dailyMinutes, 45)
+        XCTAssertEqual(dto.changePolicy.editWindowHours, 3)
+        dto.mode = "allowOnly"; dto.categories = ["news", "video"]
+        dto.budget = .init(dailyMinutes: nil, weeklyMinutes: 300)
+        dto.changePolicy.editWindowHours = 1; dto.changePolicy.confirmationWindowHours = 6
+        let revised = try dto.merging(into: original)
+        XCTAssertEqual(revised.enforcementMode, "fortressAllowList")
+        XCTAssertEqual(revised.targets?.websiteCategories, ["news", "video"])
+        XCTAssertEqual(revised.usageBudget, CloudUsageBudget(dailyLimitMinutes: nil, weeklyLimitMinutes: 300))
+        XCTAssertEqual(revised.modificationPolicy.editWindowHours, 1)
+        XCTAssertEqual(revised.modificationPolicy.confirmationWindowHours, 6)
+        // An older screen that sends none of them changes none of them.
+        dto = SharedInterfaceGroup(original)
+        dto.mode = nil; dto.categories = nil; dto.budget = nil
+        dto.changePolicy.editWindowHours = nil; dto.changePolicy.confirmationWindowHours = nil
+        let untouched = try dto.merging(into: original)
+        XCTAssertEqual(untouched.targets, original.targets)
+        XCTAssertEqual(untouched.usageBudget, original.usageBudget)
+        XCTAssertEqual(untouched.modificationPolicy, original.modificationPolicy)
+        XCTAssertEqual(untouched.enforcementMode, original.enforcementMode)
+        dto.categories = ["not-a-category"]
+        XCTAssertThrowsError(try dto.merging(into: original))
+        dto = SharedInterfaceGroup(original); dto.budget = .init(dailyMinutes: 0, weeklyMinutes: nil)
+        XCTAssertThrowsError(try dto.merging(into: original))
+    }
+    /// A website is enforced only while its category is on. One typed into the
+    /// shared editor used to be filed under "other" without turning it on.
+    func testAddedWebsiteTurnsItsCategoryOnAndClassificationApplies() throws {
+        let original = group()
+        XCTAssertFalse(original.targets?.websiteCategories.contains("other") ?? true)
+        var dto = SharedInterfaceGroup(original)
+        dto.domains += ["new.example", "chat.example"]
+        dto.domainCategories = [.init(domain: "chat.example", category: "aiTools", source: "heuristic")]
+        let revised = try dto.merging(into: original)
+        XCTAssertEqual(revised.targets?.websiteCategories, ["social", "other", "aiTools"])
+        XCTAssertEqual(revised.targets?.domains.first { $0.domain == "chat.example" }?.category, "aiTools")
+        XCTAssertEqual(revised.targets?.domains.first { $0.domain == "example.com" }, original.targets?.domains.first)
+        dto.domainCategories = [.init(domain: "chat.example", category: "casino", source: "heuristic")]
+        XCTAssertThrowsError(try dto.merging(into: original))
+        dto.domainCategories = nil
+        dto.otherTargets = .init(windowsPaths: ["C:\\Games\\Game.exe"], windowsPublishers: [])
+        let windows = try dto.merging(into: original)
+        XCTAssertEqual(windows.targets?.windowsExecutablePaths, ["C:\\Games\\Game.exe"])
+        XCTAssertEqual(windows.targets?.windowsPublisherRules, [])
+    }
     func testUnresolvedImportsCannotBeSilentlyReplaced() {
         var original = group(); original.targets = nil
         XCTAssertThrowsError(try SharedInterfaceGroup(original).merging(into: original))

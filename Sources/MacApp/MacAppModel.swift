@@ -672,6 +672,31 @@ final class MacAppModel: ObservableObject {
         }
     }
 
+    /// Copies a finished Retreat into a new draft, as the iPhone does. A draft
+    /// enforces nothing until it is started, so this needs no unlock.
+    @discardableResult
+    func recreateRetreat(_ id: UUID) -> Bool {
+        guard !uiPreviewMode else { return false }
+        do {
+            var document = try store.load()
+            guard let source = document.retreats.first(where: { $0.id == id }),
+                  source.state == .completed || source.state == .endedEarly else {
+                errorMessage = "Only a finished Retreat can be recreated."
+                return false
+            }
+            document.retreats.append(source.recreatedDraft())
+            document.rebuildLegacyRuleProjection()
+            try store.save(document)
+            apply(document)
+            syncStatus = "Retreat recreated as draft"
+            return publishDesktopPolicy()
+        } catch {
+            syncStatus = "Sync failed"
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     // MARK: - Retreat change policy
 
     func retreatChangePolicy(for id: UUID) -> CloudRetreatChangePolicy? {

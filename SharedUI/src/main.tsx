@@ -37,7 +37,7 @@ import type {
   Preset,
   Retreat,
 } from "./contract.ts";
-import { isDiagnosticsReport } from "./contract.ts";
+import { isDiagnosticsReport, isDomainCategories } from "./contract.ts";
 import { nativeAdapter } from "./bridge.ts";
 import { createPreviewAdapter } from "./preview.ts";
 import "./style.css";
@@ -247,6 +247,9 @@ function App({ connection }: { connection: Adapter | null }) {
           });
         }
       : undefined;
+  /** An unlock is a change too; an open retreat edit continues on its revision. */
+  const keepRetreatRevision = (revision: string) =>
+    setRetreatForm((old) => (old ? { ...old, revision } : old));
   const preset =
     supports("presets") && snapshot
       ? (p: Preset) =>
@@ -261,9 +264,47 @@ function App({ connection }: { connection: Adapter | null }) {
       ? () => setDiagnosticsOpen(true)
       : () => void request({ type: "diagnostics" })
     : undefined;
-  const advanced = supports("advancedControls")
-    ? () => void request({ type: "openAdvancedControls" })
+  const exportReport =
+    supports("diagnosticsExport") && connection
+      ? async (names: boolean) => {
+          // Like copying: read-only, outside `request`, never disables the page.
+          try {
+            const reply = await connection.send({
+              type: "exportDiagnostics",
+              names,
+            });
+            return reply.message ?? "Exported the report.";
+          } catch (e) {
+            return e instanceof Error ? e.message : null;
+          }
+        }
+      : undefined;
+  const recreateRetreat =
+    supports("recreateRetreat") && snapshot
+      ? (r: Retreat) =>
+          void request({
+            type: "recreateRetreat",
+            revision: snapshot.revision,
+            retreatID: r.id,
+          }).then((reply) => reply && showPage("Retreats"))
+      : undefined;
+  // A running retreat may be edited only on a host that gates the weakening edits.
+  const editable = (r: Retreat) =>
+    !!r.canEdit &&
+    (r.state === "draft" ||
+      r.state === "scheduled" ||
+      (r.state === "active" && supports("retreatChanges")));
+  const [accessRequestOpen, setAccessRequestOpen] = useState(false);
+  const accessRequest = supports("accessRequests")
+    ? snapshot?.accessRequest
     : undefined;
+  const requestGroups =
+    accessRequest && snapshot
+      ? snapshot.groups.filter(
+          (g) =>
+            accessRequest.groupIDs.includes(g.id) && g.temporaryPolicy.allowed,
+        )
+      : [];
   const enforcementTitle =
     snapshot?.platform === "ios"
       ? "Screen Time"
@@ -440,6 +481,40 @@ function App({ connection }: { connection: Adapter | null }) {
           </div>
         )}
         {!snapshot && !error && <p role="status">Connecting to this device…</p>}
+        {accessRequest && snapshot && (
+          <div role="status" className="banner access-request">
+            <span>
+              A block screen asked for more time
+              {accessRequest.minutes
+                ? ` (${accessRequest.minutes} minutes)`
+                : ""}
+              .
+            </span>
+            <span className="actions">
+              <button
+                className="primary"
+                disabled={busy || !requestGroups.length}
+                onClick={() => {
+                  setError("");
+                  setAccessRequestOpen(true);
+                }}
+              >
+                Answer…
+              </button>
+              <button
+                disabled={busy}
+                onClick={() =>
+                  void request({
+                    type: "dismissAccessRequest",
+                    requestID: accessRequest.id,
+                  })
+                }
+              >
+                Dismiss
+              </button>
+            </span>
+          </div>
+        )}
         {snapshot && (
           <>
             {page === "Status" && (
@@ -453,7 +528,6 @@ function App({ connection }: { connection: Adapter | null }) {
                 onNewRetreat={newRetreat}
                 onLockdown={lockdown}
                 onHistory={setHistory}
-                onAdvanced={advanced}
                 onDiagnostics={diagnostics}
                 controlsOpen={controlsOpen}
                 setControlsOpen={setControlsOpen}
@@ -523,15 +597,24 @@ function App({ connection }: { connection: Adapter | null }) {
                         <small>{r.groupNames.join(" · ") || "No groups"}</small>
                         <small>Changes: {r.changePolicyLabel}</small>
                       </span>
-                      {editRetreat &&
-                        r.canEdit &&
-                        (r.state === "draft" || r.state === "scheduled") && (
+                      {editRetreat && editable(r) && (
+                        <button
+                          aria-label={`Edit ${r.name}`}
+                          disabled={busy}
+                          onClick={() => editRetreat(r)}
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {recreateRetreat &&
+                        (r.state === "completed" ||
+                          r.state === "cancelled") && (
                           <button
-                            aria-label={`Edit ${r.name}`}
+                            aria-label={`Recreate ${r.name}`}
                             disabled={busy}
-                            onClick={() => editRetreat(r)}
+                            onClick={() => recreateRetreat(r)}
                           >
-                            Edit
+                            Recreate
                           </button>
                         )}
                       {["active", "scheduled"].includes(r.state) && (
@@ -566,7 +649,7 @@ function App({ connection }: { connection: Adapter | null }) {
               <Settings
                 snapshot={snapshot}
                 busy={busy}
-                onAdvancedControls={advanced}
+                send={request}
                 onDiagnostics={diagnostics}
               />
             )}
@@ -603,6 +686,47 @@ function App({ connection }: { connection: Adapter | null }) {
           }
           canSave={supports("editGroups")}
           canPick={supports("pickApplications")}
+          details={supports("groupDetails")}
+          otherTargets={supports("otherTargets")}
+          onClassify={
+            supports("classifyWebsites")
+              ? async (domains) => {
+                  const reply = await request({
+                    type: "classifyWebsites",
+                    domains,
+                  });
+                  return reply && isDomainCategories(reply.classified)
+                    ? reply.classified
+                    : null;
+                }
+              : undefined
+          }
+          onCancelUnlock={
+            supports("cancelUnlock")
+              ? async () => {
+                  const reply = await request({
+                    type: "cancelGroupUnlock",
+                    revision: editorRevision.current,
+                    groupID: editor.id,
+                  });
+                  // Re-locking is a change; keep editing on the new revision.
+                  if (reply?.snapshot) {
+                    editorRevision.current = reply.snapshot.revision;
+                    setEditor((old) =>
+                      old
+                        ? {
+                            ...old,
+                            canEdit:
+                              reply.snapshot!.groups.find(
+                                (g) => g.id === old.id,
+                              )?.canEdit ?? false,
+                          }
+                        : old,
+                    );
+                  }
+                }
+              : undefined
+          }
           websiteSupport={snapshot.platform !== "windows"}
           onDelete={
             snapshot.groups.some((g) => g.id === editor.id)
@@ -681,13 +805,14 @@ function App({ connection }: { connection: Adapter | null }) {
             )
               setLockdownOpen(false);
           }}
-          onSubmit={async (groupIDs, hours) => {
+          onSubmit={async (groupIDs, hours, lock) => {
             if (
               await request({
                 type: "startLockdown",
                 revision: snapshot.revision,
                 groupIDs,
                 hours,
+                ...(lock ? { lock } : {}),
               })
             )
               setLockdownOpen(false);
@@ -701,8 +826,39 @@ function App({ connection }: { connection: Adapter | null }) {
           choices={retreatForm.retreat?.groupChoices ?? snapshot.groups}
           status={
             retreatForm.retreat?.state === "draft" ||
-            retreatForm.retreat?.state === "scheduled"
+            retreatForm.retreat?.state === "scheduled" ||
+            retreatForm.retreat?.state === "active"
               ? retreatForm.retreat.state
+              : undefined
+          }
+          unlock={
+            snapshot.retreats.find((r) => r.id === retreatForm.retreat?.id)
+              ?.unlock
+          }
+          onRequestUnlock={
+            retreatForm.retreat && supports("retreatChanges")
+              ? async () => {
+                  const reply = await request({
+                    type: "requestRetreatUnlock",
+                    revision: snapshot.revision,
+                    retreatID: retreatForm.retreat!.id,
+                  });
+                  if (reply?.snapshot)
+                    keepRetreatRevision(reply.snapshot.revision);
+                }
+              : undefined
+          }
+          onCancelUnlock={
+            retreatForm.retreat && supports("cancelUnlock")
+              ? async () => {
+                  const reply = await request({
+                    type: "cancelRetreatUnlock",
+                    revision: snapshot.revision,
+                    retreatID: retreatForm.retreat!.id,
+                  });
+                  if (reply?.snapshot)
+                    keepRetreatRevision(reply.snapshot.revision);
+                }
               : undefined
           }
           busy={busy}
@@ -736,7 +892,10 @@ function App({ connection }: { connection: Adapter | null }) {
           // dashboard or replace a message someone is reading.
           load={async (names) => {
             try {
-              const reply = await connection.send({ type: "diagnostics", names });
+              const reply = await connection.send({
+                type: "diagnostics",
+                names,
+              });
               return isDiagnosticsReport(reply.diagnostics)
                 ? reply.diagnostics
                 : null;
@@ -744,6 +903,7 @@ function App({ connection }: { connection: Adapter | null }) {
               return null;
             }
           }}
+          exportReport={exportReport}
           copy={async (names) => {
             try {
               const reply = await connection.send({
@@ -755,6 +915,31 @@ function App({ connection }: { connection: Adapter | null }) {
             } catch {
               return null;
             }
+          }}
+        />
+      )}
+      {accessRequestOpen && accessRequest && snapshot && requestGroups[0] && (
+        <AccessDialog
+          group={requestGroups[0]}
+          choices={requestGroups}
+          fixedMinutes={accessRequest.minutes}
+          intro="A block screen asked for more time. Choose the group it is for; your device shows and verifies the passage before granting it."
+          busy={busy}
+          error={error}
+          onClose={() => setAccessRequestOpen(false)}
+          onSubmit={async (minutes, reason, reflection, groupID) => {
+            if (
+              await request({
+                type: "answerAccessRequest",
+                revision: snapshot.revision,
+                requestID: accessRequest.id,
+                groupID,
+                minutes,
+                reason,
+                reflection,
+              })
+            )
+              setAccessRequestOpen(false);
           }}
         />
       )}
@@ -779,6 +964,11 @@ function App({ connection }: { connection: Adapter | null }) {
             });
             if (reply) {
               setChallenge(null);
+              if (
+                challengeAction.current?.type === "requestRetreatUnlock" &&
+                reply.snapshot
+              )
+                keepRetreatRevision(reply.snapshot.revision);
               if (
                 challengeAction.current?.type === "requestGroupUnlock" &&
                 reply.snapshot

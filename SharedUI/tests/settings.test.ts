@@ -14,7 +14,8 @@ const compiled = buildSync({
   write: false,
   platform: "node",
   format: "cjs",
-  packages: "external",
+  // React stays shared with the server renderer; everything else is bundled.
+  external: ["react", "react-dom", "react/jsx-runtime"],
   jsx: "automatic",
 }).outputFiles[0].text;
 const componentModule = { exports: {} as any };
@@ -24,7 +25,7 @@ new Function("require", "module", "exports", compiled)(
   componentModule.exports,
 );
 
-test("advanced controls are available only in Settings on a supporting host", () => {
+test("settings own what the native settings held, and only what the host advertises", () => {
   const original = Object.getOwnPropertyDescriptor(globalThis, "document");
   Object.defineProperty(globalThis, "document", {
     configurable: true,
@@ -38,22 +39,49 @@ test("advanced controls are available only in Settings on a supporting host", ()
       renderToStaticMarkup(
         createElement(componentModule.exports.Settings, { snapshot, ...extra }),
       );
-    assert.doesNotMatch(render(), /Advanced native controls/);
+    // The native window is retired: no entry point, whatever a host says.
+    (snapshot.capabilities as string[]).push("advancedControls");
+    assert.doesNotMatch(render(), /Advanced/);
+    assert.doesNotMatch(render(), /Protection|Debug trace|Sync now/);
+
+    snapshot.platform = "ios";
+    snapshot.enforcementEnabled = false;
+    snapshot.capabilities.push("protection", "syncNow", "enforcementControl");
+    snapshot.protection = {
+      antiUninstall: { on: false },
+      appLock: {
+        enabled: true,
+        unlockDelayDays: 3,
+        repeatConfirmations: false,
+        passageWordCount: 40,
+        confirmationWindowHours: 24,
+        editWindowHours: 24,
+        unlock: { phase: "idle" },
+      },
+      pendingSync: true,
+    };
+    const ios = render({ send: async () => null });
+    assert.match(ios, /Allow Screen Time access/);
+    assert.match(ios, /<button>Sync now<\/button>/);
+    assert.match(ios, /Prevent app deletion/);
+    assert.match(ios, /App-wide change protection/);
+    assert.match(ios, /Start unlock…/);
+    assert.match(ios, /wait here until that group/);
+    assert.match(ios, /Reset Screen Time restrictions…/);
+    // Without a way to send, nothing on the page can act.
+    assert.match(render(), /<button disabled="">Sync now<\/button>/);
+
     snapshot.platform = "macos";
-    snapshot.capabilities.push("advancedControls");
-    assert.match(render({ onAdvancedControls() {} }), /<h2>Advanced<\/h2>/);
-    assert.match(
-      render({ onAdvancedControls() {} }),
-      /<button>Advanced native controls<\/button>/,
+    delete snapshot.protection;
+    snapshot.capabilities = snapshot.capabilities.filter(
+      (c) => c !== "protection",
     );
-    assert.match(
-      render({ onAdvancedControls() {}, busy: true }),
-      /<button disabled="">Advanced native controls<\/button>/,
-    );
-    assert.match(
-      render(),
-      /<button disabled="">Advanced native controls<\/button>/,
-    );
+    snapshot.capabilities.push("debugTrace");
+    snapshot.debugTrace = { recording: true };
+    const mac = render({ send: async () => null });
+    assert.match(mac, /Debug trace/);
+    assert.match(mac, /Export trace…/);
+    assert.doesNotMatch(mac, /Prevent app deletion|Reset Screen Time/);
   } finally {
     if (original) Object.defineProperty(globalThis, "document", original);
     else Reflect.deleteProperty(globalThis, "document");

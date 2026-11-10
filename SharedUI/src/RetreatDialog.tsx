@@ -1,6 +1,11 @@
 import { useState } from "react";
-import type { ChangePolicy, RetreatDraft, Snapshot } from "./contract.ts";
-import { Modal, NumberField } from "./components.tsx";
+import type {
+  ChangePolicy,
+  RetreatDraft,
+  Snapshot,
+  UnlockState,
+} from "./contract.ts";
+import { Modal, NumberField, UnlockCard } from "./components.tsx";
 import {
   fromLocalInput,
   retreatDraft,
@@ -9,29 +14,37 @@ import {
 } from "./retreat-form.ts";
 
 /**
- * Creates a retreat, or changes one that has not started. The host owns the
- * rules: it re-validates everything and a running retreat never opens here.
+ * Creates a retreat, or changes a saved one. The host owns the rules: it
+ * re-validates everything, and refuses any edit that would release part of a
+ * running retreat until that retreat's change policy has been satisfied.
  */
 export function RetreatDialog({
   snapshot,
   initial,
   choices,
   status,
+  unlock,
   busy,
   error,
   onClose,
   onSubmit,
+  onRequestUnlock,
+  onCancelUnlock,
 }: {
   snapshot: Snapshot;
   initial: RetreatForm;
   /** Groups to choose from; a new retreat uses the Blocking Groups. */
   choices: { id: string; name: string }[];
   /** The saved state when editing, otherwise undefined. */
-  status?: "draft" | "scheduled";
+  status?: "draft" | "scheduled" | "active";
+  /** A running retreat's change policy progress, from the host. */
+  unlock?: UnlockState;
   busy: boolean;
   error: string;
   onClose(): void;
   onSubmit(retreat: RetreatDraft): Promise<void>;
+  onRequestUnlock?: () => void;
+  onCancelUnlock?: () => void;
 }) {
   const [form, setForm] = useState(initial);
   const patch = (value: Partial<RetreatForm>) =>
@@ -88,6 +101,19 @@ export function RetreatDialog({
             The groups you choose are copied into this retreat, with their
             schedules and budgets, and block from its start to its end.
           </p>
+          {status === "active" && (
+            <UnlockCard
+              unlock={unlock ?? { phase: "unlocked" }}
+              detail={
+                unlock
+                  ? "Adding groups, lengthening it or a stronger lock save now. Removing or loosening a group, shortening it or weakening its lock needs this retreat's change policy first."
+                  : "This retreat has no change policy, so any change saves."
+              }
+              busy={busy}
+              onRequest={unlock ? onRequestUnlock : undefined}
+              onCancel={unlock ? onCancelUnlock : undefined}
+            />
+          )}
           <label>
             Name
             <input
@@ -211,7 +237,7 @@ export function RetreatDialog({
               ? startsLater
                 ? "Schedule retreat"
                 : "Start retreat"
-              : status === "scheduled"
+              : status === "scheduled" || status === "active"
                 ? "Save changes"
                 : "Save draft"}
           </button>

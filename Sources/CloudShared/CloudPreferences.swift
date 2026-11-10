@@ -864,6 +864,25 @@ struct CloudRetreat: Codable, Equatable, Identifiable {
         }
     }
 
+    /// A new draft with this Retreat's last configuration and duration,
+    /// starting now. Nothing in it enforces until it is started.
+    func recreatedDraft(at date: Date = Date()) -> CloudRetreat {
+        var copy = self
+        copy.id = UUID()
+        copy.name = "\(name) — New"
+        copy.state = .draft
+        copy.plannedStart = date
+        copy.plannedEnd = date.addingTimeInterval(max(60, plannedEnd.timeIntervalSince(plannedStart)))
+        copy.modifiedAt = date
+        copy.runs = []
+        copy.versions = currentVersion.map { version in
+            [CloudRetreatVersion(number: 1, createdAt: date, blockingGroups: version.blockingGroups,
+                                 modificationPolicy: version.modificationPolicy)]
+        } ?? []
+        copy.currentVersionNumber = copy.versions.isEmpty ? 0 : 1
+        return copy
+    }
+
     mutating func finish(early: Bool, at date: Date = Date()) {
         guard state == .active else { return }
         state = early ? .endedEarly : .completed

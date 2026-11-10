@@ -16,7 +16,11 @@ typealias SharedInterfaceNativeModel = AppModel
 final class SharedInterfaceSession: ObservableObject {
     let model: SharedInterfaceNativeModel
     @Published var nativePanel: String?
+    /// Only the missing-bundle fallback opens the native controls now; every
+    /// function they held is in the shared screens.
     @Published var showAdvancedControls = false
+    /// Files the host offers through the system share sheet (iPhone diagnostics export).
+    @Published var sharing: [URL]?
     private var generation = 0
     private struct Challenge {
         let passage: String
@@ -263,6 +267,30 @@ final class SharedInterfaceSession: ObservableObject {
         } else if let recovery = controller.recoveryWarning {
             enforcement["problem"] = recovery
         }
+        // The ordinary steps the native filter controls offered, with the same
+        // gates: removal needs its fixed passage, enforced by the controller.
+        if !controller.isRemoving {
+            var controls: [[String: Any]] = []
+            if controller.status == .awaitingApproval {
+                controls.append(["id": "openSystemSettings", "label": "Open System Settings", "placement": "controls",
+                    "detail": "Approve the Holdfast web filter under Login Items & Extensions › Network Extensions."])
+            }
+            if !controller.isBlockingDisabled, controller.status == .awaitingApproval || controller.status == .activating {
+                controls.append(["id": "cancelEnable", "label": "Cancel enable", "placement": "controls"])
+            }
+            if controller.status != .notInstalled, !controller.isResettingEnforcement {
+                controls.append(["id": "removeNetworkExtension", "label": "Remove Network Extension…", "placement": "controls", "danger": true,
+                    "detail": "Turns the web filter off and uninstalls it. Needs the removal passage typed exactly."])
+            }
+            if !controls.isEmpty { enforcement["actions"] = (enforcement["actions"] as? [[String: Any]] ?? []) + controls }
+        } else {
+            enforcement["detail"] = controller.status == .rebootRequired
+                ? "Restart this Mac to finish removing the Network Extension."
+                : "Removing the Network Extension…"
+        }
+        if !model.heldWeakenings.isEmpty {
+            enforcement["held"] = model.heldWeakenings.map { ["name": $0.name, "appliesAt": iso($0.appliesAt)] }
+        }
         let sync = model.syncStatus
         #else
         let platform = "ios"
@@ -369,6 +397,9 @@ final class SharedInterfaceSession: ObservableObject {
              "changePolicyLabel": r.modificationPolicy.severity, "canRequestEnd": r.state == .active]
             let editable = Self.isEditable(r, now: now)
             value["canEdit"] = editable
+            if r.state == .active, let policy = model.retreatChangePolicy(for: r.id), policy.requiresAuthorization {
+                value["unlock"] = unlockObject(model.retreatUnlockPhase(for: r.id))
+            }
             if editable {
                 let policy = Self.retreatPolicy(r)
                 value["goal"] = r.goal
@@ -383,13 +414,40 @@ final class SharedInterfaceSession: ObservableObject {
             return ["id": event.id.uuidString, "groupID": event.groupID.uuidString, "groupName": event.groupName,
                 "startedAt": iso(event.grantedAt), "endsAt": iso(event.expiresAt), "reason": event.intent == nil ? "unspecified" : event.intent == .consciousIntervention ? "conscious" : "edulgence"]
         }
+        var capabilities = ["editGroups", "temporaryAccess", "pickApplications", "retreats", "lockdown", "diagnostics", "enforcementControl",
+            "appearance", "presets", "lockdownForm", "diagnosticsReport", "retreatForm", "groupDetails", "cancelUnlock", "retreatChanges",
+            "recreateRetreat", "diagnosticsExport", "syncNow"]
+        #if os(macOS)
+        capabilities += ["lockdownPolicy", "debugTrace", "otherTargets"]
+        #else
+        capabilities += ["protection", "accessRequests", "classifyWebsites"]
+        #endif
         var result: [String: Any] = ["schema": 1, "revision": try revision(), "platform": platform,
-            "capabilities": ["editGroups", "temporaryAccess", "pickApplications", "retreats", "lockdown", "diagnostics", "enforcementControl", "appearance", "advancedControls", "presets", "lockdownForm", "diagnosticsReport", "retreatForm"],
+            "capabilities": capabilities,
             "appearance": appearance,
             "enforcementEnabled": enabled, "enforcement": enforcement,
             "sync": ["state": Self.syncState(sync), "detail": sync], "groups": groups, "retreats": retreats, "bypasses": events, "lockdown": NSNull(),
             "summary": ["headline": summary.headline, "next": summary.nextLine(now: now) ?? NSNull()] as [String: Any],
             "retreatGroups": retreatGroups, "schedule": ["days": scheduleDays(now: now)], "presets": presets]
+        #if os(macOS)
+        result["lockdownOptions"] = ["hours": DesktopLockdownSessionGate.offeredDurations.map { Int($0.seconds / 3_600) },
+                                     "locks": ["passage", "delay", "checkpoints"]]
+        result["debugTrace"] = ["recording": DesktopDiagnosticTrace.isEnabled]
+        #else
+        let lock = model.lockdownConfiguration
+        result["protection"] = [
+            "antiUninstall": ["on": model.antiUninstallEnabled],
+            "appLock": ["enabled": lock.isEnabled, "unlockDelayDays": lock.unlockDelayDays, "repeatConfirmations": lock.repeatConfirmations,
+                        "passageWordCount": lock.passageWordCount, "confirmationWindowHours": lock.confirmationWindowHours,
+                        "editWindowHours": lock.editWindowHours,
+                        "unlock": lock.isEnabled ? unlockObject(model.currentUnlockPhase(now: now)) : ["phase": "unlocked"] as [String: Any]] as [String: Any],
+            "pendingSync": !model.pendingCloudRuleIDs.isEmpty]
+        if let request = pendingAccessRequest(now: now) {
+            var value: [String: Any] = ["id": request.id.uuidString, "groupIDs": request.eligibleRuleIDs.map(\.uuidString)]
+            if let duration = request.duration { value["minutes"] = duration.rawValue }
+            result["accessRequest"] = value
+        }
+        #endif
         if let end = model.lockdownExpirations.values.max() {
             #if os(macOS)
             let sessions: [[String: Any]] = model.activeLockdownSessions.map { session in
@@ -406,18 +464,28 @@ final class SharedInterfaceSession: ObservableObject {
         }
         return result
     }
-    private func issue(title: String, passage: String, action: @escaping (String) throws -> Void) throws -> [String: Any] {
+    private func issue(title: String, passage: String, detail: String? = nil, action: @escaping (String) throws -> Void) throws -> [String: Any] {
         let id = UUID().uuidString, expiry = Date().addingTimeInterval(30 * 60)
         challenges = [id: Challenge(passage: passage, revision: try revision(), expiry: expiry, action: action)]
         return ["challenge": ["id": id, "title": title, "passage": passage, "expiresAt": iso(expiry),
-            "detail": "Type the passage. You have 30 minutes; a policy change invalidates it. Native rules determine when the request takes effect."]]
+            "detail": detail ?? "Type the passage. You have 30 minutes; a policy change invalidates it. Native rules determine when the request takes effect."]]
     }
-    /// Only a draft, or a retreat that has not started, changes from the shared
-    /// form. A running one is held by its change policy; shortening it, ending
-    /// it or swapping its groups stays with the native controls and their gate.
+    /// A draft, a retreat that has not started, or a running one. A running
+    /// retreat is held by its change policy: the models refuse any edit that
+    /// would release something it enforces until that policy is satisfied.
     private static func isEditable(_ retreat: CloudRetreat, now: Date) -> Bool {
-        (retreat.state == .draft || retreat.state == .scheduled) && !retreat.isActive(at: now)
+        ((retreat.state == .draft || retreat.state == .scheduled) && !retreat.isActive(at: now))
+            || (retreat.state == .active && retreat.isActive(at: now))
     }
+    #if os(iOS)
+    /// The block screen's request, if a group it names still allows extra time;
+    /// the same filter the native sheet applied before showing it.
+    private func pendingAccessRequest(now: Date) -> PendingTemporaryAccessRequest? {
+        guard let request = ShieldTemporaryAccessCoordinator.loadPendingRequest(now: now) else { return nil }
+        let allowed = Set(model.rules.lazy.filter { $0.isEnabled && $0.lockdownPolicy.allowsTimeExtensions }.map(\.id))
+        return allowed.isDisjoint(with: request.eligibleRuleIDs) ? nil : request
+    }
+    #endif
     private static func retreatPolicy(_ retreat: CloudRetreat) -> CloudRuleLockdownPreference {
         retreat.currentVersion?.modificationPolicy ?? retreat.modificationPolicy
     }
@@ -463,7 +531,9 @@ final class SharedInterfaceSession: ObservableObject {
         }
         // Starting is offered for a new retreat or a draft, as in the native editors.
         if startNow {
-            guard existing == nil || existing?.state == .draft else { throw SharedInterfaceError("This retreat is already scheduled.") }
+            guard existing == nil || existing?.state == .draft else {
+                throw SharedInterfaceError(existing?.state == .active ? "This retreat is already running." : "This retreat is already scheduled.")
+            }
             guard end > now else { throw SharedInterfaceError("That retreat would already be over. Choose a later end.") }
         }
         let choices = retreatChoices(existing)
@@ -503,7 +573,7 @@ final class SharedInterfaceSession: ObservableObject {
         #endif
         let message = startNow
             ? (start > now ? "Retreat scheduled." : "Retreat started.")
-            : (existing?.state == .scheduled ? "Retreat changes saved." : "Retreat draft saved.")
+            : (existing?.state == .scheduled || existing?.state == .active ? "Retreat changes saved." : "Retreat draft saved.")
         generation += 1; challenges.removeAll()
         return ["snapshot": try snapshot(), "message": message]
     }
@@ -549,16 +619,82 @@ final class SharedInterfaceSession: ObservableObject {
                 #endif
                 return ["message": "Copied the readable report."]
             }
-            return ["diagnostics": ["text": report.renderedText(), "findings": report.warnings.sorted { $0.severity < $1.severity }.map { warning in
+            #if os(macOS)
+            let events = TamperJournal.shared.events()
+            #else
+            let events = TamperJournalCloudMirror.read()
+            #endif
+            let journal: [[String: Any]] = events.suffix(50).reversed().map {
+                ["at": iso($0.at), "title": $0.title, "detail": $0.detail.isEmpty ? $0.origin : "\($0.origin) · \($0.detail)"]
+            }
+            return ["diagnostics": ["text": report.renderedText(), "journal": journal, "findings": report.warnings.sorted { $0.severity < $1.severity }.map { warning in
                 var finding: [String: Any] = ["severity": warning.severity.rawValue, "message": warning.message]
                 if let hint = warning.hint { finding["hint"] = hint }
                 return finding
             }] as [String: Any]]
         }
-        if type == "openAdvancedControls" {
-            showAdvancedControls = true
-            return [:]
+        if type == "exportDiagnostics" {
+            let report = model.makeDiagnosticReport(redaction: c["names"] as? Bool == true ? .full : .standard)
+            #if os(macOS)
+            // The system's own folder chooser decides where the files go.
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = false; panel.canChooseDirectories = true
+            panel.canCreateDirectories = true; panel.allowsMultipleSelection = false
+            panel.prompt = "Export"
+            panel.message = "Choose where to write \(report.suggestedFileName).txt and .json"
+            guard await panel.begin() == .OK, let directory = panel.url else { return ["message": "Export cancelled."] }
+            let written = try model.writeDiagnosticReport(report, to: directory)
+            return ["message": "Wrote \(written.count) files to \(directory.lastPathComponent)."]
+            #else
+            sharing = try model.writeDiagnosticReport(report)
+            return ["message": "Choose where to send the report."]
+            #endif
         }
+        if type == "syncNow" {
+            #if os(macOS)
+            model.refresh()
+            #else
+            model.syncICloudPreferences(); model.synchronize()
+            #endif
+            return ["snapshot": try snapshot(), "message": "Sync requested."]
+        }
+        #if os(macOS)
+        if type == "setDebugTrace" {
+            guard let enabled = c["enabled"] as? Bool else { throw SharedInterfaceError("Invalid setting.") }
+            DesktopDiagnosticTrace.setEnabled(enabled)
+            return ["snapshot": try snapshot(), "message": enabled ? "Trace recording. New activity is being recorded." : "Trace paused. Existing events are kept."]
+        }
+        if type == "exportDebugTrace" {
+            DesktopDiagnosticTrace.record(component: "diagnostics", event: "trace_export_requested")
+            let panel = NSSavePanel()
+            panel.title = "Export Holdfast Debug Trace"
+            panel.nameFieldStringValue = "Holdfast-debug-trace-\(Int(Date().timeIntervalSince1970)).jsonl"
+            panel.allowedContentTypes = [.json]
+            guard await panel.begin() == .OK, let url = panel.url else { return ["message": "Export cancelled."] }
+            let data = try DesktopDiagnosticTrace.exportedData()
+            try data.write(to: url, options: [.atomic])
+            return ["message": "Exported \(data.count) bytes to \(url.lastPathComponent)."]
+        }
+        if type == "clearDebugTrace" {
+            try DesktopDiagnosticTrace.clear()
+            return ["message": "Trace cleared."]
+        }
+        #else
+        if type == "classifyWebsites" {
+            // On-device classification; nothing is saved until the group is.
+            guard let texts = c["domains"] as? [String], texts.count <= 1000 else { throw SharedInterfaceError("Invalid websites.") }
+            let domains = Array(Set(texts.compactMap(BlockingTargetInput.domain(from:)))).sorted()
+            guard !domains.isEmpty else { throw SharedInterfaceError("Add websites before classifying them.") }
+            let results = await DomainClassifier.classify(domains)
+            return ["classified": results.map { ["domain": $0.domain, "category": $0.category.rawValue, "source": $0.source.rawValue] },
+                    "message": "Classified \(results.count) website\(results.count == 1 ? "" : "s"). Review the categories, then save."]
+        }
+        if type == "dismissAccessRequest" {
+            guard let text = c["requestID"] as? String, let id = UUID(uuidString: text) else { throw SharedInterfaceError("Invalid request.") }
+            model.clearPendingTemporaryAccessRequest(id: id)
+            return ["snapshot": try snapshot()]
+        }
+        #endif
         if type == "pickApplications" {
             guard let text = c["groupID"] as? String, let id = UUID(uuidString: text) else { throw SharedInterfaceError("Invalid group.") }
             #if os(macOS)
@@ -582,14 +718,30 @@ final class SharedInterfaceSession: ObservableObject {
         if type == "startLockdown" {
             guard let texts = c["groupIDs"] as? [String], let hours = c["hours"] as? Int else { nativePanel = type; return [:] }
             let ids = Set(texts.compactMap(UUID.init(uuidString:)))
-            guard !ids.isEmpty, ids.count == texts.count, (1...168).contains(hours) else {
-                throw SharedInterfaceError("Choose at least one group and a duration between one hour and seven days.")
+            guard !ids.isEmpty, ids.count == texts.count, (1...720).contains(hours) else {
+                throw SharedInterfaceError("Choose at least one group and one of the offered durations.")
             }
+            #if os(iOS)
+            guard hours <= 168, c["lock"] == nil else { throw SharedInterfaceError("Choose a duration between one hour and seven days.") }
+            #endif
             #if os(macOS)
-            // The same defaults the Mac lockdown window starts with: one typed passage to leave early.
+            // Without a lock, the defaults the Mac lockdown window starts with:
+            // one typed passage to leave early. With one, the window's options.
+            var severity = "passageOnly", words = 80, delay = 0
+            if let lock = c["lock"] as? [String: Any] {
+                let severities = ["passage": "passageOnly", "delay": "delayed", "checkpoints": "repeatedConfirmations"]
+                guard let kind = lock["kind"] as? String, let chosen = severities[kind], let w = lock["words"] as? Int, (20...300).contains(w),
+                      let d = lock["delayDays"] as? Int, (0...30).contains(d) else {
+                    throw SharedInterfaceError("Choose a lock mode, a passage of 20 to 300 words and a delay of up to 30 days.")
+                }
+                severity = chosen; words = w; delay = kind == "passage" ? 0 : d
+            }
+            guard DesktopLockdownSessionGate.offeredDurations.contains(where: { Int($0.seconds) == hours * 3_600 }) else {
+                throw SharedInterfaceError("Choose one of the offered durations.")
+            }
             let before = Set(model.activeLockdownSessions.map(\.id))
             model.startLockdownSession(ruleIDs: ids, duration: Double(hours) * 3_600,
-                lockdown: DesktopLockdownPolicy(severity: "passageOnly", unlockDelayDays: 0, passageWordCount: 80,
+                lockdown: DesktopLockdownPolicy(severity: severity, unlockDelayDays: delay, passageWordCount: words,
                     confirmationWindowHours: 24, editWindowHours: 1, allowsTimeExtensions: false, maximumTimeExtensionHours: 0))
             try ensure(model.errorMessage == nil)
             guard Set(model.activeLockdownSessions.map(\.id)) != before else {
@@ -619,9 +771,29 @@ final class SharedInterfaceSession: ObservableObject {
         }
         if type == "enforcementAction" {
             #if os(macOS)
+            let controller = model.enforcement
             switch c["id"] as? String {
             case "resetEnforcement": model.resetDesktopEnforcementWithoutRestart()
             case "retryDisable": model.disableDesktopBlockingImmediately()
+            case "openSystemSettings": model.openNetworkExtensionSettings()
+            case "cancelEnable":
+                // Offered only while the filter is waiting for approval or
+                // starting, exactly as natively; nothing is enforced yet.
+                guard controller.status == .awaitingApproval || controller.status == .activating else {
+                    throw SharedInterfaceError("The web filter is no longer starting. Refresh to see its state.")
+                }
+                model.disableDesktopBlockingImmediately()
+            case "removeNetworkExtension":
+                guard controller.status != .notInstalled, !controller.isRemoving, !controller.isResettingEnforcement else {
+                    throw SharedInterfaceError("The Network Extension cannot be removed right now. Refresh to see its state.")
+                }
+                return try issue(title: "Remove Network Extension", passage: DesktopNetworkExtensionRemovalGate.requiredPassage,
+                    detail: "Type the passage exactly, including capitals and punctuation. The web filter turns off and is uninstalled; macOS may ask for your password or a restart.") { [weak self] typed in
+                    guard let self else { throw SharedInterfaceError("The window was closed.") }
+                    guard model.removeDesktopNetworkExtension(passage: typed) == .authorized else {
+                        throw SharedInterfaceError("The passage must match exactly, including capitals and punctuation.")
+                    }
+                }
             default: throw SharedInterfaceError("Unknown recovery step.")
             }
             generation += 1; challenges.removeAll()
@@ -661,7 +833,10 @@ final class SharedInterfaceSession: ObservableObject {
                     throw SharedInterfaceError("Screen Time access was not granted, so nothing is being blocked yet. You can try again at any time.")
                 }
             }
-            else { nativePanel = "settings"; return [:] }
+            else {
+                // Holdfast never switches Screen Time off itself; iOS owns that.
+                return ["message": "Screen Time access stays on while Holdfast is blocking. To stop it, remove Holdfast under Settings › Screen Time on this iPhone, or use Reset Screen Time restrictions in Settings › Diagnostics here."]
+            }
             #endif
         } else if type == "installPreset" {
             guard let id = c["presetID"] as? String, let preset = HoldfastPresets.blockingPresets.first(where: { $0.id == id }) else { throw SharedInterfaceError("Unknown preset.") }
@@ -670,11 +845,20 @@ final class SharedInterfaceSession: ObservableObject {
             #else
             try ensure(model.installPreset(preset))
             #endif
-        } else if type == "requestRetreatEnd" {
+        } else if type == "requestRetreatEnd" || type == "requestRetreatUnlock" {
+            let finish = type == "requestRetreatEnd"
             guard let text = c["retreatID"] as? String, let id = UUID(uuidString: text), let policy = model.retreatChangePolicy(for: id) else { throw SharedInterfaceError("Retreat no longer exists.") }
+            guard model.retreats.first(where: { $0.id == id })?.state == .active else { throw SharedInterfaceError("This retreat is not running.") }
             let phase = model.retreatUnlockPhase(for: id)
-            if !policy.requiresAuthorization { try ensure(model.finishRetreat(id)) }
-            else if case .unlocked = phase { try ensure(model.finishRetreat(id)) }
+            if !policy.requiresAuthorization || { if case .unlocked = phase { return true }; return false }() {
+                if finish { try ensure(model.finishRetreat(id)) }
+                else {
+                    generation += 1; challenges.removeAll()
+                    return ["snapshot": try snapshot(), "message": policy.requiresAuthorization
+                        ? "Changes to this retreat are unlocked. Save them before the window closes."
+                        : "This retreat has no change policy; any change saves."]
+                }
+            }
             else {
                 // The phase already knows when the window opens; saying only
                 // "still waiting" leaves no way to tell a request that is
@@ -691,14 +875,29 @@ final class SharedInterfaceSession: ObservableObject {
                     )
                 default: break
                 }
-                return try issue(title: "Unlock retreat changes", passage: CommitmentPassage.generate(wordCount: policy.passageWordCount)) { [weak self] _ in
+                return try issue(title: finish ? "End retreat early" : "Unlock retreat changes", passage: CommitmentPassage.generate(wordCount: policy.passageWordCount)) { [weak self] _ in
                     guard let self else { throw SharedInterfaceError("The window was closed.") }
                     guard model.retreatChangePolicy(for: id) == policy else { throw SharedInterfaceError("The retreat policy changed. Request a new passage.") }
                     if case .confirmationDue = model.retreatUnlockPhase(for: id) { model.confirmRetreatUnlock(id) }
                     else { model.startRetreatUnlock(id) }
-                    if case .unlocked = model.retreatUnlockPhase(for: id) { try ensure(model.finishRetreat(id)) }
+                    if finish, case .unlocked = model.retreatUnlockPhase(for: id) { try ensure(model.finishRetreat(id)) }
                 }
             }
+        } else if type == "cancelRetreatUnlock" {
+            // Only ever re-locks: abandoning an unlock or closing its window.
+            guard let text = c["retreatID"] as? String, let id = UUID(uuidString: text) else { throw SharedInterfaceError("Retreat no longer exists.") }
+            model.cancelRetreatUnlock(id)
+        } else if type == "recreateRetreat" {
+            guard let text = c["retreatID"] as? String, let id = UUID(uuidString: text),
+                  let retreat = model.retreats.first(where: { $0.id == id }) else { throw SharedInterfaceError("Retreat no longer exists.") }
+            guard retreat.state == .completed || retreat.state == .endedEarly else { throw SharedInterfaceError("Only a finished retreat can be recreated.") }
+            #if os(macOS)
+            try ensure(model.recreateRetreat(id))
+            #else
+            try ensure(model.recreateRetreat(retreat))
+            #endif
+            generation += 1; challenges.removeAll()
+            return ["snapshot": try snapshot(), "message": "Recreated as a draft. Review it before starting."]
         } else if type == "saveGroup" {
             let input = try JSONSerialization.data(withJSONObject: c["group"] ?? [:])
             let dto = try JSONDecoder().decode(SharedInterfaceGroup.self, from: input)
@@ -711,6 +910,8 @@ final class SharedInterfaceSession: ObservableObject {
             #else
             try ensure(model.saveBlockingGroup(group))
             #endif
+        } else if let reply = try await performProtection(type, c) {
+            return reply
         } else {
             guard let text = c["groupID"] as? String, let id = UUID(uuidString: text), let group = owned(id) else { throw SharedInterfaceError("This group no longer exists.") }
             switch type {
@@ -718,6 +919,13 @@ final class SharedInterfaceSession: ObservableObject {
                 try ensure(model.deleteBlockingGroup(group))
             case "cancelTemporaryAccess":
                 try ensure(model.cancelTemporaryPause(for: id))
+            case "cancelGroupUnlock":
+                // Only ever re-locks: abandoning an unlock or closing its window.
+                #if os(macOS)
+                model.cancelRuleEditUnlock(id)
+                #else
+                model.cancelRuleUnlock(id)
+                #endif
             case "requestGroupUnlock":
                 #if os(macOS)
                 guard let policy = model.ruleEditPolicy(id) else { throw SharedInterfaceError("No saved change policy.") }
@@ -764,6 +972,90 @@ final class SharedInterfaceSession: ObservableObject {
         }
         generation += 1; challenges.removeAll()
         return ["snapshot": try snapshot()]
+    }
+    /// App-wide protection and block-screen requests. Nil when `type` is not one of them.
+    private func performProtection(_ type: String, _ c: [String: Any]) async throws -> [String: Any]? {
+        #if os(iOS)
+        switch type {
+        case "setAntiUninstall":
+            // Turning it off is refused by the model while any lock holds.
+            guard let enabled = c["enabled"] as? Bool else { throw SharedInterfaceError("Invalid setting.") }
+            model.setAntiUninstall(enabled); try ensure(model.errorMessage == nil)
+        case "saveAppLock":
+            guard let v = c["settings"] as? [String: Any], let enabled = v["enabled"] as? Bool, let delay = v["unlockDelayDays"] as? Int,
+                  let repeats = v["repeatConfirmations"] as? Bool, let words = v["passageWordCount"] as? Int,
+                  let checkpoint = v["confirmationWindowHours"] as? Int, let window = v["editWindowHours"] as? Int else {
+                throw SharedInterfaceError("Invalid change protection.")
+            }
+            var configuration = model.lockdownConfiguration
+            configuration.isEnabled = enabled; configuration.unlockDelayDays = delay
+            configuration.repeatConfirmations = repeats; configuration.passageWordCount = words
+            configuration.confirmationWindowHours = checkpoint; configuration.editWindowHours = window
+            guard LockdownConfiguration.delayRange.contains(delay), LockdownConfiguration.passageWordRange.contains(words),
+                  LockdownConfiguration.confirmationWindowRange.contains(checkpoint), LockdownConfiguration.editWindowRange.contains(window) else {
+                throw SharedInterfaceError("A value is outside the range change protection allows.")
+            }
+            // Loosening while locked is refused by the model, as natively.
+            model.updateLockdownConfiguration(configuration); try ensure(model.errorMessage == nil)
+        case "requestAppUnlock":
+            let expected = model.lockdownConfiguration
+            guard expected.isEnabled else { throw SharedInterfaceError("Change protection is off.") }
+            switch model.currentUnlockPhase() {
+            case let .waiting(unlocksAt, next):
+                throw SharedInterfaceError("The unlock is waiting. " + (next.map { "The next checkpoint is due by \(Self.readable($0)); " } ?? "")
+                    + "editing opens \(Self.readable(unlocksAt)).")
+            case .unlocked: throw SharedInterfaceError("Settings are already unlocked.")
+            case .confirmationDue:
+                return try issue(title: "Today's confirmation", passage: CommitmentPassage.generate(wordCount: expected.passageWordCount),
+                    detail: "Type the passage to keep the unlock going. Missing a checkpoint cancels it.") { [weak self] _ in
+                    guard let self else { throw SharedInterfaceError("The window was closed.") }
+                    guard model.lockdownConfiguration == expected else { throw SharedInterfaceError("Change protection changed. Request a new passage.") }
+                    model.confirmUnlock(); try ensure(model.errorMessage == nil)
+                }
+            default:
+                return try issue(title: "Unlock app-wide settings", passage: CommitmentPassage.generate(wordCount: expected.passageWordCount),
+                    detail: "Type the passage to start the unlock. Editing opens after \(expected.unlockDelayDays) day(s)\(expected.repeatConfirmations ? ", with a passage at each daily checkpoint" : "").") { [weak self] _ in
+                    guard let self else { throw SharedInterfaceError("The window was closed.") }
+                    guard model.lockdownConfiguration == expected else { throw SharedInterfaceError("Change protection changed. Request a new passage.") }
+                    model.startUnlock()
+                }
+            }
+        case "cancelAppUnlock":
+            // Only ever re-locks.
+            model.cancelUnlock()
+        case "resetScreenTime":
+            // The same recovery the native diagnostics offer behind a confirmation;
+            // iOS itself lets Screen Time access be revoked at any time.
+            let message = await model.resetAllScreenTimeRestrictions()
+            generation += 1; challenges.removeAll()
+            return ["snapshot": try snapshot(), "message": message]
+        case "answerAccessRequest":
+            guard let requestText = c["requestID"] as? String, let requestID = UUID(uuidString: requestText),
+                  let groupText = c["groupID"] as? String, let groupID = UUID(uuidString: groupText),
+                  let minutes = c["minutes"] as? Int, let duration = TemporaryAccessDuration(rawValue: minutes),
+                  let reason = c["reason"] as? String, ["conscious", "edulgence"].contains(reason),
+                  let reflection = c["reflection"] as? String, let answer = ReflectionPrompt.normalized(reflection) else {
+                throw SharedInterfaceError("Choose a duration and briefly describe what this time is for (at least four words).")
+            }
+            guard let request = pendingAccessRequest(now: Date()), request.id == requestID, request.eligibleRuleIDs.contains(groupID),
+                  request.duration == nil || request.duration == duration else {
+                throw SharedInterfaceError("This request expired or no longer matches that group.")
+            }
+            let intent: BypassEvent.Intent = reason == "conscious" ? .consciousIntervention : .eDulgance
+            let words = model.timeAllowancePassageWordCount(for: groupID)
+            return try issue(title: "Temporary access", passage: CommitmentPassage.generate(wordCount: words)) { [weak self] _ in
+                guard let self else { throw SharedInterfaceError("The window was closed.") }
+                guard model.timeAllowancePassageWordCount(for: groupID) == words else { throw SharedInterfaceError("The required passage changed. Request it again.") }
+                try ensure(model.grantPendingTemporaryAccess(requestID: requestID, for: groupID, duration: duration,
+                    verifiedWordCount: words, intent: intent, reflection: answer))
+            }
+        default: return nil
+        }
+        generation += 1; challenges.removeAll()
+        return ["snapshot": try snapshot()]
+        #else
+        return nil
+        #endif
     }
     #if os(iOS)
     func finishPicker(accept: Bool) {

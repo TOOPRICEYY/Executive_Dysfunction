@@ -4,13 +4,21 @@ import { Modal } from "./components.tsx";
 import { temporaryPassageDescription } from "./temporary-passage.ts";
 
 export function AccessDialog({
-  group,
+  group: initialGroup,
+  choices,
+  fixedMinutes,
+  intro,
   busy,
   error,
   onClose,
   onSubmit,
 }: {
   group: Group;
+  /** Groups the request may apply to (a block-screen request); the first is preselected. */
+  choices?: Group[];
+  /** The duration the block screen already chose. */
+  fixedMinutes?: number;
+  intro?: string;
   busy: boolean;
   error: string;
   onClose(): void;
@@ -18,11 +26,16 @@ export function AccessDialog({
     minutes: number,
     reason: "conscious" | "edulgence",
     reflection: string,
+    groupID: string,
   ): Promise<void>;
 }) {
-  const durations = [1, 5, 10, 30, 60].filter(
-    (v) => v <= group.temporaryPolicy.maximumMinutes,
-  );
+  const [groupID, setGroupID] = useState(initialGroup.id);
+  const group = choices?.find((g) => g.id === groupID) ?? initialGroup;
+  const durations = fixedMinutes
+    ? [fixedMinutes]
+    : [1, 5, 10, 30, 60].filter(
+        (v) => v <= group.temporaryPolicy.maximumMinutes,
+      );
   const [minutes, setMinutes] = useState(
     durations[0] ?? group.temporaryPolicy.maximumMinutes,
   );
@@ -37,7 +50,12 @@ export function AccessDialog({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          void onSubmit(minutes, reason, reflection.trim());
+          void onSubmit(
+            fixedMinutes ?? minutes,
+            reason,
+            reflection.trim(),
+            group.id,
+          );
         }}
       >
         <div className="dialog-content">
@@ -47,13 +65,29 @@ export function AccessDialog({
             </div>
           )}
           <p>
-            This requests a timed allowance. Your device will show and verify
-            the required passage before granting it.
+            {intro ??
+              "This requests a timed allowance. Your device will show and verify the required passage before granting it."}
           </p>
+          {choices && choices.length > 1 && (
+            <label>
+              Which group?
+              <select
+                value={groupID}
+                onChange={(e) => setGroupID(e.target.value)}
+              >
+                {choices.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
             For how long?
             <select
-              value={minutes}
+              disabled={!!fixedMinutes}
+              value={fixedMinutes ?? minutes}
               onChange={(e) => setMinutes(Number(e.target.value))}
             >
               {(durations.length

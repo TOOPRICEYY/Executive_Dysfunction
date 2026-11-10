@@ -267,6 +267,12 @@ final class AppModel: ObservableObject {
         return true
     }
 
+    /// The settings-lockdown phase right now, without the bookkeeping
+    /// `refreshLockdown` does, so reading it never changes anything.
+    func currentUnlockPhase(now: Date = Date()) -> UnlockPhase {
+        Lockdown.phase(of: unlockProcess, configuration: lockdownConfiguration, at: now)
+    }
+
     func refreshLockdown(now: Date = Date()) {
         let phase = Lockdown.phase(of: unlockProcess, configuration: lockdownConfiguration, at: now)
         switch phase {
@@ -1139,28 +1145,11 @@ final class AppModel: ObservableObject {
         return committed
     }
 
-    func recreateRetreat(_ source: CloudRetreat) {
-        var copy = source
-        copy.id = UUID()
-        copy.name = "\(source.name) — New"
-        copy.state = .draft
-        copy.plannedStart = Date()
-        let priorDuration = max(60, source.plannedEnd.timeIntervalSince(source.plannedStart))
-        copy.plannedEnd = copy.plannedStart.addingTimeInterval(priorDuration)
-        copy.modifiedAt = Date()
-        copy.runs = []
-        copy.versions = source.currentVersion.map { version in
-            [CloudRetreatVersion(
-                number: 1,
-                createdAt: Date(),
-                blockingGroups: version.blockingGroups,
-                modificationPolicy: version.modificationPolicy
-            )]
-        } ?? []
-        copy.currentVersionNumber = copy.versions.isEmpty ? 0 : 1
+    @discardableResult
+    func recreateRetreat(_ source: CloudRetreat) -> Bool {
         var document = cloudDocument
-        document.retreats.append(copy)
-        _ = commitArchitectureDocument(document, status: "Retreat recreated as draft")
+        document.retreats.append(source.recreatedDraft())
+        return commitArchitectureDocument(document, status: "Retreat recreated as draft")
     }
 
     private func bootstrapPortableArchitecture() {

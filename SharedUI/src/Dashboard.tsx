@@ -35,7 +35,7 @@ import {
   type UnenforcedNote,
   targetSummary,
 } from "./presentation.ts";
-import { duration } from "./view-format.ts";
+import { duration, when } from "./view-format.ts";
 
 /** Phone layout switch. Structure differs (as the native iOS and Mac apps did), not just spacing. */
 export function useCompact(query = "(max-width: 700px)"): boolean {
@@ -485,7 +485,6 @@ function StatusBanner({
   compact,
   onEnforcement,
   onAction,
-  onAdvanced,
   onDiagnostics,
   open,
   setOpen,
@@ -495,7 +494,6 @@ function StatusBanner({
   compact: boolean;
   onEnforcement?: () => void;
   onAction?: (id: string) => void;
-  onAdvanced?: () => void;
   onDiagnostics?: () => void;
   open: boolean;
   setOpen(v: boolean): void;
@@ -514,7 +512,9 @@ function StatusBanner({
   const enforcementLabel = snapshot.enforcementEnabled
     ? snapshot.platform === "macos"
       ? "Turn web filter off…"
-      : "Disable with passage…"
+      : snapshot.platform === "ios"
+        ? "Turning Screen Time off…"
+        : "Disable with passage…"
     : snapshot.platform === "macos"
       ? "Install / turn on web filter"
       : snapshot.platform === "ios"
@@ -522,6 +522,10 @@ function StatusBanner({
         : "Enable blocking";
   // The one thing that makes blocking work is never hidden behind the details toggle.
   const needsTurnOn = !!onEnforcement && !snapshot.enforcementEnabled;
+  const problemActions =
+    e.actions?.filter((a) => (a.placement ?? "problem") === "problem") ?? [];
+  const controlActions =
+    e.actions?.filter((a) => a.placement === "controls") ?? [];
   return (
     <section
       className={`status-banner tone-${e.state}${compact ? " compact" : ""}`}
@@ -530,7 +534,11 @@ function StatusBanner({
       <div className="status-main">
         <h2>{e.headline ?? e.title}</h2>
         {needsTurnOn && !e.problem && (
-          <button className="banner-cta" disabled={busy} onClick={onEnforcement}>
+          <button
+            className="banner-cta"
+            disabled={busy}
+            onClick={onEnforcement}
+          >
             {enforcementLabel}
           </button>
         )}
@@ -560,12 +568,12 @@ function StatusBanner({
           </button>
         </div>
       </div>
-      {(e.problem || !!e.actions?.length) && (
+      {(e.problem || !!problemActions.length) && (
         // Never behind the details toggle: this is why blocking will not start.
         <div className="status-controls status-problem" role="alert">
           {e.problem && <p>{e.problem}</p>}
           <div className="actions">
-            {e.actions?.map((a) => (
+            {problemActions.map((a) => (
               <button
                 key={a.id}
                 className="primary"
@@ -583,17 +591,34 @@ function StatusBanner({
         <div className="status-controls">
           <p>{e.detail}</p>
           {e.title !== (e.headline ?? e.title) && <p>{e.title}</p>}
+          {!!e.held?.length && (
+            <ul className="held-list" aria-label="Held changes">
+              {e.held.map((h) => (
+                <li key={h.name + h.appliesAt}>
+                  <strong>{h.name}</strong>: a looser version arrived without
+                  this device&apos;s unlock. The stricter one stays in force
+                  until {when(h.appliesAt)}, or until you unlock the group here.
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="actions">
             {onEnforcement && !needsTurnOn && (
               <button disabled={busy} onClick={onEnforcement}>
                 {enforcementLabel}
               </button>
             )}
-            {onAdvanced && (
-              <button disabled={busy} onClick={onAdvanced}>
-                Advanced controls
+            {controlActions.map((a) => (
+              <button
+                key={a.id}
+                className={a.danger ? "danger" : undefined}
+                title={a.detail}
+                disabled={busy || a.running || !onAction}
+                onClick={() => onAction?.(a.id)}
+              >
+                {a.label}
               </button>
-            )}
+            ))}
             {onDiagnostics && (
               <button disabled={busy} onClick={onDiagnostics}>
                 Diagnostics
@@ -703,7 +728,6 @@ export function Dashboard({
   onHistory,
   onEnforcement,
   onAction,
-  onAdvanced,
   onDiagnostics,
   controlsOpen,
   setControlsOpen,
@@ -719,7 +743,6 @@ export function Dashboard({
   onHistory(id: string): void;
   onEnforcement?: () => void;
   onAction?: (id: string) => void;
-  onAdvanced?: () => void;
   onDiagnostics?: () => void;
   controlsOpen: boolean;
   setControlsOpen(v: boolean): void;
@@ -899,7 +922,6 @@ export function Dashboard({
         compact={compact}
         onEnforcement={onEnforcement}
         onAction={onAction}
-        onAdvanced={onAdvanced}
         onDiagnostics={onDiagnostics}
         open={controlsOpen}
         setOpen={setControlsOpen}

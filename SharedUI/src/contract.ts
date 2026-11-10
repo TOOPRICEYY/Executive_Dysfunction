@@ -11,7 +11,6 @@ export type Capability =
   | "pickApplications"
   | "diagnostics"
   | "appearance"
-  | "advancedControls"
   | "enforcementControl"
   | "presets"
   /** The host starts a lockdown from `startLockdown` with groups and hours. */
@@ -19,7 +18,31 @@ export type Capability =
   /** The host answers `diagnostics` with the report instead of opening its own window. */
   | "diagnosticsReport"
   /** The host saves a whole retreat from `saveRetreat` instead of opening its own editor. */
-  | "retreatForm";
+  | "retreatForm"
+  /** Groups carry `mode`, `categories`, `budget` and the lock window hours, and `saveGroup` applies them. */
+  | "groupDetails"
+  /** The host closes an unlock in progress, or an open edit window, from `cancelGroupUnlock` / `cancelRetreatUnlock`. */
+  | "cancelUnlock"
+  /** A running retreat can be edited; weakening edits need `requestRetreatUnlock` first. */
+  | "retreatChanges"
+  /** The host copies a finished retreat into a new draft from `recreateRetreat`. */
+  | "recreateRetreat"
+  /** `startLockdown` accepts `lock` and the durations in `lockdownOptions`. */
+  | "lockdownPolicy"
+  /** The host writes the diagnostic report to files from `exportDiagnostics`, using its own save surface. */
+  | "diagnosticsExport"
+  /** A diagnostic trace that can be recorded, exported and cleared (`debugTrace`). */
+  | "debugTrace"
+  /** `protection` describes app-wide protection the host can change from its commands. */
+  | "protection"
+  /** The host pulls and pushes synced settings from `syncNow`. */
+  | "syncNow"
+  /** `accessRequest` carries a request made from a block screen; answered with `answerAccessRequest`. */
+  | "accessRequests"
+  /** The host classifies websites on the device from `classifyWebsites`. */
+  | "classifyWebsites"
+  /** Groups carry `otherTargets` (Windows paths and publisher rules) and `saveGroup` applies them. */
+  | "otherTargets";
 /** A recovery step only the host can decide to offer, e.g. clearing a safety lock. */
 export interface EnforcementAction {
   id: string;
@@ -27,6 +50,18 @@ export interface EnforcementAction {
   detail?: string;
   /** In progress on the host; shown disabled. */
   running?: boolean;
+  /**
+   * "problem" (default): shown with the problem, never hidden. "controls":
+   * an ordinary step, shown with the other device controls.
+   */
+  placement?: "problem" | "controls";
+  /** Destructive: drawn as such. The host still decides what it requires. */
+  danger?: boolean;
+}
+export interface JournalEntry {
+  at: string;
+  title: string;
+  detail: string;
 }
 export interface DiagnosticsReport {
   text: string;
@@ -35,6 +70,8 @@ export interface DiagnosticsReport {
     message: string;
     hint?: string;
   }[];
+  /** Tamper journal, newest first: clock changes, emergency disables, removals. */
+  journal?: JournalEntry[];
 }
 export interface Slot {
   id: string;
@@ -46,6 +83,10 @@ export interface ChangePolicy {
   kind: "none" | "passage" | "delay" | "checkpoints" | "inherited";
   words: number;
   delayDays: number;
+  /** With `groupDetails`: how long an unlock stays open, 1–72. */
+  editWindowHours?: number;
+  /** With `groupDetails`: how long each checkpoint may wait, 1–48. */
+  confirmationWindowHours?: number;
 }
 export interface TemporaryPolicy {
   allowed: boolean;
@@ -130,6 +171,37 @@ export interface Group {
   now?: GroupNow;
   unlock?: UnlockState;
   lockdownUntil?: string;
+  /** With `groupDetails`. "allowOnly" blocks everything except the targets. */
+  mode?: "block" | "allowOnly";
+  /** With `groupDetails`: website categories, ids from `websiteCategories`. */
+  categories?: string[];
+  /** With `groupDetails`. Absent or null member: no limit. */
+  budget?: { dailyMinutes?: number | null; weeklyMinutes?: number | null };
+  /** Sent only after classification; the host applies it to matching websites. */
+  domainCategories?: DomainCategory[];
+  /** Targets for another platform's enforcement, on hosts that edit them. */
+  otherTargets?: { windowsPaths: string[]; windowsPublishers: string[] };
+}
+export interface DomainCategory {
+  domain: string;
+  category: string;
+  source: "appleIntelligence" | "heuristic" | "user";
+}
+/** App-wide change protection (the iPhone's settings lockdown). */
+export interface AppLockSettings {
+  enabled: boolean;
+  unlockDelayDays: number;
+  repeatConfirmations: boolean;
+  passageWordCount: number;
+  confirmationWindowHours: number;
+  editWindowHours: number;
+}
+export interface Protection {
+  /** Screen Time's deny-app-removal setting. */
+  antiUninstall?: { on: boolean };
+  appLock?: AppLockSettings & { unlock: UnlockState };
+  /** Synced changes are waiting for a lock's unlock before they apply here. */
+  pendingSync?: boolean;
 }
 export interface Retreat {
   id: string;
@@ -153,6 +225,8 @@ export interface Retreat {
    * Blocking Groups it does not hold yet. A new retreat chooses from `groups`.
    */
   groupChoices?: { id: string; name: string }[];
+  /** Progress of this running retreat's change policy (with `retreatChanges`). */
+  unlock?: UnlockState;
 }
 /** A whole retreat to save. Without `id` it is new. The host re-validates all of it. */
 export interface RetreatDraft {
@@ -185,6 +259,8 @@ export interface Snapshot {
     state: "active" | "disabled" | "error" | "unknown";
     title: string;
     detail: string;
+    /** Locked groups whose looser version arrived without this device's unlock. */
+    held?: { name: string; appliesAt: string }[];
     /** Short banner word(s), e.g. "WEB FILTER ON". Falls back to title. */
     headline?: string;
     /** Why blocking cannot be turned on right now, in the host's words. */
@@ -208,10 +284,22 @@ export interface Snapshot {
     /** Each running session, so one can be ended early by its typed passage. */
     sessions?: { id: string; endsAt: string; groupNames: string[] }[];
   };
+  /** With `lockdownPolicy`: what a new lockdown may choose. The host re-validates. */
+  lockdownOptions?: { hours: number[]; locks: LockdownLock["kind"][] };
+  /** With `debugTrace`. */
+  debugTrace?: { recording: boolean };
+  /** With `protection`. */
+  protection?: Protection;
+  /** With `accessRequests`: the oldest unanswered request from a block screen. */
+  accessRequest?: { id: string; groupIDs: string[]; minutes?: number };
+}
+export interface LockdownLock {
+  kind: "passage" | "delay" | "checkpoints";
+  words: number;
+  delayDays: number;
 }
 export type Command =
   | { type: "snapshot" }
-  | { type: "openAdvancedControls" }
   | { type: "setAppearance"; key: "theme" | "accent"; value: string }
   | { type: "setEnforcement"; revision: string; enabled: boolean }
   | { type: "enforcementAction"; revision: string; id: string }
@@ -238,11 +326,38 @@ export type Command =
       revision: string;
       groupIDs?: string[];
       hours?: number;
+      /** With `lockdownPolicy`. Without it the host uses one typed passage. */
+      lock?: LockdownLock;
     }
   | { type: "endLockdown"; revision: string; sessionID: string }
   | { type: "installPreset"; revision: string; presetID: string }
   | { type: "pickApplications"; groupID: string }
-  | { type: "diagnostics"; names?: boolean; copy?: boolean };
+  | { type: "diagnostics"; names?: boolean; copy?: boolean }
+  | { type: "exportDiagnostics"; names: boolean }
+  | { type: "classifyWebsites"; domains: string[] }
+  | { type: "cancelGroupUnlock"; revision: string; groupID: string }
+  | { type: "requestRetreatUnlock"; revision: string; retreatID: string }
+  | { type: "cancelRetreatUnlock"; revision: string; retreatID: string }
+  | { type: "recreateRetreat"; revision: string; retreatID: string }
+  | { type: "setDebugTrace"; enabled: boolean }
+  | { type: "exportDebugTrace" }
+  | { type: "clearDebugTrace" }
+  | { type: "setAntiUninstall"; revision: string; enabled: boolean }
+  | { type: "saveAppLock"; revision: string; settings: AppLockSettings }
+  | { type: "requestAppUnlock"; revision: string }
+  | { type: "cancelAppUnlock"; revision: string }
+  | { type: "syncNow" }
+  | { type: "resetScreenTime"; revision: string }
+  | {
+      type: "answerAccessRequest";
+      revision: string;
+      requestID: string;
+      groupID: string;
+      minutes: number;
+      reason: Exclude<Bypass["reason"], "unspecified">;
+      reflection: string;
+    }
+  | { type: "dismissAccessRequest"; requestID: string };
 export interface Reply {
   snapshot?: Snapshot;
   applications?: string[];
@@ -251,6 +366,7 @@ export interface Reply {
   message?: string;
   challenge?: Challenge;
   diagnostics?: DiagnosticsReport;
+  classified?: DomainCategory[];
 }
 export interface Challenge {
   id: string;
@@ -273,7 +389,9 @@ export function isChallenge(value: unknown): value is Challenge {
     Number.isFinite(Date.parse(c.expiresAt))
   );
 }
-export function isDiagnosticsReport(value: unknown): value is DiagnosticsReport {
+export function isDiagnosticsReport(
+  value: unknown,
+): value is DiagnosticsReport {
   if (!value || typeof value !== "object") return false;
   const r = value as DiagnosticsReport;
   return (
@@ -285,7 +403,16 @@ export function isDiagnosticsReport(value: unknown): value is DiagnosticsReport 
         ["critical", "warning", "note"].includes(f.severity) &&
         typeof f.message === "string" &&
         (f.hint === undefined || typeof f.hint === "string"),
-    )
+    ) &&
+    (r.journal === undefined ||
+      (Array.isArray(r.journal) &&
+        r.journal.every(
+          (j) =>
+            !!j &&
+            isDate(j.at) &&
+            typeof j.title === "string" &&
+            typeof j.detail === "string",
+        )))
   );
 }
 export interface Adapter {
@@ -358,6 +485,7 @@ export function isSnapshot(value: unknown): value is Snapshot {
         (r.goal === undefined || typeof r.goal === "string") &&
         (r.changePolicy === undefined || isChangePolicy(r.changePolicy)) &&
         (r.groupIDs === undefined || strings(r.groupIDs)) &&
+        (r.unlock === undefined || isUnlock(r.unlock)) &&
         (r.groupChoices === undefined ||
           (Array.isArray(r.groupChoices) &&
             r.groupChoices.every(
@@ -389,8 +517,34 @@ export function isSnapshot(value: unknown): value is Snapshot {
             typeof a.id === "string" &&
             typeof a.label === "string" &&
             (a.detail === undefined || typeof a.detail === "string") &&
-            (a.running === undefined || typeof a.running === "boolean"),
+            (a.running === undefined || typeof a.running === "boolean") &&
+            (a.placement === undefined ||
+              ["problem", "controls"].includes(a.placement)) &&
+            (a.danger === undefined || typeof a.danger === "boolean"),
         ))) &&
+    (s.enforcement.held === undefined ||
+      (Array.isArray(s.enforcement.held) &&
+        s.enforcement.held.every(
+          (h) => !!h && typeof h.name === "string" && isDate(h.appliesAt),
+        ))) &&
+    (s.lockdownOptions === undefined ||
+      (!!s.lockdownOptions &&
+        Array.isArray(s.lockdownOptions.hours) &&
+        s.lockdownOptions.hours.length > 0 &&
+        s.lockdownOptions.hours.every((h) => integer(h, 1, 8760)) &&
+        Array.isArray(s.lockdownOptions.locks) &&
+        s.lockdownOptions.locks.every((k) =>
+          ["passage", "delay", "checkpoints"].includes(k),
+        ))) &&
+    (s.debugTrace === undefined ||
+      (!!s.debugTrace && typeof s.debugTrace.recording === "boolean")) &&
+    (s.protection === undefined || isProtection(s.protection)) &&
+    (s.accessRequest === undefined ||
+      (!!s.accessRequest &&
+        typeof s.accessRequest.id === "string" &&
+        strings(s.accessRequest.groupIDs) &&
+        (s.accessRequest.minutes === undefined ||
+          integer(s.accessRequest.minutes, 1, 1440)))) &&
     (s.summary === undefined ||
       (!!s.summary &&
         typeof s.summary.headline === "string" &&
@@ -462,13 +616,76 @@ const strings = (v: unknown): v is string[] =>
 const isDate = (v: unknown) =>
   typeof v === "string" && Number.isFinite(Date.parse(v));
 const policyKinds = ["none", "passage", "delay", "checkpoints", "inherited"];
+/** Same ids as the Apple hosts' BlockingTargetInput.categories. */
+export const websiteCategories = [
+  "social",
+  "video",
+  "news",
+  "shopping",
+  "gaming",
+  "adult",
+  "aiTools",
+  "productivity",
+  "education",
+  "finance",
+  "health",
+  "other",
+];
 function isChangePolicy(p: unknown): p is ChangePolicy {
   if (!p || typeof p !== "object") return false;
   const v = p as ChangePolicy;
   return (
     policyKinds.includes(v.kind) &&
     integer(v.words, 20, 300) &&
-    integer(v.delayDays, 0, 365)
+    integer(v.delayDays, 0, 365) &&
+    (v.editWindowHours === undefined || integer(v.editWindowHours, 1, 72)) &&
+    (v.confirmationWindowHours === undefined ||
+      integer(v.confirmationWindowHours, 1, 48))
+  );
+}
+export function isDomainCategories(v: unknown): v is DomainCategory[] {
+  return (
+    Array.isArray(v) &&
+    v.every(
+      (d) =>
+        !!d &&
+        typeof d.domain === "string" &&
+        websiteCategories.includes(d.category) &&
+        ["appleIntelligence", "heuristic", "user"].includes(d.source),
+    )
+  );
+}
+function isUnlock(u: unknown): u is UnlockState {
+  if (!u || typeof u !== "object") return false;
+  const v = u as UnlockState;
+  return (
+    ["idle", "waiting", "confirmationDue", "unlocked", "cancelled"].includes(
+      v.phase,
+    ) &&
+    (v.at === undefined || isDate(v.at))
+  );
+}
+export function isAppLockSettings(a: unknown): a is AppLockSettings {
+  if (!a || typeof a !== "object") return false;
+  const v = a as AppLockSettings;
+  return (
+    typeof v.enabled === "boolean" &&
+    integer(v.unlockDelayDays, 0, 365) &&
+    typeof v.repeatConfirmations === "boolean" &&
+    integer(v.passageWordCount, 20, 300) &&
+    integer(v.confirmationWindowHours, 1, 48) &&
+    integer(v.editWindowHours, 1, 72)
+  );
+}
+function isProtection(p: unknown): p is Protection {
+  if (!p || typeof p !== "object") return false;
+  const v = p as Protection;
+  return (
+    (v.antiUninstall === undefined ||
+      (!!v.antiUninstall && typeof v.antiUninstall.on === "boolean")) &&
+    (v.appLock === undefined ||
+      (isAppLockSettings(v.appLock) && isUnlock(v.appLock.unlock))) &&
+    (v.pendingSync === undefined || typeof v.pendingSync === "boolean")
   );
 }
 function isNow(n: unknown): n is GroupNow {
@@ -511,17 +728,24 @@ export function isGroup(g: unknown): g is Group {
     (v.suspendedUntil === undefined || isDate(v.suspendedUntil)) &&
     (v.lockdownUntil === undefined || isDate(v.lockdownUntil)) &&
     (v.now === undefined || isNow(v.now)) &&
-    (v.unlock === undefined ||
-      (!!v.unlock &&
-        typeof v.unlock === "object" &&
-        [
-          "idle",
-          "waiting",
-          "confirmationDue",
-          "unlocked",
-          "cancelled",
-        ].includes(v.unlock.phase) &&
-        (v.unlock.at === undefined || isDate(v.unlock.at)))) &&
+    (v.unlock === undefined || isUnlock(v.unlock)) &&
+    (v.mode === undefined || ["block", "allowOnly"].includes(v.mode)) &&
+    (v.categories === undefined ||
+      (strings(v.categories) &&
+        v.categories.every((c) => websiteCategories.includes(c)))) &&
+    (v.otherTargets === undefined ||
+      (!!v.otherTargets &&
+        strings(v.otherTargets.windowsPaths) &&
+        strings(v.otherTargets.windowsPublishers))) &&
+    (v.domainCategories === undefined ||
+      isDomainCategories(v.domainCategories)) &&
+    (v.budget === undefined ||
+      (!!v.budget &&
+        typeof v.budget === "object" &&
+        (v.budget.dailyMinutes == null ||
+          integer(v.budget.dailyMinutes, 1, 1440)) &&
+        (v.budget.weeklyMinutes == null ||
+          integer(v.budget.weeklyMinutes, 1, 10080)))) &&
     !!v.schedule &&
     ["block", "allow"].includes(v.schedule.mode) &&
     Array.isArray(v.schedule.slots) &&

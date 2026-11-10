@@ -10,6 +10,12 @@ import {
   policyWarning,
 } from "./presentation.ts";
 import { Modal, NumberField } from "./components.tsx";
+import {
+  categoryLabels,
+  groupDetailsProblem,
+  withGroupDetails,
+} from "./controls.ts";
+import { websiteCategories, type DomainCategory } from "./contract.ts";
 import { duration } from "./view-format.ts";
 import { temporaryPassageDescription } from "./temporary-passage.ts";
 
@@ -253,11 +259,14 @@ function LockCard({
   busy,
   canSave,
   onUnlock,
+  onCancelUnlock,
 }: {
   group: Group;
   busy: boolean;
   canSave: boolean;
   onUnlock(): void;
+  /** Re-locks: abandons an unlock in progress or closes the edit window. */
+  onCancelUnlock?: () => void;
 }) {
   const kind = group.changePolicy.kind;
   const phase = group.unlock?.phase ?? (group.canEdit ? "unlocked" : "idle");
@@ -298,6 +307,17 @@ function LockCard({
             : "Continue unlock…"}
         </button>
       )}
+      {onCancelUnlock &&
+        kind !== "none" &&
+        ["waiting", "confirmationDue", "unlocked"].includes(
+          group.unlock?.phase ?? "",
+        ) && (
+          <button type="button" disabled={busy} onClick={onCancelUnlock}>
+            {group.unlock?.phase === "unlocked"
+              ? "Re-lock now"
+              : "Abandon unlock"}
+          </button>
+        )}
     </div>
   );
 }
@@ -337,6 +357,10 @@ export function GroupEditor({
   onDelete,
   onAccess,
   onResume,
+  onCancelUnlock,
+  onClassify,
+  details = false,
+  otherTargets = false,
   websiteSupport,
 }: {
   group: Group;
@@ -354,9 +378,36 @@ export function GroupEditor({
   onDelete?: () => Promise<void>;
   onAccess?: () => void;
   onResume?: () => void;
+  onCancelUnlock?: () => void;
+  /** Classifies websites on the device; nothing is saved until the group is. */
+  onClassify?: (domains: string[]) => Promise<DomainCategory[] | null>;
+  /** The host takes mode, categories, budgets and lock windows (`groupDetails`). */
+  details?: boolean;
+  /** The host takes Windows targets too (`otherTargets`). */
+  otherTargets?: boolean;
   websiteSupport: boolean;
 }) {
-  const [draft, setDraft] = useState(group);
+  const [draft, setDraft] = useState(() =>
+    details ? withGroupDetails(group, otherTargets) : group,
+  );
+  const detailsProblem = details ? groupDetailsProblem(draft) : "";
+  const domainList = () => [
+    ...new Set(domains.split(/[\s,]+/).filter(Boolean)),
+  ];
+  const lines = (text: string) => [
+    ...new Set(
+      text
+        .split("\n")
+        .map((v) => v.trim())
+        .filter(Boolean),
+    ),
+  ];
+  // Raw text while typing; turned into lists only when saved.
+  const [identifiers, setIdentifiers] = useState(() => ({
+    apps: "",
+    paths: group.otherTargets?.windowsPaths.join("\n") ?? "",
+    publishers: group.otherTargets?.windowsPublishers.join("\n") ?? "",
+  }));
   const current = live ?? group;
   const [domains, setDomains] = useState(group.domains.join("\n"));
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -382,10 +433,25 @@ export function GroupEditor({
         className="editor"
         onSubmit={(e) => {
           e.preventDefault();
+          if (detailsProblem) return;
           void onSave({
             ...draft,
             name: draft.name.trim(),
-            domains: [...new Set(domains.split(/[\s,]+/).filter(Boolean))],
+            domains: domainList(),
+            ...(details && draft.otherTargets
+              ? {
+                  applications: [
+                    ...new Set([
+                      ...draft.applications,
+                      ...lines(identifiers.apps),
+                    ]),
+                  ],
+                  otherTargets: {
+                    windowsPaths: lines(identifiers.paths),
+                    windowsPublishers: lines(identifiers.publishers),
+                  },
+                }
+              : {}),
           });
         }}
       >
@@ -410,6 +476,7 @@ export function GroupEditor({
               busy={busy}
               canSave={canSave}
               onUnlock={onUnlock}
+              onCancelUnlock={onCancelUnlock}
             />
           )}
 
@@ -436,6 +503,28 @@ export function GroupEditor({
                 />
                 Enabled
               </label>
+              {details && (
+                <label>
+                  Enforcement
+                  <select
+                    value={draft.mode}
+                    onChange={(e) =>
+                      patch({ mode: e.target.value as Group["mode"] })
+                    }
+                  >
+                    <option value="block">Block selected apps & sites</option>
+                    <option value="allowOnly">
+                      Allow only selected apps & sites
+                    </option>
+                  </select>
+                  {draft.mode === "allowOnly" && (
+                    <small>
+                      While this group blocks, everything except its targets is
+                      blocked.
+                    </small>
+                  )}
+                </label>
+              )}
             </Section>
           </fieldset>
 
@@ -461,6 +550,83 @@ export function GroupEditor({
                     : "Website filtering is not available in this backend yet. Application blocking is available below."}
                 </small>
               </label>
+              {details && websiteSupport && (
+                <fieldset className="category-grid">
+                  <legend>Website categories</legend>
+                  <small>
+                    A website is blocked only while its category is on. Sites
+                    you add are filed under Other until classified.
+                  </small>
+                  {websiteCategories.map((c) => (
+                    <label className="check" key={c}>
+                      <input
+                        type="checkbox"
+                        checked={draft.categories?.includes(c) ?? false}
+                        onChange={(e) =>
+                          patch({
+                            categories: e.target.checked
+                              ? [...(draft.categories ?? []), c]
+                              : (draft.categories ?? []).filter((v) => v !== c),
+                          })
+                        }
+                      />
+                      {categoryLabels[c]}
+                    </label>
+                  ))}
+                  {onClassify && (
+                    <button
+                      type="button"
+                      disabled={busy || !domainList().length}
+                      onClick={async () => {
+                        const found = await onClassify(domainList());
+                        if (found)
+                          patch({
+                            domainCategories: found,
+                            categories: [
+                              ...new Set([
+                                ...(draft.categories ?? []),
+                                ...found.map((f) => f.category),
+                              ]),
+                            ],
+                          });
+                      }}
+                    >
+                      Classify websites automatically
+                    </button>
+                  )}
+                </fieldset>
+              )}
+              {details && draft.otherTargets && (
+                <details className="exact-times">
+                  <summary>Identifiers & other platforms</summary>
+                  {(
+                    [
+                      ["apps", "Add Mac bundle identifiers"],
+                      ["paths", "Windows executable paths"],
+                      ["publishers", "Windows publisher rules"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label key={key}>
+                      {label}
+                      <textarea
+                        rows={3}
+                        spellCheck={false}
+                        autoCapitalize="none"
+                        value={identifiers[key]}
+                        onChange={(e) =>
+                          setIdentifiers((v) => ({
+                            ...v,
+                            [key]: e.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  ))}
+                  <small>
+                    One per line. Each device enforces only its own kind.
+                  </small>
+                </details>
+              )}
               <div className="list-row">
                 <span>
                   {draft.applicationSummary ??
@@ -668,6 +834,56 @@ export function GroupEditor({
             </Section>
           )}
 
+          {details && (
+            <fieldset disabled={!canSave || busy}>
+              <Section
+                title="Usage limits"
+                subtitle="Outside its blocking windows, this group can also stop once a daily or weekly amount of use is spent."
+              >
+                {(
+                  [
+                    ["dailyMinutes", "Daily limit (minutes)", 1440, 30],
+                    ["weeklyMinutes", "Weekly limit (minutes)", 10080, 300],
+                  ] as const
+                ).map(([key, label, max, initial]) => {
+                  const value = draft.budget?.[key] ?? null;
+                  return (
+                    <div key={key}>
+                      <label className="check">
+                        <input
+                          type="checkbox"
+                          checked={value !== null}
+                          onChange={(e) =>
+                            patch({
+                              budget: {
+                                ...draft.budget,
+                                [key]: e.target.checked ? initial : null,
+                              },
+                            })
+                          }
+                        />
+                        {key === "dailyMinutes"
+                          ? "Daily limit"
+                          : "Weekly limit"}
+                      </label>
+                      {value !== null && (
+                        <NumberField
+                          label={label}
+                          value={value}
+                          min={1}
+                          max={max}
+                          onChange={(n) =>
+                            patch({ budget: { ...draft.budget, [key]: n } })
+                          }
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </Section>
+            </fieldset>
+          )}
+
           <fieldset disabled={!canSave || busy}>
             <Section
               title="Change protection"
@@ -718,6 +934,39 @@ export function GroupEditor({
                   max={300}
                   onChange={(words) =>
                     patch({ changePolicy: { ...draft.changePolicy, words } })
+                  }
+                />
+              )}
+              {details &&
+                !["none", "inherited"].includes(draft.changePolicy.kind) && (
+                  <NumberField
+                    label="Edit window after unlocking (hours)"
+                    value={draft.changePolicy.editWindowHours ?? 24}
+                    min={1}
+                    max={72}
+                    onChange={(editWindowHours) =>
+                      patch({
+                        changePolicy: {
+                          ...draft.changePolicy,
+                          editWindowHours,
+                        },
+                      })
+                    }
+                  />
+                )}
+              {details && draft.changePolicy.kind === "checkpoints" && (
+                <NumberField
+                  label="Checkpoint window (hours)"
+                  value={draft.changePolicy.confirmationWindowHours ?? 24}
+                  min={1}
+                  max={48}
+                  onChange={(confirmationWindowHours) =>
+                    patch({
+                      changePolicy: {
+                        ...draft.changePolicy,
+                        confirmationWindowHours,
+                      },
+                    })
                   }
                 />
               )}
@@ -813,6 +1062,7 @@ export function GroupEditor({
               {warning && <div className="banner warning">{warning}</div>}
             </Section>
           </fieldset>
+          {detailsProblem && <small role="status">{detailsProblem}</small>}
         </div>
         <div className="dialog-actions">
           <span className="action-note">
@@ -846,6 +1096,7 @@ export function GroupEditor({
               !canSave ||
               busy ||
               !draft.name.trim() ||
+              !!detailsProblem ||
               draft.schedule.slots.some((s) => s.weekdays.length === 0)
             }
             type="submit"
