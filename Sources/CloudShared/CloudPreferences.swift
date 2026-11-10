@@ -935,6 +935,89 @@ enum CloudRetreatEarlyEndGate {
         let changePolicy = policy(for: retreat, appDefault: appDefault)
         return !changePolicy.requiresAuthorization || authorizationIsUnlocked
     }
+
+    /// Whether saving `proposed` over the running `existing` Retreat would
+    /// release anything it enforces now.
+    ///
+    /// Shortening is only one way to weaken a running Retreat. Dropping or
+    /// swapping one of its groups, loosening a group copy, or lowering the
+    /// Retreat's own change policy releases enforcement just as surely, so all
+    /// of them pass through the same change policy as ending early. Anything
+    /// this cannot prove is same-or-stricter counts as weakening: a false
+    /// positive only asks for the passage the Retreat already promised.
+    static func weakensActiveRetreat(
+        _ existing: CloudRetreat,
+        proposed: CloudRetreat,
+        activityGroups: [CloudActivityGroup],
+        appDefault: CloudRuleLockdownPreference
+    ) -> Bool {
+        guard existing.state == .active else { return false }
+        if weakensPlannedInterval(existing, plannedStart: proposed.plannedStart, plannedEnd: proposed.plannedEnd) {
+            return true
+        }
+        guard proposed.state == .active else { return true }
+        let before = [existing.modificationPolicy, existing.currentVersion?.modificationPolicy].compactMap { $0 }
+        let after = [proposed.modificationPolicy, proposed.currentVersion?.modificationPolicy].compactMap { $0 }
+        if !lockIsSameOrStricter(old: before, new: after, appDefault: appDefault) { return true }
+        // The interval did not shrink, so the old start lies inside both runs.
+        let date = existing.plannedStart
+        let old = CloudPreferencesDocument(activityGroups: activityGroups, retreats: [existing]).compiledRules(at: date)
+        let new = CloudPreferencesDocument(activityGroups: activityGroups, retreats: [proposed]).compiledRules(at: date)
+        let newByID = Dictionary(new.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for rule in old {
+            guard let replacement = newByID[rule.id],
+                  ruleIsSameOrStricter(old: rule, new: replacement, appDefault: appDefault)
+            else { return true }
+        }
+        return false
+    }
+
+    private static func lockIsSameOrStricter(
+        old: [CloudRuleLockdownPreference],
+        new: [CloudRuleLockdownPreference],
+        appDefault: CloudRuleLockdownPreference
+    ) -> Bool {
+        // The fieldwise maximum adds nothing to `new` only when `new` already
+        // meets or exceeds `old` in every dimension.
+        CloudRuleLockdownPreference.restrictiveMaximum(old + new, appDefault: appDefault)
+            == CloudRuleLockdownPreference.restrictiveMaximum(new, appDefault: appDefault)
+    }
+
+    private static func ruleIsSameOrStricter(
+        old: CloudRulePreference,
+        new: CloudRulePreference,
+        appDefault: CloudRuleLockdownPreference
+    ) -> Bool {
+        guard old.enforcementMode == new.enforcementMode,
+              !old.isEnabled || new.isEnabled,
+              old.usageLimitEnabled == new.usageLimitEnabled,
+              !old.usageLimitEnabled || new.dailyUsageLimitMinutes <= old.dailyUsageLimitMinutes,
+              blockedMinutes(new.windows).isSuperset(of: blockedMinutes(old.windows)),
+              new.deviceLocalSelectionCount >= old.deviceLocalSelectionCount,
+              CloudPortableTargetRestriction.canReplace(old, with: new),
+              lockIsSameOrStricter(old: [old.lockdown], new: [new.lockdown], appDefault: appDefault)
+        else { return false }
+        let oldDomains = Set(old.domains.map { $0.domain.lowercased() })
+        let newDomains = Set(new.domains.map { $0.domain.lowercased() })
+        if old.enforcementMode == "fortressAllowList" {
+            return newDomains.isSubset(of: oldDomains) && new.websiteCategories.isSubset(of: old.websiteCategories)
+        }
+        return newDomains.isSuperset(of: oldDomains) && new.websiteCategories.isSuperset(of: old.websiteCategories)
+    }
+
+    private static func blockedMinutes(_ windows: [CloudTimeWindow]) -> Set<Int> {
+        var minutes: Set<Int> = []
+        for slot in windows {
+            let duration = slot.startMinutes < slot.endMinutes
+                ? slot.endMinutes - slot.startMinutes
+                : 1_440 - slot.startMinutes + slot.endMinutes
+            for weekday in slot.weekdays {
+                let start = (weekday - 1) * 1_440 + slot.startMinutes
+                for offset in 0..<duration { minutes.insert((start + offset) % (7 * 1_440)) }
+            }
+        }
+        return minutes
+    }
 }
 
 struct CloudTimeWindowTemplate: Codable, Equatable, Identifiable {

@@ -509,35 +509,23 @@ final class MacAppModel: ObservableObject {
         startImmediately: Bool
     ) {
         guard !uiPreviewMode else { return }
+        // The same rule as iPhone: a Retreat with nothing in it enforces nothing.
+        guard !sourceBlockingGroups.isEmpty else {
+            errorMessage = "A Retreat must contain at least one Blocking Group."
+            return
+        }
         do {
-            var document = try store.load()
+            let previous = try store.load()
+            var document = previous
             let copyDate = Date()
+            var authorizedRuleIDs: Set<UUID> = []
+            var authorizationExpiresAt: Date?
 
             var retreat: CloudRetreat
             if let id, let index = document.retreats.firstIndex(where: { $0.id == id }) {
                 retreat = document.retreats[index]
-                // Shortening a running Retreat releases enforcement exactly as
-                // ending it early does, so it passes through the same gate
-                // rather than slipping past it as an ordinary edit.
+                let original = retreat
                 let clampedEnd = max(plannedStart.addingTimeInterval(60), plannedEnd)
-                if CloudRetreatEarlyEndGate.weakensPlannedInterval(
-                    retreat, plannedStart: plannedStart, plannedEnd: clampedEnd
-                ) {
-                    let authorized: Bool
-                    if case .unlocked = retreatUnlockPhase(for: retreat.id, now: copyDate) {
-                        authorized = true
-                    } else {
-                        authorized = false
-                    }
-                    if !CloudRetreatEarlyEndGate.canEndEarly(
-                        retreat,
-                        authorizationIsUnlocked: authorized,
-                        appDefault: retreatAppDefaultPolicy
-                    ) {
-                        errorMessage = "Complete this Retreat\u{2019}s change policy before shortening it."
-                        return
-                    }
-                }
                 let retreatGroups = CloudRetreatGroupVersioning.versionedGroups(
                     from: sourceBlockingGroups,
                     replacing: retreat.currentVersion?.blockingGroups ?? [],
@@ -552,6 +540,37 @@ final class MacAppModel: ObservableObject {
                     modificationPolicy: modificationPolicy
                 )
                 if startImmediately { retreat.start() }
+                // Shortening a running Retreat, dropping or loosening one of
+                // its groups, or lowering its change policy all release
+                // enforcement exactly as ending it early does, so they pass the
+                // same gate rather than slipping past it as an ordinary edit.
+                // Without this the edit was written to iCloud at once and only
+                // the filter's own refusal stood between it and enforcement.
+                if CloudRetreatEarlyEndGate.weakensActiveRetreat(
+                    original, proposed: retreat,
+                    activityGroups: document.activityGroups,
+                    appDefault: retreatAppDefaultPolicy
+                ) {
+                    let authorized: Bool
+                    if case .unlocked = retreatUnlockPhase(for: original.id, now: copyDate) {
+                        authorized = true
+                    } else {
+                        authorized = false
+                    }
+                    guard CloudRetreatEarlyEndGate.canEndEarly(
+                        original,
+                        authorizationIsUnlocked: authorized,
+                        appDefault: retreatAppDefaultPolicy
+                    ) else {
+                        errorMessage = "Complete this Retreat\u{2019}s change policy before removing its groups, loosening its protection or shortening it."
+                        return
+                    }
+                    // Only this Retreat's own copies may loosen.
+                    authorizedRuleIDs = Set(original.versions.flatMap { $0.blockingGroups.map(\.id) })
+                    if CloudRetreatEarlyEndGate.policy(for: original, appDefault: retreatAppDefaultPolicy).requiresAuthorization {
+                        authorizationExpiresAt = copyDate.addingTimeInterval(120)
+                    }
+                }
                 document.retreats[index] = retreat
             } else {
                 let retreatGroups = CloudRetreatGroupVersioning.versionedGroups(
@@ -579,10 +598,19 @@ final class MacAppModel: ObservableObject {
             document.rebuildLegacyRuleProjection()
             try store.save(document)
             apply(document)
+            guard publishDesktopPolicy(
+                weakeningAuthorizationExpiresAt: authorizationExpiresAt,
+                authorizedRuleIDs: authorizedRuleIDs
+            ) else {
+                // Never leave a saved document the filter did not take.
+                try? store.save(previous)
+                apply(previous)
+                syncStatus = "Retreat change rejected"
+                return
+            }
             syncStatus = startImmediately
                 ? (retreat.state == .scheduled ? "Retreat scheduled" : "Retreat active")
-                : "Retreat draft saved"
-            publishDesktopPolicy()
+                : (retreat.state == .draft ? "Retreat draft saved" : "Retreat changes saved")
         } catch {
             syncStatus = "Sync failed"
             errorMessage = error.localizedDescription

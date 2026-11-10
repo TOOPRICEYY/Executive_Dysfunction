@@ -677,6 +677,104 @@ extension CloudPreferencesTests {
         ))
     }
 
+    private func blockingGroup(_ name: String, domains: [String]) -> CloudBlockingGroup {
+        var group = CloudBlockingGroup()
+        group.name = name
+        group.isEnabled = true
+        group.targets = CloudBlockingTargets(domains: domains.map {
+            CloudDomainPreference(domain: $0, category: "other", source: "manual")
+        })
+        return group
+    }
+
+    /// A running Retreat holding `groups` under a passage-only change policy,
+    /// and an edit of it built the way both models build one.
+    private func retreatEdit(
+        holding groups: [CloudBlockingGroup],
+        to selected: [CloudBlockingGroup],
+        policy: CloudRuleLockdownPreference? = nil,
+        name: String? = nil
+    ) -> (CloudRetreat, CloudRetreat) {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        var lock = CloudRuleLockdownPreference(severity: "passageOnly", unlockDelayDays: 0)
+        lock.passageWordCount = 40
+        var retreat = CloudRetreat(name: "Hold", plannedStart: start, plannedEnd: start.addingTimeInterval(86_400),
+                                   state: .active, modificationPolicy: lock)
+        retreat.appendVersion(blockingGroups: CloudRetreatGroupVersioning.versionedGroups(from: groups, replacing: [], at: start),
+                              modificationPolicy: lock, at: start)
+        var edited = retreat
+        if let name { edited.name = name }
+        edited.appendVersion(
+            blockingGroups: CloudRetreatGroupVersioning.versionedGroups(
+                from: selected, replacing: retreat.currentVersion?.blockingGroups ?? [], at: start.addingTimeInterval(60)),
+            modificationPolicy: policy ?? lock, at: start.addingTimeInterval(60))
+        return (retreat, edited)
+    }
+
+    private func weakens(_ edit: (CloudRetreat, CloudRetreat)) -> Bool {
+        CloudRetreatEarlyEndGate.weakensActiveRetreat(edit.0, proposed: edit.1, activityGroups: [], appDefault: .init(severity: "none"))
+    }
+
+    /// Swapping a running Retreat's group out releases those sites exactly as
+    /// ending it early would, so it must pass the same change policy.
+    func testSwappingARunningRetreatsGroupCountsAsWeakeningIt() {
+        let social = blockingGroup("Social", domains: ["social.example"])
+        let news = blockingGroup("News", domains: ["news.example"])
+        XCTAssertTrue(weakens(retreatEdit(holding: [social], to: [news])))
+    }
+
+    func testDroppingOneOfARunningRetreatsGroupsCountsAsWeakeningIt() {
+        let social = blockingGroup("Social", domains: ["social.example"])
+        let news = blockingGroup("News", domains: ["news.example"])
+        XCTAssertTrue(weakens(retreatEdit(holding: [social, news], to: [social])))
+    }
+
+    /// Setting the change policy to "none" would let the next save, or an
+    /// early end, through without any passage.
+    func testLoweringARunningRetreatsChangePolicyCountsAsWeakeningIt() {
+        let social = blockingGroup("Social", domains: ["social.example"])
+        XCTAssertTrue(weakens(retreatEdit(holding: [social], to: [social], policy: .init(severity: "none"))))
+        var shorter = CloudRuleLockdownPreference(severity: "passageOnly", unlockDelayDays: 0)
+        shorter.passageWordCount = 20
+        XCTAssertTrue(weakens(retreatEdit(holding: [social], to: [social], policy: shorter)))
+    }
+
+    /// A Baseline group edited after the Retreat started reaches the Retreat
+    /// only through a save; a looser copy is a weakening even with the same id.
+    func testLooseningARunningRetreatsGroupCopyCountsAsWeakeningIt() {
+        let social = blockingGroup("Social", domains: ["social.example", "video.example"])
+        var trimmed = social
+        trimmed.targets?.domains.removeAll { $0.domain == "video.example" }
+        XCTAssertTrue(weakens(retreatEdit(holding: [social], to: [trimmed])))
+        var unscheduled = social
+        unscheduled.timeWindow.slots = []
+        XCTAssertTrue(weakens(retreatEdit(holding: [social], to: [unscheduled])))
+    }
+
+    /// Strengthening and cosmetic edits stay ordinary edits.
+    func testAddingToARunningRetreatOrRenamingItIsNotWeakening() {
+        let social = blockingGroup("Social", domains: ["social.example"])
+        let news = blockingGroup("News", domains: ["news.example"])
+        XCTAssertFalse(weakens(retreatEdit(holding: [social], to: [social])))
+        XCTAssertFalse(weakens(retreatEdit(holding: [social], to: [social, news], name: "Hold harder")))
+        var wider = social
+        wider.targets?.domains.append(CloudDomainPreference(domain: "more.example", category: "other", source: "manual"))
+        XCTAssertFalse(weakens(retreatEdit(holding: [social], to: [wider])))
+        var stricter = CloudRuleLockdownPreference(severity: "delayed", unlockDelayDays: 2)
+        stricter.passageWordCount = 60
+        XCTAssertFalse(weakens(retreatEdit(holding: [social], to: [social], policy: stricter)))
+    }
+
+    /// Before a Retreat starts it holds nothing; its own editors govern it.
+    func testEditingARetreatThatHasNotStartedIsNeverWeakening() {
+        let social = blockingGroup("Social", domains: ["social.example"])
+        let news = blockingGroup("News", domains: ["news.example"])
+        var edit = retreatEdit(holding: [social], to: [news], policy: .init(severity: "none"))
+        edit.0.state = .scheduled
+        edit.1.state = .scheduled
+        XCTAssertFalse(weakens(edit))
+    }
+
     func testLengtheningARunningRetreatNeedsNoAuthorization() {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let retreat = runningRetreat(start: start, end: start.addingTimeInterval(39 * 3_600), severity: "delayed")
