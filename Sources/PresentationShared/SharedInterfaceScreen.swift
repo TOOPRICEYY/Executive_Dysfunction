@@ -36,6 +36,13 @@ struct SharedInterfaceScreen: View {
         .background(canvas.ignoresSafeArea())
         .preferredColorScheme(appearanceTheme == "dark" ? .dark : .light)
         .sheet(isPresented: $session.showAdvancedControls) {
+            #if os(macOS)
+            // The Mac view brings its own header with Close and the actions a
+            // window toolbar would hold. It may be narrower than the main window.
+            MacContentView(embedded: true, onClose: { session.showAdvancedControls = false })
+                .environmentObject(session.model)
+                .frame(minWidth: 1040, idealWidth: 1240, minHeight: 620, idealHeight: 760)
+            #else
             VStack(spacing: 0) {
                 HStack {
                     Text("Advanced native controls").font(.headline)
@@ -43,12 +50,9 @@ struct SharedInterfaceScreen: View {
                     Button("Close") { session.showAdvancedControls = false }
                 }
                 .padding()
-                #if os(macOS)
-                MacContentView().environmentObject(session.model).frame(minWidth: 1240, minHeight: 700)
-                #else
                 ContentView().environmentObject(session.model)
-                #endif
             }
+            #endif
         }
         .sheet(isPresented: Binding(get: { session.nativePanel != nil }, set: { if !$0 { session.nativePanel = nil } })) {
             #if os(macOS)

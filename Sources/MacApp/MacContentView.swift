@@ -11,9 +11,16 @@ struct MacContentView: View {
     @State private var isShowingLockdown = false
     @State private var isShowingDiagnostics = false
     @State private var selectedSection: MacWorkspaceSection = .dashboard
+    /// True when shown in a sheet over the shared interface. A sheet has no
+    /// window toolbar, so the toolbar actions and a Close button move into a
+    /// header row, and a safety lock is shown in the open instead of behind
+    /// the sidebar popover.
+    var embedded = false
+    var onClose: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
+            if embedded { embeddedHeader }
             if model.isUIPreviewMode {
                 HStack {
                     Text("UI PREVIEW")
@@ -47,9 +54,11 @@ struct MacContentView: View {
         .tint(MacBrutalPalette.controlAccent)
         .preferredColorScheme(currentTheme.colorScheme)
         .toolbar {
-            Button("LOCKDOWN") { isShowingLockdown = true }
-            Button("DIAGNOSTICS") { isShowingDiagnostics = true }
-            Button("REFRESH") { model.refresh() }
+            if !embedded {
+                Button("LOCKDOWN") { isShowingLockdown = true }
+                Button("DIAGNOSTICS") { isShowingDiagnostics = true }
+                Button("REFRESH") { model.refresh() }
+            }
         }
         .sheet(item: $editingBlockingGroup) { group in
             MacBlockingGroupEditor(
@@ -88,6 +97,39 @@ struct MacContentView: View {
             Button("OK", role: .cancel) { model.errorMessage = nil }
         } message: {
             Text(model.errorMessage ?? "Unknown error")
+        }
+    }
+
+    @ViewBuilder
+    private var embeddedHeader: some View {
+        HStack(spacing: 10) {
+            Text("Advanced controls").font(.headline)
+            Spacer()
+            Button("Lockdown") { isShowingLockdown = true }
+            Button("Diagnostics") { isShowingDiagnostics = true }
+            Button("Refresh") { model.refresh() }
+            if let onClose {
+                Button("Close", action: onClose).keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(MacBrutalPalette.surface)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(MacBrutalPalette.rule).frame(height: 1)
+        }
+        if model.enforcement.activationSafetyRequiresRestart, !model.isUIPreviewMode {
+            // The reset that clears a safety lock must not be hidden in a popover.
+            MacEnforcementBanner(
+                controller: model.enforcement,
+                syncStatus: model.syncStatus,
+                enforcementHealth: model.enforcementHealth,
+                install: model.installDesktopEnforcement,
+                model: model
+            )
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(MacBrutalPalette.rule).frame(height: 1)
+            }
         }
     }
 

@@ -2,6 +2,8 @@ import { SectionHeading } from "./components.tsx";
 import { GroupEditor, newGroup } from "./GroupEditor.tsx";
 import { AccessDialog } from "./AccessDialog.tsx";
 import { ChallengeDialog } from "./ChallengeDialog.tsx";
+import { LockdownDialog } from "./LockdownDialog.tsx";
+import { DiagnosticsDialog } from "./DiagnosticsDialog.tsx";
 import { History } from "./History.tsx";
 import { Settings, readPreference, ThemeSwitch } from "./Settings.tsx";
 import { Dashboard, useCompact } from "./Dashboard.tsx";
@@ -28,6 +30,7 @@ import type {
   Challenge,
   Preset,
 } from "./contract.ts";
+import { isDiagnosticsReport } from "./contract.ts";
 import { nativeAdapter } from "./bridge.ts";
 import { createPreviewAdapter } from "./preview.ts";
 import "./style.css";
@@ -69,6 +72,8 @@ function App({ connection }: { connection: Adapter | null }) {
   const editorRevision = useRef("");
   const [access, setAccess] = useState<Group | null>(null);
   const [history, setHistory] = useState<string | null>(null);
+  const [lockdownOpen, setLockdownOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const challengeAction = useRef<Command | null>(null);
   const requestSequence = useRef(0);
@@ -190,10 +195,20 @@ function App({ connection }: { connection: Adapter | null }) {
   const newBlockingGroup = supports("editGroups")
     ? () => edit(newGroup())
     : undefined;
+  // Hosts that have not moved their lockdown or diagnostics screen yet still
+  // open their own window from the bare command.
   const lockdown =
     supports("lockdown") && snapshot
-      ? () =>
-          void request({ type: "startLockdown", revision: snapshot.revision })
+      ? supports("lockdownForm")
+        ? () => {
+            setError("");
+            setLockdownOpen(true);
+          }
+        : () =>
+            void request({
+              type: "startLockdown",
+              revision: snapshot.revision,
+            })
       : undefined;
   const newRetreat =
     supports("retreats") && snapshot
@@ -210,7 +225,9 @@ function App({ connection }: { connection: Adapter | null }) {
           })
       : undefined;
   const diagnostics = supports("diagnostics")
-    ? () => void request({ type: "diagnostics" })
+    ? supports("diagnosticsReport")
+      ? () => setDiagnosticsOpen(true)
+      : () => void request({ type: "diagnostics" })
     : undefined;
   const advanced = supports("advancedControls")
     ? () => void request({ type: "openAdvancedControls" })
@@ -408,6 +425,13 @@ function App({ connection }: { connection: Adapter | null }) {
                 onDiagnostics={diagnostics}
                 controlsOpen={controlsOpen}
                 setControlsOpen={setControlsOpen}
+                onAction={(id) =>
+                  void request({
+                    type: "enforcementAction",
+                    revision: snapshot.revision,
+                    id,
+                  })
+                }
                 onEnforcement={
                   supports("enforcementControl")
                     ? () =>
@@ -594,6 +618,65 @@ function App({ connection }: { connection: Adapter | null }) {
               })
             )
               setAccess(null);
+          }}
+        />
+      )}
+      {lockdownOpen && snapshot && (
+        <LockdownDialog
+          snapshot={snapshot}
+          busy={busy}
+          error={error}
+          onClose={() => setLockdownOpen(false)}
+          onEnd={async (sessionID) => {
+            // The passage dialog takes over; one modal at a time.
+            if (
+              await request({
+                type: "endLockdown",
+                revision: snapshot.revision,
+                sessionID,
+              })
+            )
+              setLockdownOpen(false);
+          }}
+          onSubmit={async (groupIDs, hours) => {
+            if (
+              await request({
+                type: "startLockdown",
+                revision: snapshot.revision,
+                groupIDs,
+                hours,
+              })
+            )
+              setLockdownOpen(false);
+          }}
+        />
+      )}
+      {diagnosticsOpen && connection && (
+        <DiagnosticsDialog
+          onClose={() => setDiagnosticsOpen(false)}
+          // Read-only and outside `request`: a report must not disable the
+          // dashboard or replace a message someone is reading.
+          load={async (names) => {
+            try {
+              const reply = await connection.send({ type: "diagnostics", names });
+              return isDiagnosticsReport(reply.diagnostics)
+                ? reply.diagnostics
+                : null;
+            } catch {
+              return null;
+            }
+          }}
+          copy={async (names) => {
+            try {
+              const reply = await connection.send({
+                type: "diagnostics",
+                names,
+                copy: true,
+              });
+              return reply.message ?? "Copied the report.";
+            } catch {
+              return null;
+            }
           }}
         />
       )}

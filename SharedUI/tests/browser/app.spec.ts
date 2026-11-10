@@ -364,3 +364,138 @@ for (const platform of ["macos", "windows"] as const) {
     ).toBeLessThanOrEqual(page.viewportSize()!.width);
   });
 }
+
+// Screens that used to open a native window: the safety reset, the diagnostic
+// report and starting a lockdown now live in this bundle and reach the host
+// only through commands.
+test("mac host: safety reset, diagnostics and lockdown stay in the shared screens", async ({
+  page,
+}) => {
+  await page.addInitScript(
+    ({ state }) => {
+      state.platform = "macos";
+      delete state.summary;
+      state.capabilities = [
+        ...state.capabilities,
+        "enforcementControl",
+        "lockdown",
+        "lockdownForm",
+        "diagnostics",
+        "diagnosticsReport",
+      ];
+      state.enforcementEnabled = false;
+      state.enforcement = {
+        state: "error",
+        title: "Safety locked",
+        headline: "Web filter is safety locked",
+        detail: "A previous start failed.",
+        problem:
+          "The web filter is safety locked after a failed start. Reset it before turning it on.",
+        actions: [
+          { id: "resetEnforcement", label: "Reset enforcement without restart" },
+        ],
+      };
+      const sent: any[] = [];
+      const listeners = new Set<(event: { data: unknown }) => void>();
+      const host = window as any;
+      host.__sent = sent;
+      host.chrome ??= {};
+      host.chrome.webview = {
+        addEventListener(_: string, fn: (event: { data: unknown }) => void) {
+          listeners.add(fn);
+        },
+        removeEventListener(_: string, fn: (event: { data: unknown }) => void) {
+          listeners.delete(fn);
+        },
+        postMessage(request: any) {
+          const command = request.command;
+          if (command.type !== "snapshot") sent.push(command);
+          let result: any = { snapshot: structuredClone(state) };
+          if (command.type === "enforcementAction") {
+            delete state.enforcement.problem;
+            delete state.enforcement.actions;
+            state.enforcement.headline = "Web filter is off";
+            state.enforcement.state = "disabled";
+            result = { snapshot: structuredClone(state) };
+          } else if (command.type === "diagnostics") {
+            result = command.copy
+              ? { message: "Copied the readable report." }
+              : {
+                  diagnostics: {
+                    text: "== HOST ==\nbuild  109",
+                    findings: [
+                      {
+                        severity: "critical",
+                        message: "The filter is not reporting.",
+                        hint: "Reset enforcement.",
+                      },
+                    ],
+                  },
+                };
+          } else if (command.type === "startLockdown") {
+            state.lockdown = {
+              endsAt: new Date(Date.now() + command.hours * 3600000).toISOString(),
+              groupNames: state.groups
+                .filter((g: any) => command.groupIDs.includes(g.id))
+                .map((g: any) => g.name),
+              detail: "Synced",
+            };
+            result = { snapshot: structuredClone(state) };
+          }
+          const reply = { version: 1, id: request.id, ok: true, result };
+          queueMicrotask(() => listeners.forEach((fn) => fn({ data: reply })));
+        },
+      };
+    },
+    { state: previewSnapshot() },
+  );
+  await page.goto("/");
+  const sent = () => page.evaluate(() => (window as any).__sent);
+
+  // A locked filter explains itself and offers the reset, not a dead button.
+  await expect(page.getByText(/safety locked after a failed start/)).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Install / turn on web filter" }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Reset enforcement without restart" })
+    .click();
+  await expect(page.getByText(/safety locked after a failed start/)).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Install / turn on web filter" }),
+  ).toBeVisible();
+  expect((await sent()).at(-1)).toMatchObject({
+    type: "enforcementAction",
+    id: "resetEnforcement",
+  });
+
+  // Diagnostics render here, with the host doing the copy.
+  await page.getByRole("button", { name: "Filter controls" }).click();
+  await page.getByRole("button", { name: "Diagnostics" }).click();
+  const report = page.getByRole("dialog", { name: "Diagnostic report" });
+  await expect(report.getByText("1 critical finding")).toBeVisible();
+  await expect(report.getByText("The filter is not reporting.")).toBeVisible();
+  await expect(report.getByText(/build\s+109/)).toBeVisible();
+  await report.getByRole("button", { name: "Copy report" }).click();
+  await expect(report.getByText("Copied the readable report.")).toBeVisible();
+  expect((await sent()).at(-1)).toMatchObject({ type: "diagnostics", copy: true });
+  await report.getByRole("button", { name: "Close", exact: true }).last().click();
+
+  // A lockdown is chosen here and sent as groups plus hours.
+  const compact = (page.viewportSize()?.width ?? 1000) < 700;
+  if (compact) await page.getByRole("button", { name: "Add" }).click();
+  await page
+    .getByRole(compact ? "menuitem" : "button", { name: /Lockdown/ })
+    .first()
+    .click();
+  const lockdown = page.getByRole("dialog", { name: "Start a lockdown" });
+  const start = lockdown.getByRole("button", { name: "Start lockdown" });
+  await expect(start).toBeDisabled();
+  await lockdown.getByRole("checkbox").first().check();
+  await lockdown.getByRole("combobox").selectOption("12");
+  await start.click();
+  await expect(lockdown).toHaveCount(0);
+  const last = (await sent()).at(-1);
+  expect(last).toMatchObject({ type: "startLockdown", hours: 12 });
+  expect(last.groupIDs).toHaveLength(1);
+});

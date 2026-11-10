@@ -246,8 +246,23 @@ final class SharedInterfaceSession: ObservableObject {
         else if controller.isBlockingDisabled { headline = "Web filter off" }
         else if controller.status == .active { headline = FilterEnforcementSummary.isHealthy(model.enforcementHealth) ? "Web filter on" : "Needs attention" }
         else { headline = controller.status.description }
-        let enforcement: [String: Any] = ["state": !enabled ? "disabled" : warning ? "error" : confirmed ? "active" : "unknown",
+        var enforcement: [String: Any] = ["state": !enabled ? "disabled" : warning ? "error" : confirmed ? "active" : "unknown",
             "title": model.enforcement.status.description, "detail": detail, "headline": headline]
+        // Recovery lives in the shared screens: a locked or failed filter says
+        // why and offers the one step that clears it.
+        if controller.activationSafetyRequiresRestart {
+            enforcement["problem"] = controller.isResettingEnforcement
+                ? "Resetting enforcement safely. Blocking stays off until the reset has verified this Mac's connection."
+                : "The web filter is safety locked after a failed start, so it cannot be turned on yet. Reset enforcement, or restart this Mac, then turn it on again."
+            enforcement["actions"] = [["id": "resetEnforcement", "label": "Reset enforcement without restart",
+                "detail": "Keeps blocking off, removes and verifies the filter preference, and tests connectivity before clearing the safety lock.",
+                "running": controller.isResettingEnforcement] as [String: Any]]
+        } else if controller.isBlockingDisabled, let failure = controller.deliveryError {
+            enforcement["problem"] = failure
+            enforcement["actions"] = [["id": "retryDisable", "label": "Retry turning the filter off"] as [String: Any]]
+        } else if let recovery = controller.recoveryWarning {
+            enforcement["problem"] = recovery
+        }
         let sync = model.syncStatus
         #else
         let platform = "ios"
@@ -358,15 +373,25 @@ final class SharedInterfaceSession: ObservableObject {
                 "startedAt": iso(event.grantedAt), "endsAt": iso(event.expiresAt), "reason": event.intent == nil ? "unspecified" : event.intent == .consciousIntervention ? "conscious" : "edulgence"]
         }
         var result: [String: Any] = ["schema": 1, "revision": try revision(), "platform": platform,
-            "capabilities": ["editGroups", "temporaryAccess", "pickApplications", "retreats", "lockdown", "diagnostics", "enforcementControl", "appearance", "advancedControls", "presets"],
+            "capabilities": ["editGroups", "temporaryAccess", "pickApplications", "retreats", "lockdown", "diagnostics", "enforcementControl", "appearance", "advancedControls", "presets", "lockdownForm", "diagnosticsReport"],
             "appearance": appearance,
             "enforcementEnabled": enabled, "enforcement": enforcement,
             "sync": ["state": Self.syncState(sync), "detail": sync], "groups": groups, "retreats": retreats, "bypasses": events, "lockdown": NSNull(),
             "summary": ["headline": summary.headline, "next": summary.nextLine(now: now) ?? NSNull()] as [String: Any],
             "retreatGroups": retreatGroups, "schedule": ["days": scheduleDays(now: now)], "presets": presets]
         if let end = model.lockdownExpirations.values.max() {
+            #if os(macOS)
+            let sessions: [[String: Any]] = model.activeLockdownSessions.map { session in
+                ["id": session.id.uuidString, "endsAt": iso(session.endsAt),
+                 "groupNames": model.rules.filter { session.ruleIDs.contains($0.id) }.map(\.name)]
+            }
+            #else
+            let sessions: [[String: Any]] = model.activeTimedLockdowns.map { session in
+                ["id": session.id.uuidString, "endsAt": iso(session.endsAt), "groupNames": session.rules.map(\.name)]
+            }
+            #endif
             result["lockdown"] = ["endsAt": iso(end), "groupNames": model.rules.filter { model.lockdownExpirations[$0.id] != nil }.map(\.name),
-                "detail": model.lockdownSyncStatus]
+                "detail": model.lockdownSyncStatus, "sessions": sessions]
         }
         return result
     }
@@ -407,7 +432,23 @@ final class SharedInterfaceSession: ObservableObject {
             try challenge.action(typed); generation += 1
             return ["snapshot": try snapshot(), "message": "Request processed by the native policy. Check the updated status for waiting periods or enforcement acknowledgement."]
         }
-        if type == "diagnostics" { nativePanel = "diagnostics"; return [:] }
+        if type == "diagnostics" {
+            let report = model.makeDiagnosticReport(redaction: c["names"] as? Bool == true ? .full : .standard)
+            if c["copy"] as? Bool == true {
+                #if os(macOS)
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(report.renderedText(), forType: .string)
+                #else
+                UIPasteboard.general.string = report.renderedText()
+                #endif
+                return ["message": "Copied the readable report."]
+            }
+            return ["diagnostics": ["text": report.renderedText(), "findings": report.warnings.sorted { $0.severity < $1.severity }.map { warning in
+                var finding: [String: Any] = ["severity": warning.severity.rawValue, "message": warning.message]
+                if let hint = warning.hint { finding["hint"] = hint }
+                return finding
+            }] as [String: Any]]
+        }
         if type == "openAdvancedControls" {
             showAdvancedControls = true
             return [:]
@@ -430,10 +471,71 @@ final class SharedInterfaceSession: ObservableObject {
         }
         guard c["revision"] as? String == (try revision()) else { throw SharedInterfaceError("Settings changed. Close this dialog and reopen it before saving.") }
         model.errorMessage = nil
-        if type == "createRetreat" || type == "startLockdown" { nativePanel = type; return [:] }
+        if type == "createRetreat" { nativePanel = type; return [:] }
+        if type == "startLockdown" {
+            guard let texts = c["groupIDs"] as? [String], let hours = c["hours"] as? Int else { nativePanel = type; return [:] }
+            let ids = Set(texts.compactMap(UUID.init(uuidString:)))
+            guard !ids.isEmpty, ids.count == texts.count, (1...168).contains(hours) else {
+                throw SharedInterfaceError("Choose at least one group and a duration between one hour and seven days.")
+            }
+            #if os(macOS)
+            // The same defaults the Mac lockdown window starts with: one typed passage to leave early.
+            let before = Set(model.activeLockdownSessions.map(\.id))
+            model.startLockdownSession(ruleIDs: ids, duration: Double(hours) * 3_600,
+                lockdown: DesktopLockdownPolicy(severity: "passageOnly", unlockDelayDays: 0, passageWordCount: 80,
+                    confirmationWindowHours: 24, editWindowHours: 1, allowsTimeExtensions: false, maximumTimeExtensionHours: 0))
+            try ensure(model.errorMessage == nil)
+            guard Set(model.activeLockdownSessions.map(\.id)) != before else {
+                throw SharedInterfaceError("The lockdown did not start. Check that the selected groups still exist and have websites or apps this Mac can filter.")
+            }
+            #else
+            try ensure(model.startTimedLockdown(ruleIDs: ids, hours: hours))
+            #endif
+            generation += 1; challenges.removeAll()
+            return ["snapshot": try snapshot(), "message": "Lockdown started."]
+        }
+        if type == "endLockdown" {
+            guard let text = c["sessionID"] as? String, let id = UUID(uuidString: text) else { throw SharedInterfaceError("Invalid lockdown.") }
+            #if os(macOS)
+            guard let session = model.activeLockdownSessions.first(where: { $0.id == id }) else { throw SharedInterfaceError("That lockdown is no longer running.") }
+            return try issue(title: "End lockdown early", passage: session.earlyExitPassage) { [weak self] typed in
+                guard let self else { throw SharedInterfaceError("The window was closed.") }
+                try ensure(model.endLockdownSession(id: id, passage: typed))
+            }
+            #else
+            guard let session = model.activeTimedLockdowns.first(where: { $0.id == id }) else { throw SharedInterfaceError("That lockdown is no longer running.") }
+            return try issue(title: "End lockdown early", passage: session.earlyExitPassage) { [weak self] typed in
+                guard let self else { throw SharedInterfaceError("The window was closed.") }
+                try ensure(model.endTimedLockdown(session, passage: typed))
+            }
+            #endif
+        }
+        if type == "enforcementAction" {
+            #if os(macOS)
+            switch c["id"] as? String {
+            case "resetEnforcement": model.resetDesktopEnforcementWithoutRestart()
+            case "retryDisable": model.disableDesktopBlockingImmediately()
+            default: throw SharedInterfaceError("Unknown recovery step.")
+            }
+            generation += 1; challenges.removeAll()
+            return ["snapshot": try snapshot()]
+            #else
+            throw SharedInterfaceError("Unknown recovery step.")
+            #endif
+        }
         if type == "setEnforcement" {
             #if os(macOS)
-            if c["enabled"] as? Bool == true { model.installDesktopEnforcement(); try ensure(model.errorMessage == nil) }
+            if c["enabled"] as? Bool == true {
+                model.installDesktopEnforcement(); try ensure(model.errorMessage == nil)
+                // A refused install only sets the controller's own error. Without
+                // this the button would appear to do nothing.
+                if model.enforcement.isBlockingDisabled, model.enforcement.activationSafetyRequiresRestart {
+                    throw SharedInterfaceError("The web filter is safety locked after a failed start, so it was not turned on. Open Advanced controls and press Reset Enforcement Without Restart, or restart this Mac, then try again.")
+                }
+                if model.enforcement.isBlockingDisabled, let reason = model.enforcement.deliveryError {
+                    throw SharedInterfaceError(reason)
+                }
+            }
             else {
                 let challenge = model.makeDesktopBlockingDisableChallenge()
                 return try issue(title: "Disable web blocking", passage: challenge.requiredPassage) { [weak self] typed in
