@@ -13,7 +13,7 @@ settings:
     DEVELOPMENT_TEAM: 7GXNZJMGPD
     CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1,2"
-    CURRENT_PROJECT_VERSION: 111
+    CURRENT_PROJECT_VERSION: 113
     MARKETING_VERSION: 0.1.0
 
 schemes:
@@ -90,6 +90,9 @@ targets:
         CFBundleDisplayName: Holdfast
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Export compliance, declared by the owner: only Apple's built-in
+        # hashing and standard HTTPS are used, so TestFlight need not ask.
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
