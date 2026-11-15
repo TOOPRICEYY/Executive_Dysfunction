@@ -998,10 +998,14 @@ final class MacAppModel: ObservableObject {
     /// opened it from the pending window by itself), and the shared record is
     /// rewritten as an ordinary pause for older iPhone/Mac builds. Driven by
     /// the 5-second timer, so it needs this app running; until then an older
-    /// filter keeps blocking (late, never early).
+    /// filter keeps blocking (late, never early). The app's own pause store is
+    /// the source, so a pending pause the published policy never carried
+    /// still opens here (see `openedPausesNeedingPublication`).
     private func publishOpenedPendingPauses(at now: Date = Date()) {
         guard !uiPreviewMode, let published = lastPublishedPolicy else { return }
-        let due = published.rules.filter { ($0.pendingPauseOpensAt.map { $0 <= now }) ?? false }.map(\.id)
+        let due = MacTemporaryPauseStore.openedPausesNeedingPublication(
+            stored: MacTemporaryPauseStore.load(defaults: MacLockLedger.shared),
+            published: published.rules, at: now)
         guard !due.isEmpty else { return }
         publishDesktopPolicy()
         let replica = temporaryAccessCloudStore.load()

@@ -79,6 +79,32 @@ enum MacTemporaryPauseStore {
         }
     }
 
+    /// Rules whose granted pause has reached its opening and must be published
+    /// again so the filter opens it. Driven by this store, not only by the
+    /// pending openings already in the published policy: a pending pause that
+    /// publication did not carry (rejected by a bound, or skipped for any
+    /// other reason) would otherwise never open. A store pause counts once it
+    /// is open here and the published rule holds no pause open; republishing
+    /// stamps it as `pausedUntil`, after which it is no longer due. It can
+    /// only open late (at the next 5-second tick), never before its opening.
+    static func openedPausesNeedingPublication(
+        stored: [UUID: RuleTimeAllowance],
+        published: [DesktopEnforcementRule],
+        at now: Date
+    ) -> Set<UUID> {
+        var due = Set(published.filter { ($0.pendingPauseOpensAt.map { $0 <= now }) ?? false }.map(\.id))
+        let byID = Dictionary(published.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for (id, pause) in stored where pause.opensAt != nil && pause.isOpen(at: now) {
+            // Only a rule that can carry a pause at all, so a pause the
+            // policy will never publish does not republish every tick.
+            guard let rule = byID[id], rule.lockdown.allowsTimeExtensions,
+                  rule.lockdown.effectiveMaximumTemporaryAccessMinutes > 0,
+                  rule.activePauseEnd(at: now) == nil else { continue }
+            due.insert(id)
+        }
+        return due
+    }
+
     static func activeAuthorizationIDs(at now: Date, defaults: any KeyValueLedger) -> [UUID: String] {
         load(defaults: defaults).filter { $0.value.isOpen(at: now) }.mapValues { pause in
             // Granting an extension adds the same duration to expiry and spend,

@@ -419,9 +419,17 @@ struct DesktopBlockProfile: Equatable {
     /// A pending pause is published only while it is still pending, opens no
     /// later than a day from now (the longest wait) and lasts no longer than
     /// the rule's session maximum from its opening.
+    ///
+    /// The grant rounds its opening up to a whole second, so a full-day wait
+    /// published within that second lands just past `now + 1440 min`; the
+    /// same few seconds of slack the cross-device receive path allows keep
+    /// such a pause. The slack only admits a later opening, never an earlier.
+    static let pendingOpeningSlack: TimeInterval = 5
+
     static func clampedPendingPause(_ interval: DateInterval?, maximumMinutes: Int, now: Date) -> DateInterval? {
         guard let interval, interval.start > now, maximumMinutes > 0,
-              interval.start <= now.addingTimeInterval(TimeInterval(TemporaryAccessWait.range.upperBound) * 60)
+              interval.start <= now.addingTimeInterval(
+                TimeInterval(TemporaryAccessWait.range.upperBound) * 60 + pendingOpeningSlack)
         else { return nil }
         let end = min(interval.end, interval.start.addingTimeInterval(TimeInterval(maximumMinutes) * 60))
         guard end > interval.start else { return nil }

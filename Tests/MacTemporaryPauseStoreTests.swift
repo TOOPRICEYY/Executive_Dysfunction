@@ -293,4 +293,59 @@ extension MacTemporaryPauseStoreTests {
         XCTAssertEqual(pause.expiresAt, now.addingTimeInterval(600))
         XCTAssertEqual(MacTemporaryPauseStore.activeExpirations(at: now, defaults: defaults)[subject.id], pause.expiresAt)
     }
+
+    /// A full-day wait rounds its opening up past `now + 1440 min`; the
+    /// publish made in the same second must still carry the pending pause.
+    func testFullDayWaitIsPublishedDespiteWholeSecondRounding() throws {
+        let now = Date(timeIntervalSince1970: 1_790_000_000.25)
+        let subject = waitedRule(1_440)
+        guard case let .success(pause) = MacTemporaryPauseStore.grant(.thirtyMinutes, for: subject, at: now, defaults: defaults)
+        else { return XCTFail("Expected grant") }
+        let opens = try XCTUnwrap(pause.opensAt)
+        XCTAssertGreaterThan(opens, now.addingTimeInterval(86_400), "The rounding crosses the day bound")
+        let interval = try XCTUnwrap(MacTemporaryPauseStore.pendingIntervals(at: now, defaults: defaults)[subject.id])
+        let published = try XCTUnwrap(DesktopBlockProfile.clampedPendingPause(
+            interval, maximumMinutes: subject.lockdown.effectiveMaximumTemporaryAccessMinutes, now: now))
+        XCTAssertEqual(published.start, opens, "Published with its own opening, not earlier")
+        XCTAssertEqual(published.end, pause.expiresAt)
+        // Anything further out than the rounding is still refused.
+        XCTAssertNil(DesktopBlockProfile.clampedPendingPause(
+            DateInterval(start: now.addingTimeInterval(86_400 + 60), duration: 600),
+            maximumMinutes: 180, now: now))
+    }
+
+    /// A pending pause the published policy never carried still opens: the
+    /// store, not the last published policy, decides what to republish.
+    func testOpenedPauseMissingFromPublishedPolicyIsRepublished() throws {
+        let now = Date(timeIntervalSince1970: 1_790_000_000)
+        var subject = waitedRule(10)
+        guard case let .success(pause) = MacTemporaryPauseStore.grant(.thirtyMinutes, for: subject, at: now, defaults: defaults)
+        else { return XCTFail("Expected grant") }
+        let opens = try XCTUnwrap(pause.opensAt)
+        let stored = MacTemporaryPauseStore.load(defaults: defaults)
+        // Published without the pending window, as if it had been dropped.
+        XCTAssertNil(subject.pendingPauseOpensAt)
+        XCTAssertTrue(MacTemporaryPauseStore.openedPausesNeedingPublication(
+            stored: stored, published: [subject], at: opens.addingTimeInterval(-1)).isEmpty,
+            "Nothing is republished before the opening")
+        XCTAssertEqual(MacTemporaryPauseStore.openedPausesNeedingPublication(
+            stored: stored, published: [subject], at: opens), [subject.id])
+        // Once republished as an open pause it is no longer due.
+        subject.pausedUntil = pause.expiresAt
+        XCTAssertTrue(MacTemporaryPauseStore.openedPausesNeedingPublication(
+            stored: stored, published: [subject], at: opens).isEmpty)
+        // A rule that cannot carry a pause is never due, so it cannot loop.
+        var closed = subject
+        closed.pausedUntil = nil
+        closed.lockdown.allowsTimeExtensions = false
+        XCTAssertTrue(MacTemporaryPauseStore.openedPausesNeedingPublication(
+            stored: stored, published: [closed], at: opens).isEmpty)
+        // A pending opening already in the published policy is still due, as before.
+        var carried = subject
+        carried.pausedUntil = nil
+        carried.pendingPauseOpensAt = opens
+        carried.pendingPauseUntil = pause.expiresAt
+        XCTAssertEqual(MacTemporaryPauseStore.openedPausesNeedingPublication(
+            stored: [:], published: [carried], at: opens), [carried.id])
+    }
 }
