@@ -27,6 +27,18 @@ extension DesktopEnforcementPolicy {
         var result = self
         result.rules = rules.map { rule in
             var rule = rule
+            // A pending pause is bounded on its own: it may last no longer than
+            // the session maximum from its opening, and it never opens early.
+            if let opens = rule.pendingPauseOpensAt, let until = rule.pendingPauseUntil,
+               rule.lockdown.permitsAnyTemporaryAccess,
+               rule.lockdown.effectiveMaximumTemporaryAccessMinutes > 0,
+               until > now, until > opens {
+                rule.pendingPauseUntil = min(until, opens.addingTimeInterval(
+                    TimeInterval(rule.lockdown.effectiveMaximumTemporaryAccessMinutes) * 60))
+            } else {
+                rule.pendingPauseOpensAt = nil
+                rule.pendingPauseUntil = nil
+            }
             guard let claimed = rule.pausedUntil, claimed > now,
                   rule.lockdown.permitsAnyTemporaryAccess,
                   rule.lockdown.effectiveMaximumTemporaryAccessMinutes > 0 else {

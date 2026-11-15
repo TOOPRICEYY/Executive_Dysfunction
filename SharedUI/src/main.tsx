@@ -527,6 +527,16 @@ function App({ connection }: { connection: Adapter | null }) {
                 onLockdown={lockdown}
                 onHistory={setHistory}
                 onDiagnostics={diagnostics}
+                onCancelAccess={
+                  supports("temporaryAccess")
+                    ? (groupID) =>
+                        void request({
+                          type: "cancelTemporaryAccess",
+                          revision: snapshot.revision,
+                          groupID,
+                        })
+                    : undefined
+                }
                 controlsOpen={controlsOpen}
                 setControlsOpen={setControlsOpen}
                 onAction={(id) =>

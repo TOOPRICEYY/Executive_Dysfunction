@@ -20,6 +20,21 @@ struct TemporaryAccessContribution: Codable, Equatable, Sendable {
     var backoffStartedAt: Date
     var updatedAt: Date
     var sessionGrantCount: Int? = nil
+    /// A grant still inside its wait. Builds that predate waits ignore these
+    /// keys, and for them `pauseEndsAt` is set to the moment of writing, so
+    /// they see no pause to open. Current builds read the real window here.
+    /// Once the grant opens the writer republishes it as an ordinary pause
+    /// (these nil, `pauseEndsAt` the real end), which older builds then open.
+    var pauseOpensAt: Date? = nil
+    var pendingPauseEndsAt: Date? = nil
+
+    /// When this device's pause ends, pending or open.
+    var effectivePauseEndsAt: Date {
+        guard pauseOpensAt != nil, let pendingPauseEndsAt else { return pauseEndsAt }
+        return max(pauseEndsAt, pendingPauseEndsAt)
+    }
+
+    var isPendingRecord: Bool { pauseOpensAt != nil && pendingPauseEndsAt != nil }
 }
 
 /// The shared view of how much temporary access has been spent.
@@ -35,8 +50,18 @@ struct TemporaryAccessLedger: Codable, Equatable, Sendable {
             if $0.updatedAt != $1.updatedAt { return $0.updatedAt < $1.updatedAt }
             return $0.deviceID.uuidString < $1.deviceID.uuidString
         }
-        guard let latest, latest.pauseEndsAt > now else { return 0 }
+        guard let latest, latest.effectivePauseEndsAt > now else { return 0 }
         return max(0, latest.minutesGranted - localMinutes)
+    }
+
+    /// Whether this device wrote the latest entry for the rule and wrote it
+    /// while the grant was still pending, so it needs republishing once open.
+    func ownEntryIsLatestPending(rule: UUID, device: UUID) -> Bool {
+        let latest = contributions.values.filter { $0.ruleID == rule }.max {
+            if $0.updatedAt != $1.updatedAt { return $0.updatedAt < $1.updatedAt }
+            return $0.deviceID.uuidString < $1.deviceID.uuidString
+        }
+        return latest?.deviceID == device && latest?.isPendingRecord == true
     }
 
     static func key(rule: UUID, device: UUID) -> String {
@@ -62,7 +87,7 @@ struct TemporaryAccessLedger: Codable, Equatable, Sendable {
     /// published entry too would double it.
     func committedMinutes(forRule rule: UUID, excluding device: UUID, at now: Date) -> Int {
         entries(forRule: rule, excluding: device)
-            .filter { $0.pauseEndsAt > now }
+            .filter { $0.effectivePauseEndsAt > now }
             .reduce(0) { $0 + max(0, $1.minutesGranted) }
     }
 
@@ -95,7 +120,7 @@ struct TemporaryAccessLedger: Codable, Equatable, Sendable {
     mutating func prune(at now: Date) {
         let longestBackoff = Double(TemporaryAllowanceBackoff.daysRange.upperBound) * 86_400
         contributions = contributions.filter { _, entry in
-            entry.pauseEndsAt > now
+            entry.effectivePauseEndsAt > now
                 || now < entry.backoffStartedAt.addingTimeInterval(longestBackoff)
         }
     }

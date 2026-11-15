@@ -126,4 +126,94 @@ final class DesktopPauseBoundTests: XCTestCase {
             weakeningAuthorizationExpiresAt: nil
         )
     }
+
+    // MARK: - Access delay (a pending pause)
+
+    private func pendingRule(opens: Date, until: Date, maximumHours: Int = 3) -> DesktopEnforcementRule {
+        var rule = makePolicy(pausedUntil: nil).rules[0]
+        rule.windows = [DesktopTimeWindow(weekdays: Set(1...7), startMinutes: 0, endMinutes: 1_440)]
+        rule.lockdown.maximumTimeExtensionHours = maximumHours
+        rule.pendingPauseOpensAt = opens
+        rule.pendingPauseUntil = until
+        return rule
+    }
+
+    func testPendingPauseIsClosedUntilItOpensThenOpenUntilItsEnd() {
+        let opens = now.addingTimeInterval(600), until = opens.addingTimeInterval(1_800)
+        let rule = pendingRule(opens: opens, until: until)
+        XCTAssertFalse(rule.isPaused(at: now), "Pending right after the passage")
+        XCTAssertFalse(rule.isPaused(at: opens.addingTimeInterval(-0.001)), "Never early")
+        XCTAssertTrue(rule.isPaused(at: opens))
+        XCTAssertEqual(rule.activePauseEnd(at: opens), until)
+        XCTAssertFalse(rule.isPaused(at: until))
+        let policy = DesktopEnforcementPolicy(revision: 2, issuedAt: now, rules: [rule], weakeningAuthorizationExpiresAt: nil)
+        XCTAssertTrue(policy.blocksDomain("example.com", at: now.addingTimeInterval(599)))
+        XCTAssertFalse(policy.blocksDomain("example.com", at: opens.addingTimeInterval(1)))
+        XCTAssertTrue(policy.blocksDomain("example.com", at: until))
+    }
+
+    func testFilterBoundsAPendingPauseFromItsOpening() {
+        let opens = now.addingTimeInterval(3_600)
+        var policy = makePolicy(pausedUntil: nil)
+        policy.rules = [pendingRule(opens: opens, until: opens.addingTimeInterval(30 * 3_600), maximumHours: 1)]
+        let bounded = policy.boundingPauses(from: .empty, at: now).rules[0]
+        XCTAssertEqual(bounded.pendingPauseOpensAt, opens, "The opening is never moved earlier")
+        XCTAssertEqual(bounded.pendingPauseUntil, opens.addingTimeInterval(3_600))
+        XCTAssertNil(bounded.pausedUntil)
+
+        policy.rules[0].lockdown.allowsTimeExtensions = false
+        let refused = policy.boundingPauses(from: .empty, at: now).rules[0]
+        XCTAssertNil(refused.pendingPauseOpensAt)
+        XCTAssertNil(refused.pendingPauseUntil)
+    }
+
+    /// An installed filter built before waits knows only `pausedUntil`. The app
+    /// must never put a pending grant there, and the JSON a reader without the
+    /// new keys sees carries no pause at all.
+    func testAPendingGrantIsNeverPublishedAsPausedUntil() throws {
+        var cloud = CloudRulePreference(name: "Social", windows: [], domains: [
+            CloudDomainPreference(domain: "example.com", category: "social", source: "user")])
+        cloud.lockdown.allowsTimeExtensions = true
+        cloud.lockdown.setTemporaryAccessWait(minutes: 10)
+        let opens = now.addingTimeInterval(600)
+        let profile = DesktopBlockProfile(
+            cloudRules: [cloud],
+            pendingTemporaryPauses: [cloud.id: DateInterval(start: opens, end: opens.addingTimeInterval(1_800))],
+            now: now)
+        XCTAssertNil(profile.rules[0].pausedUntil)
+        XCTAssertEqual(profile.rules[0].pendingPauseOpensAt, opens)
+        XCTAssertEqual(profile.rules[0].pendingPauseUntil, opens.addingTimeInterval(1_800))
+
+        let published = DesktopEnforcementPolicy(blockProfile: profile, revision: 3, issuedAt: now)
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .millisecondsSince1970
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoder.encode(published)) as? [String: Any])
+        let rule = try XCTUnwrap((json["rules"] as? [[String: Any]])?.first)
+        XCTAssertNil(rule["pausedUntil"], "An older filter reads only this key")
+        let lockdown = try XCTUnwrap(rule["lockdown"] as? [String: Any])
+        XCTAssertEqual(lockdown["allowsTimeExtensions"] as? Bool, false,
+                       "A waited group is native-only, so an older block page cannot grant around the wait")
+        XCTAssertEqual(lockdown["requiresNativeTemporaryAccess"] as? Bool, true)
+
+        // Already open, or opening more than a day away: not published as pending.
+        XCTAssertNil(DesktopBlockProfile.clampedPendingPause(DateInterval(start: now, end: opens), maximumMinutes: 60, now: now))
+        XCTAssertNil(DesktopBlockProfile.clampedPendingPause(
+            DateInterval(start: now.addingTimeInterval(1_441 * 60), duration: 60), maximumMinutes: 60, now: now))
+    }
+
+    func testShorterWaitIsAWeakeningAndLongerIsStricter() {
+        let old = pendingRule(opens: now, until: now)
+        var longer = old; longer.lockdown.temporaryAccessWaitMinutes = 30
+        var shorter = longer; shorter.lockdown.temporaryAccessWaitMinutes = 10
+        XCTAssertTrue(DesktopPolicyRestrictionEvaluator.isSameOrStricter(old: old, new: longer))
+        XCTAssertFalse(DesktopPolicyRestrictionEvaluator.isSameOrStricter(old: longer, new: shorter))
+        XCTAssertFalse(DesktopPolicyRestrictionEvaluator.isSameOrStricter(old: longer, new: old))
+        XCTAssertTrue(DesktopPolicyRestrictionEvaluator.isSameOrStricter(old: shorter, new: longer))
+        XCTAssertTrue(longer.lockdown.needsNativeTemporaryAccess)
+        XCTAssertFalse(old.lockdown.needsNativeTemporaryAccess)
+
+        // A synced weakening of a locked rule is held for the rule's delay.
+        let held = RemoteWeakeningHold.apply(previous: [longer], proposed: [shorter], exempt: [], holds: [:], now: now)
+        XCTAssertEqual(held.rules[0].lockdown.temporaryAccessWaitMinutes, 30)
+        XCTAssertEqual(held.held.count, 1)
+    }
 }

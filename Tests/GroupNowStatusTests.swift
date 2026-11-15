@@ -280,4 +280,25 @@ extension GroupNowStatusTests {
         XCTAssertTrue(unconfirmed.hasPrefix("Scheduled until "), unconfirmed)
         XCTAssertTrue(unconfirmed.hasSuffix(" · not confirmed"), unconfirmed)
     }
+
+    // MARK: - Access delay
+
+    func testPendingAccessReadsAsBlockingUntilItOpens() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let allDay = [CloudTimeWindow(weekdays: Set(1...7), startMinutes: 0, endMinutes: 1_440)]
+        let opens = now.addingTimeInterval(600)
+        let state = GroupNowStatus.evaluate(isEnabled: true, windows: allDay, now: now, accessOpensAt: opens)
+        XCTAssertEqual(state, .waiting(opensAt: opens))
+        XCTAssertTrue(state.isBlocking)
+        XCTAssertEqual(state.changesAt, opens)
+        XCTAssertTrue(GroupNowStatus.headline(state, now: now).hasSuffix("· blocking until then"))
+        XCTAssertTrue(GroupNowStatus.headline(state, now: now).hasPrefix("Access opens at "))
+        XCTAssertEqual(DashboardNowSummary(groups: [.init(name: "Feeds", state: state)]).blockingCount, 1)
+        // An open allowance is still paused, and no schedule means no claim to block.
+        XCTAssertEqual(GroupNowStatus.evaluate(isEnabled: true, windows: allDay, now: now,
+            allowanceUntil: opens, accessOpensAt: nil), .paused(until: opens))
+        if case .waiting = GroupNowStatus.evaluate(isEnabled: true, windows: [], now: now, accessOpensAt: opens) {
+            XCTFail("Not blocking on its own schedule, so it is not waiting")
+        }
+    }
 }

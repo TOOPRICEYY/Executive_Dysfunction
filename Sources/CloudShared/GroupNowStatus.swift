@@ -76,12 +76,15 @@ enum GroupNowState: Equatable, Sendable {
     /// `until` is nil when the block does not end within the look-ahead.
     case blocking(until: Date?)
     case upcoming(at: Date)
+    /// Blocking now, with granted temporary access that opens at `opensAt`
+    /// once its wait is over. It is a blocking state in every count and lane.
+    case waiting(opensAt: Date)
     case idle
     case off
 
     var isBlocking: Bool {
         switch self {
-        case .lockdown, .blocking: true
+        case .lockdown, .blocking, .waiting: true
         default: false
         }
     }
@@ -90,7 +93,7 @@ enum GroupNowState: Equatable, Sendable {
     var sortRank: Int {
         switch self {
         case .lockdown: 0
-        case .blocking: 1
+        case .blocking, .waiting: 1
         case .paused: 2
         case .upcoming: 3
         case .idle: 4
@@ -104,6 +107,7 @@ enum GroupNowState: Equatable, Sendable {
         case let .lockdown(until), let .paused(until): until
         case let .blocking(until): until
         case let .upcoming(at): at
+        case let .waiting(opensAt): opensAt
         case .idle, .off: nil
         }
     }
@@ -118,6 +122,7 @@ enum GroupNowStatus {
         now: Date,
         allowanceUntil: Date? = nil,
         lockdownUntil: Date? = nil,
+        accessOpensAt: Date? = nil,
         calendar: Calendar = .current
     ) -> GroupNowState {
         if let lockdownUntil, lockdownUntil > now { return .lockdown(until: lockdownUntil) }
@@ -128,6 +133,11 @@ enum GroupNowStatus {
             return .paused(until: allowanceUntil)
         }
         if let current = intervals.first(where: { $0.start <= now && now < $0.end }) {
+            // A grant inside its wait changes nothing about enforcement; it is
+            // named only when it will open before this block ends on its own.
+            if let accessOpensAt, accessOpensAt > now, accessOpensAt < current.end {
+                return .waiting(opensAt: accessOpensAt)
+            }
             return .blocking(until: current.end >= horizon ? nil : current.end)
         }
         if let next = intervals.first(where: { $0.start > now }) {
@@ -165,7 +175,7 @@ enum GroupNowStatus {
             return holder.isComplete
                 ? sentenceCased(whole)
                 : "\(sentenceCased(part)) · no block of its own this week"
-        case .blocking, .lockdown:
+        case .blocking, .lockdown, .waiting:
             return base
         }
     }
@@ -180,6 +190,8 @@ enum GroupNowStatus {
             until.map { "Blocking now · until \(moment($0, now: now, calendar: calendar))" } ?? "Blocking now · always on"
         case let .upcoming(at):
             "Next block · \(moment(at, now: now, calendar: calendar))"
+        case let .waiting(opensAt):
+            "Access opens \(moment(opensAt, now: now, calendar: calendar, preposition: true)) · blocking until then"
         case .idle:
             "No blocks in the next week"
         case .off:
@@ -251,6 +263,7 @@ struct DashboardNowSummary: Equatable, Sendable {
             switch group.state {
             case .upcoming: verb = "starts"
             case .paused: verb = "resumes"
+            case .waiting: verb = "access opens"
             default: verb = "ends"
             }
             return (date, "\(group.name) \(verb)")

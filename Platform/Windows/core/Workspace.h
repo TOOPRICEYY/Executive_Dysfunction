@@ -23,7 +23,7 @@ private:
     Json challenges_ = Json::object();
     Save save_;
     void Commit(Json next);
-    Json Challenge(const Json& command, int words, int64_t now, const std::string& title);
+    Json Challenge(const Json& command, int words, int64_t now, const std::string& title, const std::string& detail = {});
     Json ApplyChallenge(const Json& command, int64_t now);
     const Json& Group(const std::string& id) const;
     bool Unlocked(const Json& group, int64_t now) const;

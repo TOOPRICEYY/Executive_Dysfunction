@@ -391,6 +391,19 @@ struct MacBlockingGroupEditor: View {
                         Text("\(pause.totalMinutesGranted) MINUTES USED THIS SESSION · \(pause.grantCount) PASSAGE(S) ACCEPTED")
                             .font(.system(.caption2, design: .default, weight: .medium))
                             .foregroundStyle(.secondary)
+                    } else if let pending = model.pendingTemporaryPause(for: group.id), let opens = pending.opensAt {
+                        // Granted but inside its wait: still blocking.
+                        HStack(spacing: 12) {
+                            editorLabel("BLOCKING · ACCESS OPENS")
+                            Text(opens.formatted(date: .omitted, time: .shortened))
+                                .font(.system(.body, design: .default, weight: .semibold))
+                            Spacer()
+                            Button("CANCEL REQUEST") { model.cancelTemporaryPause(for: group.id) }
+                                .buttonStyle(MacBrutalButtonStyle())
+                        }
+                        Text("OPEN UNTIL \(pending.expiresAt.formatted(date: .omitted, time: .shortened)) · \(pending.totalMinutesGranted) MINUTES USED THIS SESSION")
+                            .font(.system(.caption2, design: .default, weight: .medium))
+                            .foregroundStyle(.secondary)
                     }
 
                     if !model.allowsTemporaryPause(for: group.id) {

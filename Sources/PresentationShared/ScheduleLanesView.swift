@@ -158,7 +158,7 @@ struct ScheduleLanesView: View {
         if let state = lane.state {
             switch state {
             case .lockdown: return enforced ? "LOCKED DOWN" : unenforcedNote.uppercased()
-            case .blocking: return enforced ? "BLOCKING" : unenforcedNote.uppercased()
+            case .blocking, .waiting: return enforced ? "BLOCKING" : unenforcedNote.uppercased()
             case .paused: return "PAUSED"
             case let .upcoming(at):
                 if calendar.isDate(at, inSameDayAs: now) { return "LATER TODAY" }

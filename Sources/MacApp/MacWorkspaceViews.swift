@@ -529,7 +529,7 @@ private struct MacDashboardBlockingGroupRow: View {
     /// every enabled group, which said nothing about the present.
     private var barColor: Color {
         switch state {
-        case .lockdown, .blocking: showsBlocking ? MacBrutalPalette.signal : MacBrutalPalette.signal.opacity(0.35)
+        case .lockdown, .blocking, .waiting: showsBlocking ? MacBrutalPalette.signal : MacBrutalPalette.signal.opacity(0.35)
         case .paused: Color.orange
         case .upcoming: MacBrutalPalette.signal.opacity(0.35)
         case .idle, .off: MacBrutalPalette.raisedSurface

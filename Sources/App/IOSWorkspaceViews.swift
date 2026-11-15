@@ -336,7 +336,8 @@ struct IOSDashboardView: View {
             let state = GroupNowStatus.evaluate(
                 isEnabled: rule.isEnabled, windows: rule.windows, now: now,
                 allowanceUntil: model.activeTimeAllowance(for: rule.id)?.expiresAt,
-                lockdownUntil: model.lockdownExpirations[rule.id]
+                lockdownUntil: model.lockdownExpirations[rule.id],
+                accessOpensAt: model.pendingTimeAllowance(for: rule.id)?.opensAt
             )
             subjects.append(GroupCoverage.Subject(
                 id: rule.id,
@@ -356,7 +357,8 @@ struct IOSDashboardView: View {
             windows: group.timeWindow.effectiveBlockingSlots(),
             now: now,
             allowanceUntil: model.activeTimeAllowance(for: group.id)?.expiresAt,
-            lockdownUntil: model.lockdownExpirations[group.id]
+            lockdownUntil: model.lockdownExpirations[group.id],
+            accessOpensAt: model.pendingTimeAllowance(for: group.id)?.opensAt
         )
     }
 
@@ -376,7 +378,7 @@ struct IOSDashboardView: View {
     private func rowColor(_ state: GroupNowState) -> Color {
         switch state {
         // Without Screen Time access nothing is held, so the row must not look live.
-        case .lockdown, .blocking: model.isAuthorized ? IOSBrutalPalette.signal : IOSBrutalPalette.signal.opacity(0.35)
+        case .lockdown, .blocking, .waiting: model.isAuthorized ? IOSBrutalPalette.signal : IOSBrutalPalette.signal.opacity(0.35)
         case .paused: .orange
         case .upcoming: IOSBrutalPalette.signal.opacity(0.35)
         case .idle, .off: IOSBrutalPalette.raised

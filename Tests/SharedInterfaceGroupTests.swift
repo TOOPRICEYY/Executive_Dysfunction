@@ -162,4 +162,23 @@ final class SharedInterfaceGroupTests: XCTestCase {
         // A new retreat has nothing stored to keep.
         XCTAssertEqual(SharedInterfaceInstant.keepingStored(sentEnd, stored: nil), sentEnd)
     }
+
+    func testWaitMinutesTravelsValidatesAndIsLeftAloneWhenAbsent() throws {
+        var original = group()
+        original.modificationPolicy.allowsTimeExtensions = true
+        original.modificationPolicy.setTemporaryAccessWait(minutes: 20)
+        var dto = SharedInterfaceGroup(original)
+        XCTAssertEqual(dto.temporaryPolicy.waitMinutes, 20)
+        dto.temporaryPolicy.waitMinutes = 45
+        XCTAssertEqual(try dto.merging(into: original).modificationPolicy.effectiveTemporaryAccessWaitMinutes, 45)
+        dto.temporaryPolicy.waitMinutes = nil
+        XCTAssertEqual(try dto.merging(into: original).modificationPolicy.effectiveTemporaryAccessWaitMinutes, 20,
+                       "A screen that does not know the field leaves it alone")
+        dto.temporaryPolicy.waitMinutes = 1_441
+        XCTAssertThrowsError(try dto.merging(into: original))
+        dto.temporaryPolicy.waitMinutes = -1
+        XCTAssertThrowsError(try dto.merging(into: original))
+        dto.temporaryPolicy.waitMinutes = 0
+        XCTAssertNil(try dto.merging(into: original).modificationPolicy.temporaryAccessWaitMinutes)
+    }
 }

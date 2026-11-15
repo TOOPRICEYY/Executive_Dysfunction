@@ -50,6 +50,12 @@ struct BypassEvent: Codable, Equatable, Identifiable, Sendable {
     var intent: Intent? = nil
     /// The user's answer to the reflection question, when one was asked.
     var reflection: String? = nil
+    /// When access actually opened or opens, after the group's wait. Nil
+    /// means at `grantedAt`. `grantedAt` stays the grant (passage) instant.
+    var opensAt: Date? = nil
+
+    /// When the access this event bought starts.
+    var startedAt: Date { max(grantedAt, opensAt ?? grantedAt) }
 
     /// Synthetic group for events that affect every web rule at once.
     static let allWebBlocksGroupID = UUID(uuidString: "00000000-0000-0000-0000-00000000E0E0")!

@@ -12,7 +12,11 @@ struct SharedInterfaceGroup: Codable {
     struct Budget: Codable { var dailyMinutes: Int?; var weeklyMinutes: Int? }
     struct DomainCategory: Codable { var domain: String; var category: String; var source: String }
     struct OtherTargets: Codable { var windowsPaths: [String]; var windowsPublishers: [String] }
-    struct Temporary: Codable { var allowed: Bool; var words: Int; var maximumMinutes: Int; var resetDays: Int? }
+    struct Temporary: Codable {
+        var allowed: Bool; var words: Int; var maximumMinutes: Int; var resetDays: Int?
+        /// Minutes access stays closed after the passage. Absent: unchanged.
+        var waitMinutes: Int? = nil
+    }
     var id: UUID
     var name: String
     var enabled: Bool
@@ -57,7 +61,8 @@ struct SharedInterfaceGroup: Codable {
                              windowsPublishers: (group.targets?.windowsPublisherRules ?? []).sorted())
         #endif
         temporaryPolicy = .init(allowed: p.allowsTimeExtensions, words: p.effectiveTemporaryAccessPassageWordCount,
-                                maximumMinutes: p.effectiveMaximumTemporaryAccessMinutes, resetDays: p.temporaryAllowanceResetDays)
+                                maximumMinutes: p.effectiveMaximumTemporaryAccessMinutes, resetDays: p.temporaryAllowanceResetDays,
+                                waitMinutes: p.effectiveTemporaryAccessWaitMinutes)
     }
 
     func merging(into existing: CloudBlockingGroup?) throws -> CloudBlockingGroup {
@@ -69,6 +74,8 @@ struct SharedInterfaceGroup: Codable {
         try check((20...300).contains(temporaryPolicy.words) && (1...480).contains(temporaryPolicy.maximumMinutes),
                   "Choose a temporary-access maximum between one minute and eight hours.")
         try check(temporaryPolicy.resetDays.map { (1...365).contains($0) } ?? true, "Invalid backoff reset interval.")
+        try check(temporaryPolicy.waitMinutes.map { TemporaryAccessWait.range.contains($0) } ?? true,
+                  "Choose a wait before access opens between 0 minutes and 24 hours.")
         try check(["block", "allow"].contains(schedule.mode) && schedule.slots.count <= 128, "Invalid schedule.")
         for slot in schedule.slots {
             try check(!slot.weekdays.isEmpty && slot.weekdays.allSatisfy { (1...7).contains($0) }
@@ -141,6 +148,7 @@ struct SharedInterfaceGroup: Codable {
         group.modificationPolicy.allowsTimeExtensions = temporaryPolicy.allowed
         group.modificationPolicy.setMaximumTemporaryAccess(minutes: temporaryPolicy.maximumMinutes)
         group.modificationPolicy.temporaryAllowanceResetDays = temporaryPolicy.resetDays
+        if let wait = temporaryPolicy.waitMinutes { group.modificationPolicy.setTemporaryAccessWait(minutes: wait) }
         // Preserve inheritance when it has not actually changed. Re-encoding a
         // legacy policy is not a user request to pin a formerly inherited value.
         if temporaryPolicy.words != existing?.modificationPolicy.effectiveTemporaryAccessPassageWordCount || existing == nil {

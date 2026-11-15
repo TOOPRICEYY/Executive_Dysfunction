@@ -117,6 +117,38 @@ final class SharedInterfaceSession: ObservableObject {
         return model.activeTimeAllowance(for: id)?.expiresAt
         #endif
     }
+    /// When a granted pause still inside its wait opens. The UI shows this;
+    /// it never decides enforcement from it.
+    private func accessOpens(_ id: UUID) -> Date? {
+        #if os(macOS)
+        return model.pendingTemporaryPause(for: id)?.opensAt
+        #else
+        return model.pendingTimeAllowance(for: id)?.opensAt
+        #endif
+    }
+    private func livePause(_ id: UUID) -> RuleTimeAllowance? {
+        #if os(macOS)
+        return model.liveTemporaryPause(for: id)
+        #else
+        return model.liveTimeAllowance(for: id)
+        #endif
+    }
+    /// What the person is committing to, said before they type the passage,
+    /// and a refusal up front when a request could not be granted anyway.
+    private func accessDetail(_ id: UUID, _ duration: TemporaryAccessDuration) throws -> String? {
+        let wait = model.temporaryAccessWaitMinutes(for: id)
+        let existing = livePause(id)
+        let now = Date()
+        if case let .refused(endsAt) = TimeAllowancePolicy.timing(existing: existing, duration: duration, waitMinutes: wait, now: now) {
+            throw SharedInterfaceError("Access is already scheduled. Request more after it ends at \(endsAt.formatted(date: .omitted, time: .shortened)).")
+        }
+        guard wait > 0 else { return nil }
+        let typing = "Type the passage. You have 30 minutes; a policy change invalidates it."
+        if let existing, existing.isActive(at: now) {
+            return "These \(duration.title) extend access already scheduled to end at \(existing.expiresAt.formatted(date: .omitted, time: .shortened)). \(typing)"
+        }
+        return "Access opens \(TemporaryAccessWait.describe(minutes: wait).lowercased()) after you finish the passage, then lasts \(duration.title). Blocking continues until then, and you can cancel before it opens. \(typing)"
+    }
     private static let policyKinds = ["none": "none", "passageOnly": "passage", "delayed": "delay", "repeatedConfirmations": "checkpoints"]
     /// The models report sync as a sentence; the shared contract needs a state as well.
     static func syncState(_ status: String) -> String {
@@ -139,7 +171,8 @@ final class SharedInterfaceSession: ObservableObject {
         for rule in liveRules where seen.insert(rule.id).inserted {
             let state = GroupNowStatus.evaluate(
                 isEnabled: rule.isEnabled, windows: rule.windows, now: now,
-                allowanceUntil: pause(rule.id), lockdownUntil: model.lockdownExpirations[rule.id]
+                allowanceUntil: pause(rule.id), lockdownUntil: model.lockdownExpirations[rule.id],
+                accessOpensAt: accessOpens(rule.id)
             )
             subjects.append(GroupCoverage.Subject(
                 id: rule.id,
@@ -181,6 +214,7 @@ final class SharedInterfaceSession: ObservableObject {
         case .paused: name = "paused"
         case .blocking: name = "blocking"
         case .upcoming: name = "upcoming"
+        case .waiting: name = "waiting"
         case .idle: name = "idle"
         case .off: name = "off"
         }
@@ -325,7 +359,8 @@ final class SharedInterfaceSession: ObservableObject {
             #endif
             if passageWords >= 20 { value["temporaryPassageWords"] = passageWords }
             let state = GroupNowStatus.evaluate(isEnabled: group.isEnabled, windows: group.timeWindow.effectiveBlockingSlots(), now: now,
-                allowanceUntil: pause(group.id), lockdownUntil: model.lockdownExpirations[group.id])
+                allowanceUntil: pause(group.id), lockdownUntil: model.lockdownExpirations[group.id],
+                accessOpensAt: accessOpens(group.id))
             let hasWebTargets = !(group.targets?.domains.isEmpty ?? true) || !(group.targets?.websiteCategories.isEmpty ?? true)
             #if os(macOS)
             let hasDeviceTargets = hasWebTargets || !(group.targets?.macApplicationIdentifiers.isEmpty ?? true)
@@ -338,7 +373,7 @@ final class SharedInterfaceSession: ObservableObject {
             case .off: status = "disabled"
             case .paused: status = "suspended"
             case .lockdown: status = blockingConfirmed && hasDeviceTargets ? "lockdown" : "unsupported"
-            case .blocking: status = blockingConfirmed && hasDeviceTargets ? "blocking" : "unsupported"
+            case .blocking, .waiting: status = blockingConfirmed && hasDeviceTargets ? "blocking" : "unsupported"
             default: status = "allowed"
             }
             value["status"] = status
@@ -368,6 +403,7 @@ final class SharedInterfaceSession: ObservableObject {
             }
             summaryGroups.append(.init(name: group.name, state: state))
             if let until = pause(group.id) { value["suspendedUntil"] = iso(until) }
+            if let opens = accessOpens(group.id) { value["accessOpensAt"] = iso(opens) }
             #if os(iOS)
             let s = model.selectionForBlockingGroup(group)
             value["applicationSummary"] = "\(s.applicationTokens.count) apps · \(s.categoryTokens.count) categories · \(s.webDomainTokens.count) Screen Time websites"
@@ -377,7 +413,8 @@ final class SharedInterfaceSession: ObservableObject {
         var seenLive = Set<UUID>()
         let retreatGroups: [[String: Any]] = liveRules.filter { !baselineIDs.contains($0.id) && seenLive.insert($0.id).inserted }.map { rule in
             let state = GroupNowStatus.evaluate(isEnabled: rule.isEnabled, windows: rule.windows, now: now,
-                allowanceUntil: pause(rule.id), lockdownUntil: model.lockdownExpirations[rule.id])
+                allowanceUntil: pause(rule.id), lockdownUntil: model.lockdownExpirations[rule.id],
+                accessOpensAt: accessOpens(rule.id))
             summaryGroups.append(.init(name: rule.name, state: state))
             var value: [String: Any] = ["id": rule.id.uuidString, "name": rule.name,
                     "now": nowObject(state, now: now, coveredBy: coverage[rule.id]),
@@ -392,7 +429,8 @@ final class SharedInterfaceSession: ObservableObject {
             value["temporaryPolicy"] = ["allowed": p.allowsTimeExtensions,
                 "words": min(300, max(20, p.effectiveTemporaryAccessPassageWordCount)),
                 "maximumMinutes": min(1440, max(1, p.effectiveMaximumTemporaryAccessMinutes)),
-                "resetDays": p.temporaryAllowanceResetDays.map { min(365, max(1, $0)) } ?? NSNull()] as [String: Any]
+                "resetDays": p.temporaryAllowanceResetDays.map { min(365, max(1, $0)) } ?? NSNull(),
+                "waitMinutes": p.effectiveTemporaryAccessWaitMinutes] as [String: Any]
             let passageWords = model.timeAllowancePassageWordCount(for: rule.id)
             if passageWords >= 20 { value["temporaryPassageWords"] = min(38_400, passageWords) }
             #endif
@@ -424,7 +462,7 @@ final class SharedInterfaceSession: ObservableObject {
         }
         let events: [[String: Any]] = BypassHistoryStore.read(defaults: historyDefaults).document.events.map { event in
             return ["id": event.id.uuidString, "groupID": event.groupID.uuidString, "groupName": event.groupName,
-                "startedAt": iso(event.grantedAt), "endsAt": iso(event.expiresAt), "reason": event.intent == nil ? "unspecified" : event.intent == .consciousIntervention ? "conscious" : "edulgence"]
+                "startedAt": iso(event.startedAt), "endsAt": iso(event.expiresAt), "reason": event.intent == nil ? "unspecified" : event.intent == .consciousIntervention ? "conscious" : "edulgence"]
         }
         var capabilities = ["editGroups", "temporaryAccess", "pickApplications", "retreats", "lockdown", "diagnostics", "enforcementControl",
             "appearance", "presets", "lockdownForm", "diagnosticsReport", "retreatForm", "groupDetails", "cancelUnlock", "retreatChanges",
@@ -978,7 +1016,8 @@ final class SharedInterfaceSession: ObservableObject {
                 guard model.lockdownExpirations[id] == nil, model.availableTemporaryAccessDurations(for: id).contains(duration) else { throw SharedInterfaceError("This group cannot grant that temporary allowance.") }
                 let words = model.timeAllowancePassageWordCount(for: id)
                 #endif
-                return try issue(title: "Temporary access", passage: CommitmentPassage.generate(wordCount: words)) { [weak self] _ in
+                let detail = try accessDetail(id, duration)
+                return try issue(title: "Temporary access", passage: CommitmentPassage.generate(wordCount: words), detail: detail) { [weak self] _ in
                     guard let self else { throw SharedInterfaceError("The window was closed.") }
                     #if os(macOS)
                     guard model.pausePassageWordCount(for: id) == words else { throw SharedInterfaceError("The required passage changed. Request it again.") }
@@ -1065,7 +1104,8 @@ final class SharedInterfaceSession: ObservableObject {
             }
             let intent: BypassEvent.Intent = reason == "conscious" ? .consciousIntervention : .eDulgance
             let words = model.timeAllowancePassageWordCount(for: groupID)
-            return try issue(title: "Temporary access", passage: CommitmentPassage.generate(wordCount: words)) { [weak self] _ in
+            let detail = try accessDetail(groupID, duration)
+            return try issue(title: "Temporary access", passage: CommitmentPassage.generate(wordCount: words), detail: detail) { [weak self] _ in
                 guard let self else { throw SharedInterfaceError("The window was closed.") }
                 guard model.timeAllowancePassageWordCount(for: groupID) == words else { throw SharedInterfaceError("The required passage changed. Request it again.") }
                 try ensure(model.grantPendingTemporaryAccess(requestID: requestID, for: groupID, duration: duration,
