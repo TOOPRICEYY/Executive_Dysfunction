@@ -22,7 +22,8 @@ extension TemporaryAccessLedger {
                 // Never earlier than this device's own wait from the moment
                 // the grant was made, nor later than a day after it.
                 let ownWait = Double(TemporaryAccessWait.clamped(waitMinutes[rule] ?? 0)) * 60
-                let floor = latest.updatedAt.addingTimeInterval(ownWait)
+                let floor = Self.wholeSecondCeiling(Self.pendingGrantOrigin(of: latest, opening: opening)
+                    .addingTimeInterval(ownWait))
                 guard opening <= latest.updatedAt.addingTimeInterval(Double(TemporaryAccessWait.range.upperBound) * 60 + 5) else {
                     result[rule] = nil
                     continue
@@ -46,6 +47,26 @@ extension TemporaryAccessLedger {
         }
         return result
     }
+
+    /// The moment a pending grant was made, from which a receiver measures its
+    /// own wait. A record without `pendingGrantedAt` (an older writer) uses
+    /// its write time, as before. A claimed origin is never earlier than the
+    /// opening less the longest wait (and one second of the writer's
+    /// rounding): no wait can have started before that, and it is the same
+    /// bound the "opens more than a day after the write" check already puts on
+    /// `updatedAt`, so this field cannot move a floor further into the past
+    /// than a record's own write time could. A later claim only opens later.
+    static func pendingGrantOrigin(of entry: TemporaryAccessContribution, opening: Date) -> Date {
+        guard let claimed = entry.pendingGrantedAt else { return entry.updatedAt }
+        let earliest = opening.addingTimeInterval(-(Double(TemporaryAccessWait.range.upperBound) * 60 + 1))
+        return max(claimed, earliest)
+    }
+
+    /// Screen Time schedules at whole seconds and truncates, so a floor is
+    /// rounded up: the monitor can never start a fraction before it.
+    static func wholeSecondCeiling(_ date: Date) -> Date {
+        Date(timeIntervalSince1970: date.timeIntervalSince1970.rounded(.up))
+    }
 }
 
 extension ICloudTemporaryAccessStore {
@@ -55,6 +76,13 @@ extension ICloudTemporaryAccessStore {
     /// it: its `pauseEndsAt` is `now`, which such a reader treats as no pause,
     /// while the real window travels in `pauseOpensAt` / `pendingPauseEndsAt`.
     /// The spend (minutes, backoff) is charged now, as for an open grant.
+    ///
+    /// `pendingGrantedAt` stays at the session's first pending write while
+    /// the grant is extended, so receivers measure their wait from the grant,
+    /// not from the extension. It is carried over only from this device's own
+    /// pending entry with the identical opening: a new session (after expiry
+    /// or cancellation, both of which overwrite that entry) opens later than
+    /// any earlier one, so it always gets a fresh origin.
     @discardableResult
     func record(
         rule: UUID,
@@ -64,6 +92,14 @@ extension ICloudTemporaryAccessStore {
         at now: Date = Date()
     ) -> TemporaryAccessLedger {
         let pending = allowance?.isPending(at: now) == true
+        var grantedAt: Date? = nil
+        if pending {
+            grantedAt = now
+            if let own = load().contributions[TemporaryAccessLedger.key(rule: rule, device: deviceID)],
+               own.isPendingRecord, let opening = own.pauseOpensAt, opening == allowance?.opensAt {
+                grantedAt = min(now, own.pendingGrantedAt ?? own.updatedAt)
+            }
+        }
         return record(TemporaryAccessContribution(
             deviceID: deviceID,
             ruleID: rule,
@@ -74,7 +110,8 @@ extension ICloudTemporaryAccessStore {
             updatedAt: now,
             sessionGrantCount: allowance?.grantCount,
             pauseOpensAt: pending ? allowance?.opensAt : nil,
-            pendingPauseEndsAt: pending ? allowance?.expiresAt : nil
+            pendingPauseEndsAt: pending ? allowance?.expiresAt : nil,
+            pendingGrantedAt: grantedAt
         ), at: now)
     }
 }

@@ -101,6 +101,38 @@ final class TemporaryAccessLedgerTests: XCTestCase {
             maximumMinutes: [rule: 60], waitMinutes: [:], at: now)[rule])
     }
 
+    /// Without `pendingGrantedAt` (an older writer) the write time is the
+    /// origin, as before; a claimed origin can never reach further back than
+    /// the longest wait before the opening.
+    func testPendingOriginFallsBackToTheWriteAndIsBounded() throws {
+        var legacy = TemporaryAccessLedger()
+        var entry = pendingContribution(opensIn: 3_000, lasts: 3_600, minutes: 60)
+        entry.updatedAt = now.addingTimeInterval(600)
+        legacy.record(entry)
+        let fromWrite = try XCTUnwrap(legacy.applyingSharedPauses(to: [:], device: phone,
+            maximumMinutes: [rule: 60], waitMinutes: [rule: 60], at: now.addingTimeInterval(600))[rule])
+        XCTAssertEqual(fromWrite.opensAt, now.addingTimeInterval(4_200), "Measured from the write, conservatively")
+
+        var forged = TemporaryAccessLedger()
+        entry.pendingGrantedAt = now.addingTimeInterval(-10 * 86_400)
+        forged.record(entry)
+        let opening = now.addingTimeInterval(3_000)
+        XCTAssertEqual(TemporaryAccessLedger.pendingGrantOrigin(of: entry, opening: opening),
+                       opening.addingTimeInterval(-86_401))
+        let bounded = try XCTUnwrap(forged.applyingSharedPauses(to: [:], device: phone,
+            maximumMinutes: [rule: 60], waitMinutes: [rule: 1_440], at: now.addingTimeInterval(600))[rule])
+        XCTAssertEqual(bounded.opensAt, opening, "Never before the writer's own opening")
+
+        // A fractional origin rounds the receiver's floor up to a whole second.
+        var fractional = TemporaryAccessLedger()
+        var late = pendingContribution(opensIn: 60, lasts: 3_600, minutes: 60)
+        late.pendingGrantedAt = now.addingTimeInterval(0.4)
+        fractional.record(late)
+        let rounded = try XCTUnwrap(fractional.applyingSharedPauses(to: [:], device: phone,
+            maximumMinutes: [rule: 60], waitMinutes: [rule: 30], at: now)[rule])
+        XCTAssertEqual(rounded.opensAt, now.addingTimeInterval(1_801))
+    }
+
     private let rule = UUID()
     private let mac = UUID()
     private let phone = UUID()
@@ -384,5 +416,63 @@ final class ICloudTemporaryAccessStoreTests: XCTestCase {
         let replica = store.reconcile(at: now)
 
         XCTAssertEqual(replica.committedMinutes(forRule: rule, excluding: store.deviceID, at: now), 0)
+    }
+
+    // MARK: - Pending grant origin
+
+    private func pending(opensIn: TimeInterval, endsIn: TimeInterval, minutes: Int, grants: Int) -> RuleTimeAllowance {
+        RuleTimeAllowance(ruleID: rule, expiresAt: now.addingTimeInterval(endsIn), totalMinutesGranted: minutes,
+                          grantCount: grants, restoreUsageShield: false, opensAt: now.addingTimeInterval(opensIn))
+    }
+
+    /// A 60-minute wait granted at 12:00 opens at 13:00. Extended at 12:10, it
+    /// must still open at 13:00 on another device with the same wait, not 13:10.
+    func testExtendingAPendingGrantKeepsTheReceiversOpening() throws {
+        let cloud = FakeCloud()
+        let mac = ICloudTemporaryAccessStore(ledger: InMemoryKeyValueLedger(), cloud: cloud)
+        let phone = ICloudTemporaryAccessStore(ledger: InMemoryKeyValueLedger(), cloud: cloud)
+        mac.record(rule: rule, allowance: pending(opensIn: 3_600, endsIn: 5_400, minutes: 30, grants: 1),
+                   backoffGrants: 1, backoffStartedAt: now, at: now)
+        let extendedAt = now.addingTimeInterval(600)
+        mac.record(rule: rule, allowance: pending(opensIn: 3_600, endsIn: 6_000, minutes: 40, grants: 2),
+                   backoffGrants: 2, backoffStartedAt: now, at: extendedAt)
+        let seen = phone.reconcile(at: extendedAt)
+        let entry = try XCTUnwrap(seen.contributions[TemporaryAccessLedger.key(rule: rule, device: mac.deviceID)])
+        XCTAssertEqual(entry.updatedAt, extendedAt)
+        XCTAssertEqual(entry.pendingGrantedAt, now, "The extension keeps the grant's origin")
+        XCTAssertLessThanOrEqual(entry.pauseEndsAt, extendedAt, "Older readers still see no pause")
+        let imported = try XCTUnwrap(seen.applyingSharedPauses(to: [:], device: phone.deviceID,
+            maximumMinutes: [rule: 60], waitMinutes: [rule: 60], at: extendedAt)[rule])
+        XCTAssertEqual(imported.opensAt, now.addingTimeInterval(3_600), "Same opening as the granting device")
+        XCTAssertEqual(imported.expiresAt, now.addingTimeInterval(6_000))
+        // A receiver with a longer wait still waits its own full wait from the grant.
+        let stricter = try XCTUnwrap(seen.applyingSharedPauses(to: [:], device: phone.deviceID,
+            maximumMinutes: [rule: 60], waitMinutes: [rule: 90], at: extendedAt)[rule])
+        XCTAssertEqual(stricter.opensAt, now.addingTimeInterval(5_400))
+    }
+
+    /// A new grant after the previous one ended, or after a cancellation,
+    /// starts a fresh origin and so a fresh wait on the receiver.
+    func testANewGrantGetsAFreshOrigin() throws {
+        let cloud = FakeCloud()
+        let mac = ICloudTemporaryAccessStore(ledger: InMemoryKeyValueLedger(), cloud: cloud)
+        mac.record(rule: rule, allowance: pending(opensIn: 600, endsIn: 1_200, minutes: 10, grants: 1),
+                   backoffGrants: 1, backoffStartedAt: now, at: now)
+        // The first ended at +1200; a new one is granted at +1500.
+        let later = now.addingTimeInterval(1_500)
+        mac.record(rule: rule, allowance: pending(opensIn: 2_100, endsIn: 2_700, minutes: 10, grants: 1),
+                   backoffGrants: 2, backoffStartedAt: now, at: later)
+        let key = TemporaryAccessLedger.key(rule: rule, device: mac.deviceID)
+        XCTAssertEqual(mac.load().contributions[key]?.pendingGrantedAt, later)
+        // Cancelled, then granted again with an opening that happens to match.
+        mac.releasePause(rule: rule, backoffGrants: 2, backoffStartedAt: now, at: later.addingTimeInterval(1))
+        let again = later.addingTimeInterval(2)
+        mac.record(rule: rule, allowance: pending(opensIn: 2_100, endsIn: 2_700, minutes: 10, grants: 1),
+                   backoffGrants: 3, backoffStartedAt: now, at: again)
+        XCTAssertEqual(mac.load().contributions[key]?.pendingGrantedAt, again)
+        // An opened grant carries no origin at all.
+        mac.record(rule: rule, allowance: pending(opensIn: 2_100, endsIn: 2_700, minutes: 10, grants: 1),
+                   backoffGrants: 3, backoffStartedAt: now, at: now.addingTimeInterval(2_200))
+        XCTAssertNil(mac.load().contributions[key]?.pendingGrantedAt)
     }
 }

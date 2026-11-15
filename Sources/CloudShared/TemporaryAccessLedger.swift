@@ -27,6 +27,12 @@ struct TemporaryAccessContribution: Codable, Equatable, Sendable {
     /// (these nil, `pauseEndsAt` the real end), which older builds then open.
     var pauseOpensAt: Date? = nil
     var pendingPauseEndsAt: Date? = nil
+    /// When the pending grant was first made on the writing device. Extending
+    /// a pending grant keeps its opening but rewrites `updatedAt`, so a
+    /// receiver measuring its own wait from `updatedAt` would open later than
+    /// the granting device. Readers bound it (see `applyingSharedPauses`) and
+    /// fall back to `updatedAt` when it is absent, as from a build before it.
+    var pendingGrantedAt: Date? = nil
 
     /// When this device's pause ends, pending or open.
     var effectivePauseEndsAt: Date {
