@@ -126,7 +126,18 @@ enum SharedConfiguration {
         }
     }
 
+    /// The allowance whose access is OPEN at `date`. Every shield decision
+    /// uses this, so a grant still inside its wait keeps the group blocked.
     static func activeTimeAllowance(for ruleID: UUID, at date: Date = Date()) -> RuleTimeAllowance? {
+        guard let allowance = loadRuleTimeAllowances()[ruleID], allowance.isOpen(at: date) else {
+            return nil
+        }
+        return allowance
+    }
+
+    /// The allowance that exists at `date`, pending or open. For bookkeeping
+    /// only: session spend, passage growth, monitors and cancellation.
+    static func liveTimeAllowance(for ruleID: UUID, at date: Date = Date()) -> RuleTimeAllowance? {
         guard let allowance = loadRuleTimeAllowances()[ruleID], allowance.isActive(at: date) else {
             return nil
         }

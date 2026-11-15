@@ -17,7 +17,11 @@ import {
 } from "./controls.ts";
 import { websiteCategories, type DomainCategory } from "./contract.ts";
 import { duration } from "./view-format.ts";
-import { temporaryPassageDescription } from "./temporary-passage.ts";
+import {
+  accessTimingDescription,
+  temporaryPassageDescription,
+  waitMinutes,
+} from "./temporary-passage.ts";
 
 export function newGroup(): Group {
   return {
@@ -36,6 +40,7 @@ export function newGroup(): Group {
       words: 40,
       maximumMinutes: 60,
       resetDays: null,
+      waitMinutes: 0,
     },
   };
 }
@@ -786,6 +791,21 @@ export function GroupEditor({
               title="Temporary access"
               subtitle="Pause this group for a set time. Blocking resumes automatically, even if Holdfast is closed."
             >
+              {current.accessOpensAt && !current.suspendedUntil && (
+                <div className="list-row access-pending" data-access-pending>
+                  <span>
+                    <strong>
+                      Access opens at {duration(current.accessOpensAt)}
+                    </strong>
+                    <small>Still blocking until then.</small>
+                  </span>
+                  {onResume && (
+                    <button type="button" disabled={busy} onClick={onResume}>
+                      Cancel request
+                    </button>
+                  )}
+                </div>
+              )}
               {current.suspendedUntil && (
                 <div className="list-row">
                   <span>
@@ -820,7 +840,7 @@ export function GroupEditor({
                       disabled={busy}
                       onClick={onAccess}
                     >
-                      {current.suspendedUntil
+                      {current.suspendedUntil || current.accessOpensAt
                         ? "Extend pause…"
                         : "Disable temporarily…"}
                     </button>
@@ -1020,6 +1040,27 @@ export function GroupEditor({
                       })
                     }
                   />
+                  <NumberField
+                    label="Wait before access opens (minutes)"
+                    value={waitMinutes(draft.temporaryPolicy)}
+                    min={0}
+                    max={1440}
+                    onChange={(minutes) =>
+                      patch({
+                        temporaryPolicy: {
+                          ...draft.temporaryPolicy,
+                          waitMinutes: Math.min(1440, Math.max(0, minutes)),
+                        },
+                      })
+                    }
+                  />
+                  <small className="field-note" data-wait-note>
+                    {waitMinutes(draft.temporaryPolicy)
+                      ? accessTimingDescription(draft.temporaryPolicy)
+                      : "No wait: access opens as soon as the passage is accepted. 0 means no wait."}
+                    {!current.canEdit &&
+                      " A longer wait can be saved now; a shorter one needs this group unlocked first."}
+                  </small>
                   <label className="check">
                     <input
                       type="checkbox"

@@ -112,6 +112,43 @@ function LockChip({
 export function GroupRow({
   group: g,
   note,
+  busy,
+  onEdit,
+  onCancelAccess,
+}: {
+  group: Group;
+  note?: UnenforcedNote;
+  busy?: boolean;
+  onEdit(): void;
+  /** Cancels granted access still inside its wait (`cancelTemporaryAccess`). */
+  onCancelAccess?: () => void;
+}) {
+  // Granted access inside its wait: the row stays a blocking row, and the
+  // pending access is a secondary line with its own cancel action beside the
+  // row (a button cannot sit inside the row's button).
+  const pending = !!g.accessOpensAt && !g.suspendedUntil;
+  const row = <GroupRowButton group={g} note={note} onEdit={onEdit} />;
+  if (!pending) return row;
+  return (
+    <div className="row-with-pending" data-group-pending={g.id}>
+      {row}
+      <div className="row-pending" role="status">
+        <span>
+          Access requested · opens at {duration(g.accessOpensAt!)}. Blocking
+          until then.
+        </span>
+        {onCancelAccess && (
+          <button type="button" disabled={busy} onClick={onCancelAccess}>
+            Cancel request
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+function GroupRowButton({
+  group: g,
+  note,
   onEdit,
 }: {
   group: Group;
@@ -729,6 +766,7 @@ export function Dashboard({
   onEnforcement,
   onAction,
   onDiagnostics,
+  onCancelAccess,
   controlsOpen,
   setControlsOpen,
 }: {
@@ -744,6 +782,7 @@ export function Dashboard({
   onEnforcement?: () => void;
   onAction?: (id: string) => void;
   onDiagnostics?: () => void;
+  onCancelAccess?: (groupID: string) => void;
   controlsOpen: boolean;
   setControlsOpen(v: boolean): void;
 }) {
@@ -807,7 +846,11 @@ export function Dashboard({
                 key={g.id}
                 group={g}
                 note={note}
+                busy={busy}
                 onEdit={() => edit(g)}
+                onCancelAccess={
+                  onCancelAccess ? () => onCancelAccess(g.id) : undefined
+                }
               />
             ))}
           {retreatGroups

@@ -105,6 +105,13 @@ struct RuleLockdownPolicy: Codable, Equatable {
     /// The session maximum in minutes. Optional so a rule compiled before
     /// minutes existed still decodes against the hour field above.
     var maximumTemporaryAccessMinutes: Int? = nil
+    /// Minutes temporary access stays closed after the passage is accepted,
+    /// 0...1440. Nil means no wait, which is every rule written before it.
+    var temporaryAccessWaitMinutes: Int? = nil
+
+    var effectiveTemporaryAccessWaitMinutes: Int {
+        min(1440, max(0, temporaryAccessWaitMinutes ?? 0))
+    }
 
     var effectiveTemporaryAccessPassageWordCount: Int {
         min(300, max(20, temporaryAccessPassageWordCount ?? passageWordCount))
@@ -150,6 +157,10 @@ extension RuleLockdownPolicy {
         case allowsTimeExtensions, maximumTimeExtensionHours
         case temporaryAllowanceResetDays
         case temporaryAccessPassageWordCount
+        // Both are persisted: a rule reloaded from disk (by the app or an
+        // extension) must keep its maximum and, above all, its wait.
+        case maximumTemporaryAccessMinutes
+        case temporaryAccessWaitMinutes
     }
 
     init(from decoder: Decoder) throws {
@@ -163,6 +174,9 @@ extension RuleLockdownPolicy {
         maximumTimeExtensionHours = try values.decodeIfPresent(Int.self, forKey: .maximumTimeExtensionHours) ?? 3
         temporaryAllowanceResetDays = try values.decodeIfPresent(Int.self, forKey: .temporaryAllowanceResetDays).map { min(365, max(1, $0)) }
         temporaryAccessPassageWordCount = try values.decodeIfPresent(Int.self, forKey: .temporaryAccessPassageWordCount).map { min(300, max(20, $0)) }
+        maximumTemporaryAccessMinutes = try values.decodeIfPresent(Int.self, forKey: .maximumTemporaryAccessMinutes).map { min(480, max(1, $0)) }
+        temporaryAccessWaitMinutes = try values.decodeIfPresent(Int.self, forKey: .temporaryAccessWaitMinutes)
+            .map { min(1440, max(0, $0)) }.flatMap { $0 == 0 ? nil : $0 }
     }
 }
 
@@ -206,6 +220,11 @@ struct RuleTimeAllowance: Codable, Equatable {
     /// A usage-threshold shield was active when the allowance began or fired
     /// during it, and must be restored when the allowance expires.
     var restoreUsageShield: Bool
+    /// When access opens. Nil means it opened when granted, which is every
+    /// record written before waits existed. Until then the grant is pending:
+    /// the record exists (and counts against the session) but enforcement
+    /// must treat the group as blocked.
+    var opensAt: Date? = nil
 
     init(
         ruleID: UUID,
@@ -227,7 +246,8 @@ struct RuleTimeAllowance: Codable, Equatable {
         expiresAt: Date,
         totalMinutesGranted: Int,
         grantCount: Int,
-        restoreUsageShield: Bool
+        restoreUsageShield: Bool,
+        opensAt: Date? = nil
     ) {
         let count = max(0, grantCount)
         self.ruleID = ruleID
@@ -236,11 +256,13 @@ struct RuleTimeAllowance: Codable, Equatable {
         self.totalMinutesGranted = max(0, totalMinutesGranted)
         self.grantCount = count
         self.restoreUsageShield = restoreUsageShield
+        self.opensAt = opensAt
     }
 
     private enum CodingKeys: String, CodingKey {
         case ruleID, expiresAt, incrementsGranted
         case totalMinutesGranted, grantCount, restoreUsageShield
+        case opensAt
     }
 
     init(from decoder: Decoder) throws {
@@ -256,9 +278,22 @@ struct RuleTimeAllowance: Codable, Equatable {
                 ?? (legacyCount * 60)
         )
         restoreUsageShield = try values.decodeIfPresent(Bool.self, forKey: .restoreUsageShield) ?? false
+        opensAt = try values.decodeIfPresent(Date.self, forKey: .opensAt)
     }
 
+    /// The record is live: pending or open. Use for bookkeeping (session
+    /// spend, passage growth, monitors, cancellation), never for enforcement.
     func isActive(at date: Date) -> Bool { date < expiresAt }
+
+    /// Access is open now. The only question enforcement may ask.
+    func isOpen(at date: Date) -> Bool {
+        date < expiresAt && (opensAt.map { date >= $0 } ?? true)
+    }
+
+    /// Granted, still inside its wait.
+    func isPending(at date: Date) -> Bool {
+        date < expiresAt && (opensAt.map { date < $0 } ?? false)
+    }
 
     /// DeviceActivity stores calendar boundaries at whole-second precision.
     /// Accept that boundary even when the persisted expiry has a fraction,
@@ -314,6 +349,47 @@ enum TimeAllowancePolicy {
         maximumMinutes: Int
     ) -> Bool {
         max(0, alreadyGranted) + duration.minutes <= max(0, maximumMinutes)
+    }
+
+    enum GrantTiming: Equatable {
+        /// Access opens at `opensAt` and closes at `expiresAt`.
+        case scheduled(opensAt: Date, expiresAt: Date)
+        /// The new minutes could only start after the existing grant ends,
+        /// and one record cannot hold a gap; the request is refused.
+        case refused(existingEndsAt: Date)
+    }
+
+    /// When a grant opens and ends, given the live grant it would join.
+    ///
+    /// The wait counts from `now` and never shortens: a fresh grant opens at
+    /// `now + wait` (rounded up to a whole second, the precision Screen Time
+    /// schedules at, so a monitor never starts a fraction before the grant
+    /// opens). Joining a live grant keeps its opening unchanged and appends
+    /// the minutes to its end, exactly as an extension always has, provided
+    /// the new minutes' own wait has elapsed by that end. Otherwise access
+    /// would run through time this request's wait should have kept closed, so
+    /// it is refused. With no wait the result is always today's extension.
+    static func timing(
+        existing: RuleTimeAllowance?,
+        duration: TemporaryAccessDuration,
+        waitMinutes: Int,
+        now: Date
+    ) -> GrantTiming {
+        let wait = min(1440, max(0, waitMinutes))
+        var opening = now
+        if wait > 0 {
+            let raw = now.addingTimeInterval(TimeInterval(wait) * 60).timeIntervalSince1970
+            opening = Date(timeIntervalSince1970: raw.rounded(.up))
+        }
+        guard let existing, existing.isActive(at: now) else {
+            return .scheduled(opensAt: opening, expiresAt: opening.addingTimeInterval(duration.seconds))
+        }
+        guard opening <= existing.expiresAt else { return .refused(existingEndsAt: existing.expiresAt) }
+        return .scheduled(
+            // Pending: its opening stands. Open: it is already open.
+            opensAt: existing.opensAt ?? now,
+            expiresAt: existing.expiresAt.addingTimeInterval(duration.seconds)
+        )
     }
 
     /// The first grant uses the base passage. Every consecutive grant doubles it.

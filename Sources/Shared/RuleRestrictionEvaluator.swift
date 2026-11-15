@@ -116,6 +116,10 @@ enum RuleRestrictionEvaluator {
             if newDays < oldDays { reasons.append("The temporary-access passage backoff would be removed or reset sooner.") }
         }
         if existing.lockdownPolicy.allowsTimeExtensions, proposed.lockdownPolicy.allowsTimeExtensions,
+           proposed.lockdownPolicy.effectiveTemporaryAccessWaitMinutes < existing.lockdownPolicy.effectiveTemporaryAccessWaitMinutes {
+            reasons.append("The wait before temporary access opens would shorten from \(existing.lockdownPolicy.effectiveTemporaryAccessWaitMinutes) to \(proposed.lockdownPolicy.effectiveTemporaryAccessWaitMinutes) minutes.")
+        }
+        if existing.lockdownPolicy.allowsTimeExtensions, proposed.lockdownPolicy.allowsTimeExtensions,
            proposed.lockdownPolicy.effectiveTemporaryAccessPassageWordCount < existing.lockdownPolicy.effectiveTemporaryAccessPassageWordCount {
             reasons.append("The temporary-access passage would become shorter.")
         }
@@ -440,7 +444,9 @@ enum RuleRestrictionEvaluator {
         return combine([
             lowerIsStricter(old: old.maximumTimeExtensionHours, new: new.maximumTimeExtensionHours),
             higherIsStricter(old: old.effectiveTemporaryAccessPassageWordCount, new: new.effectiveTemporaryAccessPassageWordCount),
-            higherIsStricter(old: old.temporaryAllowanceResetDays ?? 0, new: new.temporaryAllowanceResetDays ?? 0)
+            higherIsStricter(old: old.temporaryAllowanceResetDays ?? 0, new: new.temporaryAllowanceResetDays ?? 0),
+            // A longer cooling-off period is stricter; shortening it weakens.
+            higherIsStricter(old: old.effectiveTemporaryAccessWaitMinutes, new: new.effectiveTemporaryAccessWaitMinutes)
         ])
     }
 

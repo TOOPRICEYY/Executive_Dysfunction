@@ -779,4 +779,92 @@ extension LockdownTests {
         XCTAssertNil(decoded.unlockCeiling)
         XCTAssertEqual(decoded.unlockDelayDays, 3)
     }
+
+    // MARK: - Access delay
+
+    func testRuleWaitDecodesAsZeroClampsAndIsPersisted() throws {
+        let legacy = try JSONDecoder().decode(RuleLockdownPolicy.self, from: Data(#"{"allowsTimeExtensions":true}"#.utf8))
+        XCTAssertEqual(legacy.effectiveTemporaryAccessWaitMinutes, 0)
+        let huge = try JSONDecoder().decode(RuleLockdownPolicy.self, from: Data(#"{"temporaryAccessWaitMinutes":9999}"#.utf8))
+        XCTAssertEqual(huge.effectiveTemporaryAccessWaitMinutes, 1_440)
+        let negative = try JSONDecoder().decode(RuleLockdownPolicy.self, from: Data(#"{"temporaryAccessWaitMinutes":-5}"#.utf8))
+        XCTAssertEqual(negative.effectiveTemporaryAccessWaitMinutes, 0)
+        // A rule reloaded from disk (by the app or the monitor) keeps its wait
+        // and its minute maximum; losing either would weaken it.
+        let policy = RuleLockdownPolicy(allowsTimeExtensions: true, maximumTemporaryAccessMinutes: 45, temporaryAccessWaitMinutes: 20)
+        let reloaded = try JSONDecoder().decode(RuleLockdownPolicy.self, from: JSONEncoder().encode(policy))
+        XCTAssertEqual(reloaded.effectiveTemporaryAccessWaitMinutes, 20)
+        XCTAssertEqual(reloaded.effectiveMaximumTemporaryAccessMinutes, 45)
+    }
+
+    func testFreshGrantIsPendingUntilItOpensThenOpenUntilItsEnd() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000.4)
+        let timing = TimeAllowancePolicy.timing(existing: nil, duration: .thirtyMinutes, waitMinutes: 10, now: now)
+        guard case let .scheduled(opensAt, expiresAt) = timing else { return XCTFail("Expected a schedule") }
+        XCTAssertEqual(opensAt, Date(timeIntervalSince1970: 1_800_000_601), "now + wait, rounded up to a whole second")
+        XCTAssertGreaterThanOrEqual(opensAt, now.addingTimeInterval(600), "Never early")
+        XCTAssertEqual(expiresAt, opensAt.addingTimeInterval(1_800), "The wait does not shorten the access")
+        let allowance = RuleTimeAllowance(ruleID: UUID(), expiresAt: expiresAt, totalMinutesGranted: 30,
+                                          grantCount: 1, restoreUsageShield: false, opensAt: opensAt)
+        XCTAssertTrue(allowance.isActive(at: now), "The record exists, so it is charged and can be cancelled")
+        XCTAssertTrue(allowance.isPending(at: now))
+        XCTAssertFalse(allowance.isOpen(at: now))
+        XCTAssertFalse(allowance.isOpen(at: opensAt.addingTimeInterval(-0.001)))
+        XCTAssertTrue(allowance.isOpen(at: opensAt))
+        XCTAssertTrue(allowance.isOpen(at: expiresAt.addingTimeInterval(-1)))
+        XCTAssertFalse(allowance.isOpen(at: expiresAt))
+        // Screen Time's interval starts at the opening, so the monitor lifts the
+        // shield then and not before.
+        XCTAssertEqual(RuleScheduler.allowanceInterval(for: allowance, now: now),
+                       DateInterval(start: opensAt, end: expiresAt))
+        let decoded = try JSONDecoder().decode(RuleTimeAllowance.self, from: JSONEncoder().encode(allowance))
+        XCTAssertEqual(decoded.opensAt, opensAt)
+    }
+
+    func testRecordWithoutOpeningIsOpenSinceGrantAsBefore() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let legacy = try JSONDecoder().decode(RuleTimeAllowance.self, from: Data(
+            #"{"ruleID":"11111111-2222-3333-4444-555555555555","expiresAt":\#(now.addingTimeInterval(600).timeIntervalSinceReferenceDate),"incrementsGranted":1}"#.utf8))
+        XCTAssertNil(legacy.opensAt)
+        XCTAssertTrue(legacy.isOpen(at: now))
+        XCTAssertFalse(legacy.isPending(at: now))
+        guard case let .scheduled(opensAt, expiresAt) = TimeAllowancePolicy.timing(
+            existing: nil, duration: .tenMinutes, waitMinutes: 0, now: now) else { return XCTFail() }
+        XCTAssertEqual(opensAt, now)
+        XCTAssertEqual(expiresAt, now.addingTimeInterval(600))
+    }
+
+    func testStackedRequestNeverOpensEarlierAndCannotLeaveAGap() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let opens = now.addingTimeInterval(600)
+        let pending = RuleTimeAllowance(ruleID: UUID(), expiresAt: opens.addingTimeInterval(1_800),
+                                        totalMinutesGranted: 30, grantCount: 1, restoreUsageShield: false, opensAt: opens)
+        // Two minutes later, another ten minutes: its own wait ends before the
+        // scheduled access does, so it joins on the end and the opening stays.
+        let later = now.addingTimeInterval(120)
+        XCTAssertEqual(TimeAllowancePolicy.timing(existing: pending, duration: .tenMinutes, waitMinutes: 10, now: later),
+                       .scheduled(opensAt: opens, expiresAt: pending.expiresAt.addingTimeInterval(600)))
+        // A request whose wait would end after the scheduled access is refused:
+        // one window cannot hold a gap, and running through it would shortcut the wait.
+        let short = RuleTimeAllowance(ruleID: UUID(), expiresAt: opens.addingTimeInterval(60),
+                                      totalMinutesGranted: 1, grantCount: 1, restoreUsageShield: false, opensAt: opens)
+        XCTAssertEqual(TimeAllowancePolicy.timing(existing: short, duration: .tenMinutes, waitMinutes: 10, now: later),
+                       .refused(existingEndsAt: short.expiresAt))
+        // With no wait, stacking is today's extension.
+        let open = RuleTimeAllowance(ruleID: UUID(), expiresAt: now.addingTimeInterval(300),
+                                     totalMinutesGranted: 5, grantCount: 1, restoreUsageShield: false)
+        XCTAssertEqual(TimeAllowancePolicy.timing(existing: open, duration: .tenMinutes, waitMinutes: 0, now: now),
+                       .scheduled(opensAt: now, expiresAt: now.addingTimeInterval(900)))
+        // An expired record is not joined: the new grant waits from now.
+        XCTAssertEqual(TimeAllowancePolicy.timing(existing: open, duration: .tenMinutes, waitMinutes: 10, now: now.addingTimeInterval(400)),
+                       .scheduled(opensAt: now.addingTimeInterval(1_000), expiresAt: now.addingTimeInterval(1_600)))
+    }
+
+    func testCloudBridgeCarriesTheWaitBothWays() {
+        var rule = BlockingRule()
+        rule.lockdownPolicy = RuleLockdownPolicy(allowsTimeExtensions: true, temporaryAccessWaitMinutes: 15)
+        let cloud = CloudRuleBridge.cloudPreference(from: rule)
+        XCTAssertEqual(cloud.lockdown.effectiveTemporaryAccessWaitMinutes, 15)
+        XCTAssertEqual(CloudRuleBridge.applying(cloud, to: nil).lockdownPolicy.effectiveTemporaryAccessWaitMinutes, 15)
+    }
 }

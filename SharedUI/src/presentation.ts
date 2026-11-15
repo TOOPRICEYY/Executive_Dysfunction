@@ -151,6 +151,7 @@ export function groupNow(g: Group): GroupNow {
 const rank: Record<NowState, number> = {
   lockdown: 0,
   blocking: 1,
+  waiting: 1,
   paused: 2,
   upcoming: 3,
   idle: 4,
@@ -171,8 +172,9 @@ export function byNow<T extends { name: string }>(
     return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
   });
 }
+/** A group waiting for temporary access to open is still blocking. */
 export const isBlockingState = (s: NowState) =>
-  s === "blocking" || s === "lockdown";
+  s === "blocking" || s === "lockdown" || s === "waiting";
 
 export type UnenforcedNote = "not enforced" | "not confirmed";
 /** Why a scheduled block is not shown as blocking. "Not enforced" is a fact the
@@ -196,7 +198,8 @@ export function shownNow(
   const what = now.state === "lockdown" ? "Lockdown" : "Scheduled";
   return {
     ...now,
-    headline: now.changesAt
+    // A waiting group's change is access opening, not the block ending.
+    headline: now.changesAt && now.state !== "waiting"
       ? `${what} until ${moment(now.changesAt, clockNow)} · ${note}`
       : `${what} now · ${note}`,
   };
@@ -285,6 +288,7 @@ export function laneLabel(
       case "lockdown":
         return "Locked down";
       case "blocking":
+      case "waiting":
         return "Blocking";
       case "paused":
         return "Paused";

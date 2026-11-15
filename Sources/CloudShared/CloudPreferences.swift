@@ -1077,9 +1077,23 @@ struct CloudRuleLockdownPreference: Codable, Equatable {
     /// policy. A maximum below an hour floors to zero hours there, which
     /// disables temporary access rather than granting a whole one.
     var maximumTemporaryAccessMinutes: Int? = nil
+    /// Minutes temporary access stays closed after the passage is accepted.
+    /// Nil and zero both mean no wait; zero is stored as nil so a policy that
+    /// never had a wait stays byte-identical. A device on an older build does
+    /// not read this field (see the report on old-build compatibility).
+    var temporaryAccessWaitMinutes: Int? = nil
 
     var effectiveTemporaryAccessPassageWordCount: Int {
         min(300, max(20, temporaryAccessPassageWordCount ?? passageWordCount))
+    }
+
+    /// The wait every caller should use, 0...1440.
+    var effectiveTemporaryAccessWaitMinutes: Int {
+        TemporaryAccessWait.clamped(temporaryAccessWaitMinutes ?? 0)
+    }
+
+    mutating func setTemporaryAccessWait(minutes: Int) {
+        temporaryAccessWaitMinutes = TemporaryAccessWait.stored(minutes)
     }
 
     /// Sets the session maximum, keeping the legacy hour field floored in step.
@@ -1112,6 +1126,7 @@ extension CloudRuleLockdownPreference {
         case temporaryAllowanceResetDays
         case temporaryAccessPassageWordCount
         case maximumTemporaryAccessMinutes
+        case temporaryAccessWaitMinutes
     }
 
     init(from decoder: Decoder) throws {
@@ -1127,6 +1142,8 @@ extension CloudRuleLockdownPreference {
         temporaryAccessPassageWordCount = try values.decodeIfPresent(Int.self, forKey: .temporaryAccessPassageWordCount).map { min(300, max(20, $0)) }
         maximumTemporaryAccessMinutes = try values.decodeIfPresent(Int.self, forKey: .maximumTemporaryAccessMinutes)
             .map { min(480, max(1, $0)) }
+        temporaryAccessWaitMinutes = TemporaryAccessWait.stored(
+            try values.decodeIfPresent(Int.self, forKey: .temporaryAccessWaitMinutes) ?? 0)
     }
 
     static func restrictiveMaximum(
@@ -1143,6 +1160,7 @@ extension CloudRuleLockdownPreference {
             value.temporaryAllowanceResetDays = policy.temporaryAllowanceResetDays
             value.temporaryAccessPassageWordCount = policy.temporaryAccessPassageWordCount
             value.maximumTemporaryAccessMinutes = policy.maximumTemporaryAccessMinutes
+            value.temporaryAccessWaitMinutes = policy.temporaryAccessWaitMinutes
             return value
         }
         let enabled = resolved.filter { $0.severity != "none" }
@@ -1159,7 +1177,10 @@ extension CloudRuleLockdownPreference {
                 temporaryAllowanceResetDays: accessPolicies.compactMap(\.temporaryAllowanceResetDays).max(),
                 temporaryAccessPassageWordCount: accessPolicies.contains { $0.temporaryAccessPassageWordCount != nil }
                     ? accessPolicies.map(\.effectiveTemporaryAccessPassageWordCount).max() : nil,
-                maximumTemporaryAccessMinutes: accessPolicies.map(\.effectiveMaximumTemporaryAccessMinutes).min()
+                maximumTemporaryAccessMinutes: accessPolicies.map(\.effectiveMaximumTemporaryAccessMinutes).min(),
+                // The stricter policy waits longer.
+                temporaryAccessWaitMinutes: TemporaryAccessWait.stored(
+                    accessPolicies.map(\.effectiveTemporaryAccessWaitMinutes).max() ?? 0)
             )
         }
 
@@ -1179,8 +1200,33 @@ extension CloudRuleLockdownPreference {
             temporaryAllowanceResetDays: accessPolicies.compactMap(\.temporaryAllowanceResetDays).max(),
             temporaryAccessPassageWordCount: accessPolicies.contains { $0.temporaryAccessPassageWordCount != nil }
                 ? accessPolicies.map(\.effectiveTemporaryAccessPassageWordCount).max() : nil,
-            maximumTemporaryAccessMinutes: (enabled + accessPolicies).map(\.effectiveMaximumTemporaryAccessMinutes).min()
+            maximumTemporaryAccessMinutes: (enabled + accessPolicies).map(\.effectiveMaximumTemporaryAccessMinutes).min(),
+            temporaryAccessWaitMinutes: TemporaryAccessWait.stored(
+                (enabled + accessPolicies).map(\.effectiveTemporaryAccessWaitMinutes).max() ?? 0)
         )
+    }
+}
+
+/// The cooling-off period between an accepted passage and temporary access
+/// opening. Shared by every Apple target that grants or enforces access.
+enum TemporaryAccessWait {
+    static let range = 0...1440
+
+    static func clamped(_ minutes: Int) -> Int { min(range.upperBound, max(range.lowerBound, minutes)) }
+
+    /// Zero is stored as nil so a policy without a wait encodes as before.
+    static func stored(_ minutes: Int) -> Int? {
+        let value = clamped(minutes)
+        return value == 0 ? nil : value
+    }
+
+    static func describe(minutes: Int) -> String {
+        let value = clamped(minutes)
+        if value == 0 { return "No wait" }
+        if value < 60 { return value == 1 ? "1 minute" : "\(value) minutes" }
+        let hours = value / 60, rest = value % 60
+        let hourText = hours == 1 ? "1 hour" : "\(hours) hours"
+        return rest == 0 ? hourText : "\(hourText) \(rest) min"
     }
 }
 

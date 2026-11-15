@@ -93,12 +93,20 @@ export interface TemporaryPolicy {
   words: number;
   maximumMinutes: number;
   resetDays: number | null;
+  /**
+   * Minutes access stays closed after the passage is accepted, 0–1440.
+   * Absent (an older host): 0, no wait. Part of the lock: lowering it is a
+   * weakening the host refuses on a locked group.
+   */
+  waitMinutes?: number;
 }
 /** Host-evaluated "what is this group doing now" (GroupNowStatus on Apple). */
 export type NowState =
   | "lockdown"
   | "paused"
   | "blocking"
+  /** Blocking now; granted temporary access opens at `changesAt` after its wait. */
+  | "waiting"
   | "upcoming"
   | "idle"
   | "off";
@@ -174,6 +182,12 @@ export interface Group {
     | "lockdown";
   detail: string;
   suspendedUntil?: string;
+  /**
+   * Granted temporary access that is still inside its wait opens at this
+   * instant. Until then the group is blocked exactly as `status` says; this is
+   * shown, never used to decide enforcement. Cancelled by `cancelTemporaryAccess`.
+   */
+  accessOpensAt?: string;
   canEdit: boolean;
   now?: GroupNow;
   unlock?: UnlockState;
@@ -703,9 +717,15 @@ function isNow(n: unknown): n is GroupNow {
   if (!n || typeof n !== "object") return false;
   const v = n as GroupNow;
   return (
-    ["lockdown", "paused", "blocking", "upcoming", "idle", "off"].includes(
-      v.state,
-    ) &&
+    [
+      "lockdown",
+      "paused",
+      "blocking",
+      "waiting",
+      "upcoming",
+      "idle",
+      "off",
+    ].includes(v.state) &&
     typeof v.headline === "string" &&
     (v.changesAt === undefined || isDate(v.changesAt)) &&
     (v.coveredBy === undefined ||
@@ -737,6 +757,7 @@ export function isGroup(g: unknown): g is Group {
     ].includes(v.status) &&
     typeof v.detail === "string" &&
     (v.suspendedUntil === undefined || isDate(v.suspendedUntil)) &&
+    (v.accessOpensAt === undefined || isDate(v.accessOpensAt)) &&
     (v.lockdownUntil === undefined || isDate(v.lockdownUntil)) &&
     (v.now === undefined || isNow(v.now)) &&
     (v.unlock === undefined || isUnlock(v.unlock)) &&
@@ -782,6 +803,7 @@ function isTemporaryPolicy(t: unknown): t is TemporaryPolicy {
     typeof v.allowed === "boolean" &&
     integer(v.words, 20, 300) &&
     integer(v.maximumMinutes, 1, 1440) &&
-    (v.resetDays === null || integer(v.resetDays, 1, 365))
+    (v.resetDays === null || integer(v.resetDays, 1, 365)) &&
+    (v.waitMinutes === undefined || integer(v.waitMinutes, 0, 1440))
   );
 }

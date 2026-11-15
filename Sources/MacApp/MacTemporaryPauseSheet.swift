@@ -21,10 +21,14 @@ struct MacTemporaryPauseSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(model.temporaryPause(for: ruleID) == nil ? "Disable temporarily" : "Extend pause")
+            Text(model.liveTemporaryPause(for: ruleID) == nil ? "Disable temporarily" : "Extend pause")
                 .font(.title3.weight(.semibold))
             Text("\(ruleName) stops being enforced on this Mac for the period you choose, then resumes on its own.")
                 .font(.callout)
+            if model.temporaryAccessWaitMinutes(for: ruleID) > 0, model.liveTemporaryPause(for: ruleID) == nil {
+                Text("Access opens \(TemporaryAccessWait.describe(minutes: model.temporaryAccessWaitMinutes(for: ruleID)).lowercased()) after you finish the passage, then lasts \(duration.title). Blocking continues until then.")
+                    .font(.callout.weight(.semibold))
+            }
 
             Picker("For", selection: $duration) {
                 ForEach(availableDurations) { option in

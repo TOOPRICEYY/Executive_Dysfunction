@@ -100,7 +100,9 @@ export function AccessDialog({
               ))}
             </select>
           </label>
-          <p>{temporaryPassageDescription(group)}</p>
+          <p data-access-timing>
+            {temporaryPassageDescription(group, fixedMinutes ?? minutes)}
+          </p>
           <fieldset>
             <legend>What brings you here?</legend>
             <label className="check">

@@ -253,6 +253,14 @@ struct DesktopEnforcementRule: Codable, Equatable, Identifiable {
     /// groups, which have no boundary.
     var activeFrom: Date?
     var activeUntil: Date?
+    /// A granted pause still inside its wait: closed until `pendingPauseOpensAt`,
+    /// then open until `pendingPauseUntil`. Kept apart from `pausedUntil` on
+    /// purpose. A filter built before waits existed does not know these keys
+    /// and drops them, so it keeps blocking; it only opens once the app
+    /// republishes the opened pause as `pausedUntil`. A current filter opens
+    /// at `pendingPauseOpensAt` by itself, without the app.
+    var pendingPauseOpensAt: Date? = nil
+    var pendingPauseUntil: Date? = nil
 
     func isWithinPlannedInterval(at date: Date) -> Bool {
         if let activeFrom, date < activeFrom { return false }
@@ -275,8 +283,19 @@ struct DesktopEnforcementRule: Codable, Equatable, Identifiable {
     }
 
     func isPaused(at date: Date) -> Bool {
-        guard let pausedUntil else { return false }
-        return pausedUntil > date
+        activePauseEnd(at: date) != nil
+    }
+
+    /// When the pause in force at `date` ends, or nil while none is open. A
+    /// pending pause counts only from its opening instant: never early.
+    func activePauseEnd(at date: Date) -> Date? {
+        var end: Date?
+        if let pausedUntil, pausedUntil > date { end = pausedUntil }
+        if let opens = pendingPauseOpensAt, let until = pendingPauseUntil,
+           opens <= date, date < until {
+            end = max(end ?? until, until)
+        }
+        return end
     }
 }
 
@@ -294,6 +313,8 @@ struct DesktopLockdownPolicy: Codable, Equatable {
     /// The session maximum in minutes. Optional so a policy written before
     /// minutes existed still decodes; the hour field remains its fallback.
     var maximumTemporaryAccessMinutes: Int? = nil
+    /// Minutes access stays closed after the passage. Nil means no wait.
+    var temporaryAccessWaitMinutes: Int? = nil
 
     var effectiveTemporaryAccessPassageWordCount: Int {
         min(300, max(20, temporaryAccessPassageWordCount ?? passageWordCount))
@@ -305,9 +326,17 @@ struct DesktopLockdownPolicy: Codable, Equatable {
         return max(0, min(480, resolved))
     }
 
+    var effectiveTemporaryAccessWaitMinutes: Int {
+        TemporaryAccessWait.clamped(temporaryAccessWaitMinutes ?? 0)
+    }
+
+    /// A wait is only enforced by the app's own grant, so the browser
+    /// block-page path (which an older helper would run without knowing about
+    /// the wait) is switched off for such a group, exactly like backoff.
     var needsNativeTemporaryAccess: Bool {
         temporaryAllowanceResetDays != nil
             || effectiveTemporaryAccessPassageWordCount != min(300, max(20, passageWordCount))
+            || effectiveTemporaryAccessWaitMinutes > 0
     }
 
     var permitsAnyTemporaryAccess: Bool {
@@ -345,6 +374,7 @@ struct DesktopBlockProfile: Equatable {
         cloudRules: [CloudRulePreference],
         temporaryPauses: [UUID: Date] = [:],
         temporaryPauseAuthorizationIDs: [UUID: String] = [:],
+        pendingTemporaryPauses: [UUID: DateInterval] = [:],
         now: Date = Date()
     ) {
         rules = cloudRules.map { rule in
@@ -361,6 +391,15 @@ struct DesktopBlockProfile: Equatable {
                 if desktop.pausedUntil != nil {
                     desktop.pauseAuthorizationID = temporaryPauseAuthorizationIDs[rule.id]
                 }
+                if desktop.pausedUntil == nil,
+                   let pending = Self.clampedPendingPause(
+                       pendingTemporaryPauses[rule.id],
+                       maximumMinutes: desktop.lockdown.effectiveMaximumTemporaryAccessMinutes,
+                       now: now
+                   ) {
+                    desktop.pendingPauseOpensAt = pending.start
+                    desktop.pendingPauseUntil = pending.end
+                }
             }
             return desktop
         }
@@ -375,6 +414,18 @@ struct DesktopBlockProfile: Equatable {
         guard let expiry, expiry > now, maximumMinutes > 0 else { return nil }
         let ceiling = now.addingTimeInterval(TimeInterval(maximumMinutes) * 60)
         return min(expiry, ceiling)
+    }
+
+    /// A pending pause is published only while it is still pending, opens no
+    /// later than a day from now (the longest wait) and lasts no longer than
+    /// the rule's session maximum from its opening.
+    static func clampedPendingPause(_ interval: DateInterval?, maximumMinutes: Int, now: Date) -> DateInterval? {
+        guard let interval, interval.start > now, maximumMinutes > 0,
+              interval.start <= now.addingTimeInterval(TimeInterval(TemporaryAccessWait.range.upperBound) * 60)
+        else { return nil }
+        let end = min(interval.end, interval.start.addingTimeInterval(TimeInterval(maximumMinutes) * 60))
+        guard end > interval.start else { return nil }
+        return DateInterval(start: interval.start, end: end)
     }
 
     private static func desktopRule(_ rule: CloudRulePreference) -> DesktopEnforcementRule {
@@ -404,7 +455,8 @@ struct DesktopBlockProfile: Equatable {
                 maximumTimeExtensionHours: rule.lockdown.maximumTimeExtensionHours,
                 temporaryAllowanceResetDays: rule.lockdown.temporaryAllowanceResetDays,
                 temporaryAccessPassageWordCount: rule.lockdown.temporaryAccessPassageWordCount,
-                maximumTemporaryAccessMinutes: rule.lockdown.effectiveMaximumTemporaryAccessMinutes
+                maximumTemporaryAccessMinutes: rule.lockdown.effectiveMaximumTemporaryAccessMinutes,
+                temporaryAccessWaitMinutes: rule.lockdown.temporaryAccessWaitMinutes
             )
         )
     }
@@ -520,6 +572,9 @@ enum DesktopPolicyRestrictionEvaluator {
            new.effectiveMaximumTemporaryAccessMinutes > old.effectiveMaximumTemporaryAccessMinutes { return false }
         if old.permitsAnyTemporaryAccess && new.permitsAnyTemporaryAccess,
            new.effectiveTemporaryAccessPassageWordCount < old.effectiveTemporaryAccessPassageWordCount { return false }
+        // A shorter wait before access opens is a weakening.
+        if old.permitsAnyTemporaryAccess && new.permitsAnyTemporaryAccess,
+           new.effectiveTemporaryAccessWaitMinutes < old.effectiveTemporaryAccessWaitMinutes { return false }
         if old.permitsAnyTemporaryAccess && new.permitsAnyTemporaryAccess,
            old.temporaryAllowanceResetDays != new.temporaryAllowanceResetDays {
             // Backoff is additive over the existing session passage floor.

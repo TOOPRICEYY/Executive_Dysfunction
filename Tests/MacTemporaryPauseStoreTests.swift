@@ -221,4 +221,76 @@ extension MacTemporaryPauseStoreTests {
             return XCTFail("Ten minutes must not fit a five-minute maximum")
         }
     }
+
+    // MARK: - Access delay
+
+    private func waitedRule(_ wait: Int) -> DesktopEnforcementRule {
+        var subject = rule(maximumHours: 3)
+        subject.lockdown.temporaryAccessWaitMinutes = wait
+        return subject
+    }
+
+    func testGrantWithWaitIsPendingUntilItOpensAndNeverEarly() throws {
+        let now = Date(timeIntervalSince1970: 1_790_000_000.25)
+        let subject = waitedRule(10)
+        guard case let .success(pause) = MacTemporaryPauseStore.grant(.thirtyMinutes, for: subject, at: now, defaults: defaults)
+        else { return XCTFail("Expected grant") }
+        let opens = try XCTUnwrap(pause.opensAt)
+        XCTAssertEqual(opens, Date(timeIntervalSince1970: 1_790_000_601), "Wait rounds up to a whole second")
+        XCTAssertEqual(pause.expiresAt, opens.addingTimeInterval(1_800), "The wait does not shorten the access")
+        XCTAssertEqual(pause.totalMinutesGranted, 30, "Charged when granted")
+        XCTAssertTrue(MacTemporaryPauseStore.activeExpirations(at: now, defaults: defaults).isEmpty)
+        XCTAssertNil(MacTemporaryPauseStore.open(for: subject.id, at: opens.addingTimeInterval(-0.5), defaults: defaults))
+        XCTAssertEqual(MacTemporaryPauseStore.pendingIntervals(at: now, defaults: defaults)[subject.id],
+                       DateInterval(start: opens, end: pause.expiresAt))
+        XCTAssertEqual(MacTemporaryPauseStore.activeExpirations(at: opens, defaults: defaults)[subject.id], pause.expiresAt)
+        XCTAssertTrue(MacTemporaryPauseStore.pendingIntervals(at: opens, defaults: defaults).isEmpty)
+        XCTAssertTrue(MacTemporaryPauseStore.activeExpirations(at: pause.expiresAt, defaults: defaults).isEmpty)
+    }
+
+    func testPendingGrantCanBeCancelledAndIsNotRefunded() {
+        let now = Date()
+        var subject = waitedRule(10)
+        subject.lockdown.temporaryAllowanceResetDays = 2
+        _ = MacTemporaryPauseStore.grant(.tenMinutes, for: subject, at: now, defaults: defaults)
+        XCTAssertTrue(MacTemporaryPauseStore.cancel(ruleID: subject.id, defaults: defaults))
+        XCTAssertTrue(MacTemporaryPauseStore.pendingIntervals(at: now, defaults: defaults).isEmpty)
+        XCTAssertTrue(MacTemporaryPauseStore.activeExpirations(at: now.addingTimeInterval(700), defaults: defaults).isEmpty)
+        XCTAssertEqual(MacTemporaryPauseStore.passageWordCount(for: subject, at: now, defaults: defaults), 80,
+                       "The backoff charge of a cancelled pending grant stays")
+    }
+
+    func testSecondRequestNeverOpensEarlierAndCannotLeaveAGap() throws {
+        let now = Date(timeIntervalSince1970: 1_790_000_000)
+        let subject = waitedRule(10)
+        guard case let .success(first) = MacTemporaryPauseStore.grant(.thirtyMinutes, for: subject, at: now, defaults: defaults)
+        else { return XCTFail("Expected grant") }
+        let later = now.addingTimeInterval(120)
+        guard case let .success(second) = MacTemporaryPauseStore.grant(.tenMinutes, for: subject, at: later, defaults: defaults)
+        else { return XCTFail("A contiguous extension is granted") }
+        XCTAssertEqual(second.opensAt, first.opensAt, "Stacking never moves the opening earlier")
+        XCTAssertEqual(second.expiresAt, first.expiresAt.addingTimeInterval(600))
+        XCTAssertEqual(second.grantCount, 2)
+
+        // A short grant whose end comes before this request's own wait is over.
+        MacTemporaryPauseStore.cancel(ruleID: subject.id, defaults: defaults)
+        let long = waitedRule(60)
+        guard case let .success(short) = MacTemporaryPauseStore.grant(.oneMinute, for: long, at: now, defaults: defaults)
+        else { return XCTFail("Expected grant") }
+        XCTAssertEqual(
+            MacTemporaryPauseStore.grant(.tenMinutes, for: long, at: now.addingTimeInterval(300), defaults: defaults),
+            .failure(.alreadyScheduled(endsAt: short.expiresAt)))
+        XCTAssertEqual(MacTemporaryPauseStore.active(for: long.id, at: now, defaults: defaults), short,
+                       "A refused request changes nothing")
+    }
+
+    func testNoWaitGrantIsOpenImmediatelyAsBefore() {
+        let now = Date()
+        let subject = rule()
+        guard case let .success(pause) = MacTemporaryPauseStore.grant(.tenMinutes, for: subject, at: now, defaults: defaults)
+        else { return XCTFail("Expected grant") }
+        XCTAssertNil(pause.opensAt)
+        XCTAssertEqual(pause.expiresAt, now.addingTimeInterval(600))
+        XCTAssertEqual(MacTemporaryPauseStore.activeExpirations(at: now, defaults: defaults)[subject.id], pause.expiresAt)
+    }
 }

@@ -13,6 +13,8 @@ enum MacTemporaryPauseStore {
     enum GrantError: Error, Equatable {
         case notPermitted
         case exceedsSessionMaximum(maximumMinutes: Int)
+        /// The new minutes' wait would end after the scheduled access does.
+        case alreadyScheduled(endsAt: Date)
 
         var message: String {
             switch self {
@@ -20,6 +22,8 @@ enum MacTemporaryPauseStore {
                 "This Blocking Group's security policy does not allow temporary access."
             case let .exceedsSessionMaximum(maximumMinutes):
                 "This pause would exceed the group's configured maximum of \(TimeAllowancePolicy.describeMaximum(minutes: maximumMinutes)) for the current session."
+            case let .alreadyScheduled(endsAt):
+                "Access is already scheduled. Request more after it ends at \(endsAt.formatted(date: .omitted, time: .shortened))."
             }
         }
     }
@@ -39,6 +43,8 @@ enum MacTemporaryPauseStore {
         }
     }
 
+    /// The live record, pending or open. Bookkeeping only (spend, passage
+    /// growth, extensions); enforcement and display use `open`.
     static func active(
         for ruleID: UUID,
         at now: Date,
@@ -48,17 +54,33 @@ enum MacTemporaryPauseStore {
         return pause
     }
 
-    /// What the published policy stamps onto its rules. Expired records are
-    /// dropped rather than published, so a stale entry can never release a
-    /// block.
+    /// The pause whose access is open now.
+    static func open(for ruleID: UUID, at now: Date, defaults: any KeyValueLedger) -> RuleTimeAllowance? {
+        guard let pause = active(for: ruleID, at: now, defaults: defaults), pause.isOpen(at: now) else { return nil }
+        return pause
+    }
+
+    /// What the published policy stamps onto its rules as `pausedUntil`. Only
+    /// open pauses: a pending one is published separately (see
+    /// `pendingIntervals`) so an older filter cannot open it early. Expired
+    /// records are dropped rather than published, so a stale entry can never
+    /// release a block.
     static func activeExpirations(at now: Date, defaults: any KeyValueLedger) -> [UUID: Date] {
         load(defaults: defaults)
-            .filter { $0.value.expiresAt > now }
+            .filter { $0.value.isOpen(at: now) }
             .mapValues(\.expiresAt)
     }
 
+    /// Granted pauses still inside their wait, as opening → end.
+    static func pendingIntervals(at now: Date, defaults: any KeyValueLedger) -> [UUID: DateInterval] {
+        load(defaults: defaults).compactMapValues { pause in
+            guard pause.isPending(at: now), let opens = pause.opensAt else { return nil }
+            return DateInterval(start: opens, end: pause.expiresAt)
+        }
+    }
+
     static func activeAuthorizationIDs(at now: Date, defaults: any KeyValueLedger) -> [UUID: String] {
-        load(defaults: defaults).filter { $0.value.expiresAt > now }.mapValues { pause in
+        load(defaults: defaults).filter { $0.value.isOpen(at: now) }.mapValues { pause in
             // Granting an extension adds the same duration to expiry and spend,
             // so this origin remains stable throughout a contiguous session.
             String(pause.expiresAt.timeIntervalSince1970 - Double(pause.totalMinutesGranted) * 60)
@@ -144,14 +166,22 @@ enum MacTemporaryPauseStore {
         }
 
         // Extending adds to the end of the current pause rather than restarting
-        // it, so repeated grants cannot quietly stretch past the maximum.
-        let base = existing?.expiresAt ?? now
+        // it, so repeated grants cannot quietly stretch past the maximum. The
+        // group's wait keeps a fresh grant closed until it has elapsed.
+        let timing = TimeAllowancePolicy.timing(
+            existing: existing, duration: duration,
+            waitMinutes: rule.lockdown.effectiveTemporaryAccessWaitMinutes, now: now)
+        guard case let .scheduled(opensAt, expiresAt) = timing else {
+            if case let .refused(endsAt) = timing { return .failure(.alreadyScheduled(endsAt: endsAt)) }
+            return .failure(.notPermitted)
+        }
         let granted = RuleTimeAllowance(
             ruleID: rule.id,
-            expiresAt: base.addingTimeInterval(duration.seconds),
+            expiresAt: expiresAt,
             totalMinutesGranted: spent + duration.minutes,
             grantCount: (existing?.grantCount ?? 0) + 1,
-            restoreUsageShield: existing?.restoreUsageShield ?? false
+            restoreUsageShield: existing?.restoreUsageShield ?? false,
+            opensAt: opensAt > now ? opensAt : existing?.opensAt
         )
         var stored = load(defaults: defaults)
         stored[rule.id] = granted

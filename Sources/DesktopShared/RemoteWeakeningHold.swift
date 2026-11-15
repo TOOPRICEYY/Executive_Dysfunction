@@ -70,6 +70,8 @@ enum RemoteWeakeningHold {
             kept.pausedUntil = replacement?.pausedUntil
             kept.pauseAuthorizationID = replacement?.pauseAuthorizationID
             kept.pauseSessionStartedAt = nil
+            kept.pendingPauseOpensAt = replacement?.pendingPauseOpensAt
+            kept.pendingPauseUntil = replacement?.pendingPauseUntil
             if let index {
                 rules[index] = kept
             } else {

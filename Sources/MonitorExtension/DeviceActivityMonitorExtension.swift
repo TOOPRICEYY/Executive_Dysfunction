@@ -17,8 +17,17 @@ final class DeviceActivityMonitorExtension: DeviceActivityMonitor {
             EnforcementEngine.apply(rule, to: ManagedSettingsStore(named: descriptor.storeName))
             SharedConfiguration.recordShieldedWindowStore(descriptor)
         case let .allowance(ruleID):
+            // The interval starts at the grant's opening. A callback that
+            // arrives before it (or for a cancelled grant) changes nothing:
+            // the shield stays until a later callback or the app finds the
+            // grant open. Opening late is acceptable; opening early is not.
             guard SharedConfiguration.activeTimeAllowance(for: ruleID) != nil,
                   let rule = enabledRule(id: ruleID) else { return }
+            // A usage threshold reached during the wait shielded the group;
+            // suspending clears that store, so its end must restore it.
+            if rule.usageLimitEnabled, EnforcementEngine.usageShieldIsConfigured(ruleID: ruleID) {
+                SharedConfiguration.markUsageShieldForRestore(ruleID: ruleID)
+            }
             EnforcementEngine.suspend(rule)
         case .usage, .usageBatch:
             break

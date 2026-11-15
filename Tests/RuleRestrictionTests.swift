@@ -240,4 +240,22 @@ final class RuleRestrictionTests: XCTestCase {
             appDefaultLockdown: appDefault
         )
     }
+
+    func testShorterWaitNeedsAnUnlockAndLongerIsStricter() {
+        var old = BlockingRule()
+        old.lockdownPolicy = .init(severity: .passageOnly, passageWordCount: 40,
+            allowsTimeExtensions: true, temporaryAccessWaitMinutes: 30)
+        var longer = old
+        longer.lockdownPolicy.temporaryAccessWaitMinutes = 60
+        XCTAssertEqual(compare(old, longer), .strictlyMoreRestrictive)
+        var shorter = old
+        shorter.lockdownPolicy.temporaryAccessWaitMinutes = 10
+        XCTAssertEqual(compare(old, shorter), .requiresUnlock)
+        var none = old
+        none.lockdownPolicy.temporaryAccessWaitMinutes = nil
+        XCTAssertEqual(compare(old, none), .requiresUnlock, "Removing the wait is a weakening")
+        XCTAssertTrue(RuleRestrictionEvaluator.unlockRequirementReasons(
+            existing: old, proposed: shorter, appDefaultLockdown: appDefault
+        ).contains { $0.contains("wait before temporary access opens") })
+    }
 }

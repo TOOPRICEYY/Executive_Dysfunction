@@ -42,6 +42,65 @@ final class TemporaryAccessLedgerTests: XCTestCase {
         XCTAssertEqual(current.additionalCommittedMinutes(forRule: rule, localMinutes: 0, at: now), 0)
     }
 
+    // MARK: - Access delay
+
+    /// How a pending grant travels: an older reader sees an expired pause (so
+    /// it opens nothing) while a current reader gets the real window.
+    private func pendingContribution(opensIn: TimeInterval, lasts: TimeInterval, minutes: Int) -> TemporaryAccessContribution {
+        var entry = contribution(device: mac, minutes: minutes, pauseEndsIn: 0)
+        entry.pauseOpensAt = now.addingTimeInterval(opensIn)
+        entry.pendingPauseEndsAt = now.addingTimeInterval(opensIn + lasts)
+        return entry
+    }
+
+    func testPendingRecordLooksLikeNoPauseToAnOlderReader() throws {
+        let entry = pendingContribution(opensIn: 600, lasts: 1_800, minutes: 30)
+        XCTAssertLessThanOrEqual(entry.pauseEndsAt, now, "An older build opens only while pauseEndsAt > now")
+        // Decode with only the keys an older build knows.
+        struct OldContribution: Decodable { var minutesGranted: Int; var pauseEndsAt: Date; var updatedAt: Date }
+        let old = try JSONDecoder().decode(OldContribution.self, from: JSONEncoder().encode(entry))
+        let oldExpiry = min(old.pauseEndsAt, old.updatedAt.addingTimeInterval(60 * 60))
+        XCTAssertFalse(oldExpiry > now, "The older reader's own open test fails, so it stays blocked")
+    }
+
+    func testPendingRecordOpensOnAnotherCurrentDeviceAtItsOpeningOnly() throws {
+        var ledger = TemporaryAccessLedger()
+        ledger.record(pendingContribution(opensIn: 600, lasts: 1_800, minutes: 30))
+        let imported = try XCTUnwrap(ledger.applyingSharedPauses(to: [:], device: phone,
+            maximumMinutes: [rule: 60], waitMinutes: [rule: 10], at: now.addingTimeInterval(60))[rule])
+        XCTAssertEqual(imported.opensAt, now.addingTimeInterval(600))
+        XCTAssertEqual(imported.expiresAt, now.addingTimeInterval(2_400), "The wait does not shorten it")
+        XCTAssertTrue(imported.isPending(at: now.addingTimeInterval(599)))
+        XCTAssertFalse(imported.isOpen(at: now.addingTimeInterval(599)))
+        XCTAssertTrue(imported.isOpen(at: now.addingTimeInterval(600)))
+        XCTAssertFalse(imported.isOpen(at: now.addingTimeInterval(2_400)))
+        // Its spend counts against the other devices while pending.
+        XCTAssertEqual(ledger.additionalCommittedMinutes(forRule: rule, localMinutes: 0, at: now.addingTimeInterval(60)), 30)
+        XCTAssertEqual(ledger.committedMinutes(forRule: rule, excluding: phone, at: now.addingTimeInterval(60)), 30)
+        XCTAssertTrue(ledger.ownEntryIsLatestPending(rule: rule, device: mac))
+        XCTAssertFalse(ledger.ownEntryIsLatestPending(rule: rule, device: phone))
+    }
+
+    func testReceiverNeverOpensSoonerThanItsOwnWait() throws {
+        var ledger = TemporaryAccessLedger()
+        // A record claiming an opening after only one minute.
+        ledger.record(pendingContribution(opensIn: 60, lasts: 3_600, minutes: 60))
+        let imported = try XCTUnwrap(ledger.applyingSharedPauses(to: [:], device: phone,
+            maximumMinutes: [rule: 60], waitMinutes: [rule: 30], at: now)[rule])
+        XCTAssertEqual(imported.opensAt, now.addingTimeInterval(30 * 60), "Opens late, never early")
+        XCTAssertEqual(imported.expiresAt, now.addingTimeInterval(3_660), "The end is not pushed later")
+        // If its window ends before this device's own wait is over, it never opens here.
+        var short = TemporaryAccessLedger()
+        short.record(pendingContribution(opensIn: 60, lasts: 600, minutes: 10))
+        XCTAssertNil(short.applyingSharedPauses(to: [:], device: phone,
+            maximumMinutes: [rule: 60], waitMinutes: [rule: 30], at: now)[rule])
+        // An opening more than a day after the grant is not believed.
+        var forged = TemporaryAccessLedger()
+        forged.record(pendingContribution(opensIn: 2 * 86_400, lasts: 600, minutes: 10))
+        XCTAssertNil(forged.applyingSharedPauses(to: [:], device: phone,
+            maximumMinutes: [rule: 60], waitMinutes: [:], at: now)[rule])
+    }
+
     private let rule = UUID()
     private let mac = UUID()
     private let phone = UUID()

@@ -108,7 +108,7 @@ struct FilterEnforcementStatus: Codable, Equatable {
         }
         blockPageRules = pageRules.isEmpty ? nil : pageRules
         temporaryAllowanceExpirations = Dictionary(policy.rules.compactMap { rule -> (UUID, Date)? in
-            guard !forced.contains(rule.id), let expiry = rule.pausedUntil, expiry > date else { return nil }
+            guard !forced.contains(rule.id), let expiry = rule.activePauseEnd(at: date) else { return nil }
             return (rule.id, expiry)
         }, uniquingKeysWith: max)
         lockdownEndsAt = policy.activeSessions(at: date).map(\.endsAt).max()

@@ -202,7 +202,7 @@ struct RuleScheduler {
                 let descriptor = MonitorDescriptor.allowance(ruleID: allowance.ruleID)
                 try center.startMonitoring(
                     descriptor.activityName,
-                    during: allowanceSchedule(until: allowance.expiresAt)
+                    during: allowanceSchedule(for: allowance, now: now)
                 )
             },
             cancel: { allowance, error in
@@ -232,7 +232,9 @@ struct RuleScheduler {
             }
         }
 
-        for allowance in admittedAllowances {
+        // Only an open grant lifts the shield here. A pending one keeps its
+        // shields; its monitor's intervalDidStart lifts them at the opening.
+        for allowance in admittedAllowances where allowance.isOpen(at: now) {
             if let rule = enabledRules.first(where: { $0.id == allowance.ruleID }) {
                 EnforcementEngine.suspend(rule)
             }
@@ -346,12 +348,23 @@ struct RuleScheduler {
         )
     }
 
-    private func allowanceSchedule(until endDate: Date) -> DeviceActivitySchedule {
+    /// The allowance monitor runs from the grant's opening to its end, so
+    /// Screen Time itself lifts the shield at the opening (intervalDidStart)
+    /// and restores it at the end (intervalDidEnd) without the app.
+    private func allowanceSchedule(for allowance: RuleTimeAllowance, now: Date) -> DeviceActivitySchedule {
         let calendar = Calendar.current
         let components: Set<Calendar.Component> = [.year, .month, .day, .hour, .minute, .second]
-        let start = calendar.dateComponents(components, from: Date())
-        let end = calendar.dateComponents(components, from: endDate)
+        let interval = Self.allowanceInterval(for: allowance, now: now)
+        let start = calendar.dateComponents(components, from: interval.start)
+        let end = calendar.dateComponents(components, from: interval.end)
         return DeviceActivitySchedule(intervalStart: start, intervalEnd: end, repeats: false)
+    }
+
+    /// Never starts before the grant opens. `opensAt` is already a whole
+    /// second, so second-precision components cannot move it earlier.
+    static func allowanceInterval(for allowance: RuleTimeAllowance, now: Date) -> DateInterval {
+        let start = max(now, allowance.opensAt ?? now)
+        return DateInterval(start: start, end: max(start, allowance.expiresAt))
     }
 
     private func startUsageMonitor(for rules: [BlockingRule]) throws {

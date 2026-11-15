@@ -92,6 +92,17 @@ final class ICloudTemporaryAccessStore {
         return replica
     }
 
+    /// Publishes a whole contribution for this device. The allowance-aware
+    /// `record(rule:allowance:...)` in Shared builds it, pending or open.
+    @discardableResult
+    func record(_ contribution: TemporaryAccessContribution, at now: Date = Date()) -> TemporaryAccessLedger {
+        var replica = load()
+        replica.record(contribution)
+        persist(replica)
+        flush(replica, at: now)
+        return replica
+    }
+
     /// Stops this device's minutes counting against the others, used when a
     /// pause is cancelled early. The backoff grant deliberately survives: the
     /// passage was still spent.
@@ -126,7 +137,7 @@ final class ICloudTemporaryAccessStore {
                   let entry = try? JSONDecoder().decode(TemporaryAccessContribution.self, from: data)
             else { continue }
             let longestBackoff = Double(TemporaryAllowanceBackoff.daysRange.upperBound) * 86_400
-            if entry.pauseEndsAt <= now,
+            if entry.effectivePauseEndsAt <= now,
                now >= entry.backoffStartedAt.addingTimeInterval(longestBackoff) {
                 cloud.remove(key)
             }

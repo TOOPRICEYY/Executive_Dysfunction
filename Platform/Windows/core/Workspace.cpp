@@ -44,6 +44,7 @@ void ValidateGroup(const Json& g) {
     Require(t.at("allowed").is_boolean() && Integer(t.at("words"), 20, 300)
         && Integer(t.at("maximumMinutes"), 10, 480)
         && (t.at("resetDays").is_null() || Integer(t.at("resetDays"), 1, 365)), "Invalid temporary access policy (maximum eight hours).");
+    Require(!t.contains("waitMinutes") || Integer(t.at("waitMinutes"), 0, 1440), "Invalid temporary access wait (0 to 1440 minutes).");
     const auto& schedule = g.at("schedule");
     Require(schedule.at("mode") == "allow" || schedule.at("mode") == "block", "Invalid window mode.");
     Require(schedule.at("slots").is_array() && schedule.at("slots").size() <= 128, "Too many schedule windows.");
@@ -80,14 +81,28 @@ bool PolicyStricter(const Json& old, const Json& next) {
     return next.at("kind") != "none" && Delay(next) >= Delay(old) && next.at("words") >= old.at("words")
         && (old.at("kind") != "checkpoints" || next.at("kind") == "checkpoints");
 }
+// Saved data from before the cooling-off wait existed means no wait.
+void DefaultWait(Json& g) {
+    if (g.is_object() && g.contains("temporaryPolicy") && g.at("temporaryPolicy").is_object() && !g.at("temporaryPolicy").contains("waitMinutes")) g["temporaryPolicy"]["waitMinutes"] = 0;
+}
+int WaitMinutes(const Json& policy) { return policy.value("waitMinutes", 0); }
+std::string Minutes(int64_t n) { return std::to_string(n) + (n == 1 ? " minute" : " minutes"); }
 Json CleanGroup(const Json& g) {
     Json result;
     for (const auto* field : {"id", "name", "enabled", "domains", "applications", "schedule", "changePolicy", "temporaryPolicy"}) result[field] = g.at(field);
+    DefaultWait(result);
     return result;
 }
 int64_t PauseUntil(const Json& doc, const std::string& id) {
     return doc.at("pauses").contains(id) ? doc.at("pauses").at(id).at("until").get<int64_t>() : 0;
 }
+// A pause is live (pending or open) until `until`; it unblocks only once open. Records without opensAt opened at grant.
+int64_t PauseOpensAt(const Json& doc, const std::string& id) {
+    return doc.at("pauses").contains(id) ? doc.at("pauses").at(id).value("opensAt", int64_t{0}) : 0;
+}
+bool PauseLive(const Json& doc, const std::string& id, int64_t now) { return PauseUntil(doc, id) > now; }
+bool PauseOpen(const Json& doc, const std::string& id, int64_t now) { return PauseLive(doc, id, now) && PauseOpensAt(doc, id) <= now; }
+std::string AlreadyScheduled(int64_t until) { return "Access is already scheduled. Request more after it ends at " + ISOTime(until) + "."; }
 }
 std::string NewIdentifier() {
     std::random_device random; std::ostringstream output;
@@ -112,6 +127,7 @@ Workspace::Workspace(Json document, Save save) : document_(std::move(document)),
     Require(document_.at("schema") == 1 && document_.at("revision").is_number_integer() && document_.at("revision") > 0
         && document_.at("enabled").is_boolean() && document_.at("groups").is_array()
         && document_.at("groups").size() <= 256, "Invalid saved workspace. Recover its backup before changing rules.");
+    for (auto& group : document_["groups"]) DefaultWait(group);
     std::set<std::string> ids;
     for (const auto& group : document_.at("groups")) { ValidateGroup(group); Require(ids.insert(group.at("id").get<std::string>()).second, "Duplicate saved group."); }
     for (const auto* key : {"pauses", "unlocks", "backoff"}) Require(document_.at(key).is_object(), "Invalid saved authorization state.");
@@ -146,7 +162,7 @@ bool Workspace::SameOrStricter(const Json& old, const Json& next) {
     if (!PolicyStricter(old.at("changePolicy"), next.at("changePolicy"))) return false;
     const auto& a = old.at("temporaryPolicy"); const auto& b = next.at("temporaryPolicy");
     if (b.at("allowed").get<bool>() && (!a.at("allowed").get<bool>() || b.at("words") < a.at("words")
-        || b.at("maximumMinutes") > a.at("maximumMinutes")
+        || b.at("maximumMinutes") > a.at("maximumMinutes") || WaitMinutes(b) < WaitMinutes(a)
         || (!a.at("resetDays").is_null() && (b.at("resetDays").is_null() || b.at("resetDays") < a.at("resetDays"))))) return false;
     for (int d = 1; d <= 7; ++d) for (int m = 0; m < 1440; ++m)
         if (Scheduled(old, d, m) && !Scheduled(next, d, m)) return false;
@@ -166,7 +182,7 @@ bool Workspace::Unlocked(const Json& group, int64_t now) const {
 int Workspace::PassageWords(const Json& group, int64_t now) const {
     const auto id = group.at("id").get<std::string>(); const auto& policy = group.at("temporaryPolicy");
     int factor = 1;
-    if (PauseUntil(document_, id) > now) factor = 1 << std::min(11, document_.at("pauses").at(id).at("grants").get<int>());
+    if (PauseLive(document_, id, now)) factor = 1 << std::min(11, document_.at("pauses").at(id).at("grants").get<int>());
     if (!policy.at("resetDays").is_null() && document_.at("backoff").contains(id)) {
         const auto& history = document_.at("backoff").at(id);
         if (now < history.at("started").get<int64_t>() + policy.at("resetDays").get<int64_t>() * 86400)
@@ -174,7 +190,7 @@ int Workspace::PassageWords(const Json& group, int64_t now) const {
     }
     return std::min(38400, policy.at("words").get<int>() * factor);
 }
-Json Workspace::Challenge(const Json& command, int words, int64_t now, const std::string& title) {
+Json Workspace::Challenge(const Json& command, int words, int64_t now, const std::string& title, const std::string& detail) {
     static constexpr const char* vocabulary[]{"river", "attention", "quiet", "return", "choice", "ground", "breathe", "time", "steady", "notice", "space", "patient", "present", "enough", "kind", "begin"};
     std::random_device random; std::string passage;
     for (int i = 0; i < words; ++i) { if (i) passage += ' '; passage += vocabulary[random() % std::size(vocabulary)]; }
@@ -182,8 +198,9 @@ Json Workspace::Challenge(const Json& command, int words, int64_t now, const std
     if (challenges_.size() >= 16) challenges_.clear();
     constexpr int64_t lifetime = 30 * 60;
     challenges_[id] = {{"command", command}, {"words", words}, {"passage", passage}, {"expires", now + lifetime}, {"revision", document_.at("revision")}};
+    const std::string standard = "Type the passage. You have 30 minutes; any saved policy change invalidates it. Blocking remains in force until the service accepts it.";
     return {{"challenge", {{"id", id}, {"title", title}, {"passage", passage}, {"expiresAt", ISOTime(now + lifetime)},
-        {"detail", "Type the passage. You have 30 minutes; any saved policy change invalidates it. Blocking remains in force until the service accepts it."}}}};
+        {"detail", detail.empty() ? standard : detail + " " + standard}}}};
 }
 Json Workspace::ApplyChallenge(const Json& command, int64_t now) {
     const auto id = Text(command.at("challengeID"), 80);
@@ -215,12 +232,17 @@ Json Workspace::ApplyChallenge(const Json& command, int64_t now) {
         const auto groupID = action.at("groupID").get<std::string>(); const auto& group = Group(groupID);
         Require(group.at("temporaryPolicy").at("allowed").get<bool>(), "Temporary access is no longer allowed.");
         Require(PassageWords(group, now) == challenge.at("words"), "Passage length changed. Request a new passage.");
-        const int minutes = action.at("minutes");
-        const auto existing = next["pauses"].value(groupID, Json::object()); const bool continuing = PauseUntil(document_, groupID) > now;
+        const int minutes = action.at("minutes"); const int wait = WaitMinutes(group.at("temporaryPolicy"));
+        const auto existing = next["pauses"].value(groupID, Json::object()); const bool continuing = PauseLive(document_, groupID, now);
+        // Time passes while typing: re-check that the wait would not leave a gap after the scheduled access.
+        const int64_t previous = PauseUntil(document_, groupID), opening = now + static_cast<int64_t>(wait) * 60;
+        if (continuing && opening > previous) throw std::runtime_error(AlreadyScheduled(previous));
         const int total = (continuing ? existing.at("total").get<int>() : 0) + minutes;
         Require(total <= group.at("temporaryPolicy").at("maximumMinutes").get<int>(), "This allowance session would exceed its saved maximum.");
-        const int64_t until = std::max(now, PauseUntil(document_, groupID)) + minutes * 60;
-        next["pauses"][groupID] = {{"until", until}, {"total", total}, {"grants", continuing ? existing.at("grants").get<int>() + 1 : 1}};
+        // Stacking never opens earlier: a live pause keeps its opensAt and only extends its end.
+        const int64_t opensAt = continuing ? PauseOpensAt(document_, groupID) : opening;
+        const int64_t until = (continuing ? previous : opening) + static_cast<int64_t>(minutes) * 60;
+        next["pauses"][groupID] = {{"opensAt", opensAt}, {"until", until}, {"total", total}, {"grants", continuing ? existing.at("grants").get<int>() + 1 : 1}};
         const auto& reset = group.at("temporaryPolicy").at("resetDays");
         if (!reset.is_null()) {
             auto history = next["backoff"].value(groupID, Json{{"started", now}, {"grants", 0}});
@@ -228,9 +250,10 @@ Json Workspace::ApplyChallenge(const Json& command, int64_t now) {
             history["grants"] = std::min(38400, history.at("grants").get<int>() + 1); next["backoff"][groupID] = history;
         }
         next["history"].push_back({{"id", NewIdentifier()}, {"groupID", groupID}, {"groupName", group.at("name")},
-            {"startedAt", ISOTime(now)}, {"endsAt", ISOTime(until)}, {"reason", action.at("reason")}, {"reflection", action.at("reflection")}});
+            {"startedAt", ISOTime(std::max(now, opensAt))}, {"endsAt", ISOTime(until)}, {"reason", action.at("reason")}, {"reflection", action.at("reflection")}});
         if (next["history"].size() > 10000) next["history"].erase(next["history"].begin());
-        message = "Temporary access granted until " + ISOTime(until) + ".";
+        message = wait > 0 ? "Temporary access opens at " + ISOTime(opensAt) + " and lasts until " + ISOTime(until) + "."
+            : "Temporary access granted until " + ISOTime(until) + ".";
     } else throw std::runtime_error("Unknown passage action.");
     Commit(std::move(next)); return {{"message", message}};
 }
@@ -269,7 +292,14 @@ Json Workspace::Handle(const Json& command, int64_t now, int weekday, int minute
             std::istringstream reflection(Text(command.at("reflection"), 1120));
             std::string word; int count = 0; while (reflection >> word) ++count;
             Require(count >= 4, "Describe what this time is for in at least four words.");
-            return Challenge(command, PassageWords(group, now), now, "Temporary access: " + group.at("name").get<std::string>());
+            const auto id = group.at("id").get<std::string>(); const int wait = WaitMinutes(policy);
+            const int64_t scheduled = PauseUntil(document_, id), opening = now + static_cast<int64_t>(wait) * 60;
+            const bool live = PauseLive(document_, id, now);
+            if (live && opening > scheduled) throw std::runtime_error(AlreadyScheduled(scheduled));
+            std::string detail;
+            if (wait > 0) detail = live ? "These " + Minutes(minutes) + " extend access already scheduled to end at " + ISOTime(scheduled) + "."
+                : "Access opens " + Minutes(wait) + " after you finish the passage, then lasts " + Minutes(minutes) + ".";
+            return Challenge(command, PassageWords(group, now), now, "Temporary access: " + group.at("name").get<std::string>(), detail);
         } else if (type == "requestGroupUnlock") {
             const auto& group = Group(Text(command.at("groupID")));
             if (Unlocked(group, now)) reply["message"] = "This group is already unlocked. Reopen it to edit.";
@@ -286,7 +316,10 @@ Json Workspace::Handle(const Json& command, int64_t now, int weekday, int minute
             }
         } else if (type == "cancelTemporaryAccess") {
             const auto id = Text(command.at("groupID")); Group(id);
-            auto next = document_; next["pauses"].erase(id); Commit(std::move(next)); reply["message"] = "Temporary access ended. The normal schedule applies again.";
+            // Cancelling only strengthens, so a pending (not yet open) grant is cancelled without a passage. Counters are not refunded.
+            const bool pending = PauseLive(document_, id, now) && !PauseOpen(document_, id, now);
+            auto next = document_; next["pauses"].erase(id); Commit(std::move(next));
+            reply["message"] = pending ? "Scheduled temporary access cancelled. Blocking continues." : "Temporary access ended. The normal schedule applies again.";
         } else throw std::runtime_error("This Windows capability is not available. No change was made.");
     }
     reply["snapshot"] = Snapshot(now, weekday, minute); return reply;
@@ -294,7 +327,7 @@ Json Workspace::Handle(const Json& command, int64_t now, int weekday, int minute
 std::vector<std::string> Workspace::ActiveApplications(int64_t now, int weekday, int minute) const {
     std::set<std::string> paths;
     if (document_.at("enabled").get<bool>()) for (const auto& g : document_.at("groups")) {
-        if (!g.at("enabled").get<bool>() || PauseUntil(document_, g.at("id").get<std::string>()) > now || !Scheduled(g, weekday, minute)) continue;
+        if (!g.at("enabled").get<bool>() || PauseOpen(document_, g.at("id").get<std::string>(), now) || !Scheduled(g, weekday, minute)) continue;
         for (const auto& path : g.at("applications")) paths.insert(Fold(path.get<std::string>()));
     }
     return {paths.begin(), paths.end()};
@@ -302,11 +335,22 @@ std::vector<std::string> Workspace::ActiveApplications(int64_t now, int weekday,
 Json Workspace::Snapshot(int64_t now, int weekday, int minute) const {
     Json groups = Json::array();
     for (auto g : document_.at("groups")) {
-        const auto until = PauseUntil(document_, g.at("id").get<std::string>());
-        const bool active = document_.at("enabled").get<bool>() && g.at("enabled").get<bool>();
-        g["status"] = !active ? "disabled" : until > now ? "suspended" : Scheduled(g, weekday, minute) ? "blocking" : "allowed";
-        g["detail"] = !active ? "Application blocking disabled" : until > now ? "Temporarily suspended" : Scheduled(g, weekday, minute) ? "Scheduled to block application networking" : "Outside this group's blocking windows";
-        if (until > now) g["suspendedUntil"] = ISOTime(until);
+        const auto id = g.at("id").get<std::string>();
+        const auto until = PauseUntil(document_, id), opensAt = PauseOpensAt(document_, id);
+        const bool open = PauseOpen(document_, id, now), pending = PauseLive(document_, id, now) && !open;
+        const bool active = document_.at("enabled").get<bool>() && g.at("enabled").get<bool>(), scheduled = Scheduled(g, weekday, minute);
+        g["temporaryPolicy"]["waitMinutes"] = WaitMinutes(g.at("temporaryPolicy"));
+        // A pending grant never changes status: blocking continues through the wait.
+        g["status"] = !active ? "disabled" : open ? "suspended" : scheduled ? "blocking" : "allowed";
+        g["detail"] = !active ? "Application blocking disabled" : open ? "Temporarily suspended" : scheduled
+            ? (pending ? "Blocking until temporary access opens at " + ISOTime(opensAt) : std::string("Scheduled to block application networking")) : "Outside this group's blocking windows";
+        if (open) g["suspendedUntil"] = ISOTime(until);
+        if (pending) {
+            g["accessOpensAt"] = ISOTime(opensAt);
+            // "waiting" is a blocking state, so it is reported only while a block is in force (as on Apple).
+            if (active && scheduled) g["now"] = {{"state", "waiting"}, {"changesAt", ISOTime(opensAt)},
+                {"headline", "Access opens at " + ISOTime(opensAt) + " \xC2\xB7 blocking until then"}};
+        }
         g["canEdit"] = Unlocked(g, now);
         g["temporaryPassageWords"] = PassageWords(g, now);
         groups.push_back(std::move(g));

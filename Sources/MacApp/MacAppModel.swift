@@ -144,6 +144,7 @@ final class MacAppModel: ObservableObject {
                 self?.enforcement.refreshRemovalState()
                 self?.pruneExpiredSessions()
                 self?.pruneExpiredTemporaryPauses()
+                self?.publishOpenedPendingPauses()
                 self?.refreshRetreatLockdowns()
                 self?.objectWillChange.send()
             }
@@ -965,10 +966,50 @@ final class MacAppModel: ObservableObject {
         return values.filter { lockdownExpirations[$0.key] == nil }
     }
 
-    /// The pause currently in force for a Blocking Group, if any.
+    /// The pause currently open for a Blocking Group, if any. A granted pause
+    /// still inside its wait is not returned: the group is still blocked.
     func temporaryPause(for ruleID: UUID, at now: Date = Date()) -> RuleTimeAllowance? {
         guard !lockdownSessions.contains(where: { $0.isActive(at: now) && $0.ruleIDs.contains(ruleID) }) else { return nil }
+        return MacTemporaryPauseStore.open(for: ruleID, at: now, defaults: MacLockLedger.shared)
+    }
+
+    /// The live pause, pending or open. For bookkeeping and cancellation.
+    func liveTemporaryPause(for ruleID: UUID, at now: Date = Date()) -> RuleTimeAllowance? {
+        guard !lockdownSessions.contains(where: { $0.isActive(at: now) && $0.ruleIDs.contains(ruleID) }) else { return nil }
         return MacTemporaryPauseStore.active(for: ruleID, at: now, defaults: MacLockLedger.shared)
+    }
+
+    /// The group's saved wait before temporary access opens.
+    func temporaryAccessWaitMinutes(for ruleID: UUID) -> Int {
+        desktopRule(for: ruleID)?.lockdown.effectiveTemporaryAccessWaitMinutes ?? 0
+    }
+
+    /// A granted pause still inside its wait.
+    func pendingTemporaryPause(for ruleID: UUID, at now: Date = Date()) -> RuleTimeAllowance? {
+        guard !lockdownSessions.contains(where: { $0.isActive(at: now) && $0.ruleIDs.contains(ruleID) }),
+              let pause = MacTemporaryPauseStore.active(for: ruleID, at: now, defaults: MacLockLedger.shared),
+              pause.isPending(at: now) else { return nil }
+        return pause
+    }
+
+    /// When a pending pause this app published reaches its opening, publish
+    /// again: the opened pause then goes out as `pausedUntil`, which is what an
+    /// older installed filter needs to open it (a current filter has already
+    /// opened it from the pending window by itself), and the shared record is
+    /// rewritten as an ordinary pause for older iPhone/Mac builds. Driven by
+    /// the 5-second timer, so it needs this app running; until then an older
+    /// filter keeps blocking (late, never early).
+    private func publishOpenedPendingPauses(at now: Date = Date()) {
+        guard !uiPreviewMode, let published = lastPublishedPolicy else { return }
+        let due = published.rules.filter { ($0.pendingPauseOpensAt.map { $0 <= now }) ?? false }.map(\.id)
+        guard !due.isEmpty else { return }
+        publishDesktopPolicy()
+        let replica = temporaryAccessCloudStore.load()
+        for id in due where MacTemporaryPauseStore.open(for: id, at: now, defaults: MacLockLedger.shared) != nil
+            && replica.ownEntryIsLatestPending(rule: id, device: temporaryAccessCloudStore.deviceID) {
+            publishTemporaryAccessSpend(for: id, at: now)
+        }
+        objectWillChange.send()
     }
 
     func availablePauseDurations(
@@ -1018,8 +1059,10 @@ final class MacAppModel: ObservableObject {
                   lockdownExpirations[rule.id] == nil else { return nil }
             return (rule.id, rule.lockdown.effectiveMaximumTemporaryAccessMinutes)
         }, uniquingKeysWith: { first, _ in first })
+        let waits = Dictionary(rules.map { ($0.id, $0.lockdown.effectiveTemporaryAccessWaitMinutes) },
+                               uniquingKeysWith: { first, _ in first })
         let merged = replica.applyingSharedPauses(to: stored, device: temporaryAccessCloudStore.deviceID,
-            maximumMinutes: limits, at: now)
+            maximumMinutes: limits, waitMinutes: waits, at: now)
         if merged != stored {
             MacTemporaryPauseStore.save(merged, defaults: MacLockLedger.shared)
             publishDesktopPolicy()
@@ -1033,12 +1076,10 @@ final class MacAppModel: ObservableObject {
         let history = TemporaryAllowanceBackoff.history(for: ruleID, defaults: MacLockLedger.shared)
         temporaryAccessCloudStore.record(
             rule: ruleID,
-            minutesGranted: pause?.totalMinutesGranted ?? 0,
-            pauseEndsAt: pause?.expiresAt ?? .distantPast,
+            allowance: pause,
             backoffGrants: history?.grants ?? 0,
             backoffStartedAt: history?.startedAt ?? now,
-            at: now,
-            sessionGrantCount: pause?.grantCount
+            at: now
         )
     }
 
@@ -1094,7 +1135,7 @@ final class MacAppModel: ObservableObject {
             }
             BypassHistoryStore.record([BypassEvent(id: UUID(), groupID: ruleID, groupName: rule.name,
                 grantedAt: now, expiresAt: allowance.expiresAt, grantedMinutes: duration.minutes, source: .app, intent: intent,
-                reflection: reflection)],
+                reflection: reflection, opensAt: (allowance.opensAt ?? now) > now ? allowance.opensAt : nil)],
                 defaults: .standard, at: now)
             DesktopDiagnosticTrace.record(
                 component: "policy",
@@ -1618,7 +1659,8 @@ final class MacAppModel: ObservableObject {
         var blockProfile = DesktopBlockProfile(
             cloudRules: rules,
             temporaryPauses: MacTemporaryPauseStore.activeExpirations(at: Date(), defaults: MacLockLedger.shared),
-            temporaryPauseAuthorizationIDs: MacTemporaryPauseStore.activeAuthorizationIDs(at: Date(), defaults: MacLockLedger.shared)
+            temporaryPauseAuthorizationIDs: MacTemporaryPauseStore.activeAuthorizationIDs(at: Date(), defaults: MacLockLedger.shared),
+            pendingTemporaryPauses: MacTemporaryPauseStore.pendingIntervals(at: Date(), defaults: MacLockLedger.shared)
         )
         // Give Retreat groups their planned interval, and include Retreats that
         // start soon, so the filter starts and ends them on time by itself.

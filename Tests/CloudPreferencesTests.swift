@@ -809,4 +809,52 @@ extension CloudPreferencesTests {
             retreat, authorizationIsUnlocked: false, appDefault: CloudRuleLockdownPreference()
         ))
     }
+
+    // MARK: - Access delay
+
+    func testWaitDecodesAsZeroWhenAbsentAndClampsToADay() throws {
+        let legacy = try JSONDecoder().decode(CloudRuleLockdownPreference.self, from: Data(#"{"allowsTimeExtensions":true}"#.utf8))
+        XCTAssertNil(legacy.temporaryAccessWaitMinutes)
+        XCTAssertEqual(legacy.effectiveTemporaryAccessWaitMinutes, 0)
+        let huge = try JSONDecoder().decode(CloudRuleLockdownPreference.self, from: Data(#"{"temporaryAccessWaitMinutes":5000}"#.utf8))
+        XCTAssertEqual(huge.effectiveTemporaryAccessWaitMinutes, 1_440)
+        let negative = try JSONDecoder().decode(CloudRuleLockdownPreference.self, from: Data(#"{"temporaryAccessWaitMinutes":-4}"#.utf8))
+        XCTAssertNil(negative.temporaryAccessWaitMinutes)
+        var policy = CloudRuleLockdownPreference()
+        policy.setTemporaryAccessWait(minutes: 15)
+        let roundTrip = try JSONDecoder().decode(CloudRuleLockdownPreference.self, from: JSONEncoder().encode(policy))
+        XCTAssertEqual(roundTrip.effectiveTemporaryAccessWaitMinutes, 15)
+        policy.setTemporaryAccessWait(minutes: 0)
+        XCTAssertFalse(String(decoding: try JSONEncoder().encode(policy), as: UTF8.self).contains("temporaryAccessWaitMinutes"),
+                       "No wait encodes exactly as before")
+    }
+
+    func testTheStricterPolicyWaitsLonger() {
+        var short = CloudRuleLockdownPreference(severity: "passageOnly", allowsTimeExtensions: true)
+        short.setTemporaryAccessWait(minutes: 5)
+        var long = short
+        long.setTemporaryAccessWait(minutes: 45)
+        XCTAssertEqual(CloudRuleLockdownPreference.restrictiveMaximum([short, long]).effectiveTemporaryAccessWaitMinutes, 45)
+        // An unlocked group still keeps its own wait, and appDefault keeps the group's.
+        var unlocked = CloudRuleLockdownPreference(severity: "none", allowsTimeExtensions: true)
+        unlocked.setTemporaryAccessWait(minutes: 20)
+        XCTAssertEqual(CloudRuleLockdownPreference.restrictiveMaximum([unlocked]).effectiveTemporaryAccessWaitMinutes, 20)
+        var inherited = CloudRuleLockdownPreference(severity: "appDefault", allowsTimeExtensions: true)
+        inherited.setTemporaryAccessWait(minutes: 25)
+        XCTAssertEqual(CloudRuleLockdownPreference.restrictiveMaximum(
+            [inherited], appDefault: .init(severity: "passageOnly")).effectiveTemporaryAccessWaitMinutes, 25)
+    }
+
+    func testLoweringAGroupsWaitWeakensARunningRetreatAndRaisingItDoesNot() {
+        var social = blockingGroup("Social", domains: ["social.example"])
+        social.modificationPolicy = CloudRuleLockdownPreference(severity: "passageOnly", allowsTimeExtensions: true)
+        social.modificationPolicy.setTemporaryAccessWait(minutes: 30)
+        var shorter = social
+        shorter.modificationPolicy.setTemporaryAccessWait(minutes: 10)
+        var longer = social
+        longer.modificationPolicy.setTemporaryAccessWait(minutes: 60)
+        XCTAssertTrue(weakens(retreatEdit(holding: [social], to: [shorter])))
+        XCTAssertFalse(weakens(retreatEdit(holding: [social], to: [longer])))
+        XCTAssertFalse(weakens(retreatEdit(holding: [social], to: [social])))
+    }
 }

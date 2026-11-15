@@ -106,6 +106,18 @@ function evaluate(g: Group, now: Date): GroupNow {
   const current = list.find(
     ([s, e]) => s <= now.getTime() && now.getTime() < e,
   );
+  // Granted access inside its wait: still blocking until it opens.
+  if (
+    current &&
+    g.accessOpensAt &&
+    Date.parse(g.accessOpensAt) > now.getTime() &&
+    Date.parse(g.accessOpensAt) < current[1]
+  )
+    return {
+      state: "waiting",
+      changesAt: g.accessOpensAt,
+      headline: `Access opens ${moment(g.accessOpensAt, now, true)} · blocking until then`,
+    };
   if (current)
     return current[1] >= horizon.getTime()
       ? { state: "blocking", headline: "Blocking now · always on" }
@@ -126,7 +138,10 @@ function evaluate(g: Group, now: Date): GroupNow {
 function summary(groups: Group[], now: Date): Snapshot["summary"] {
   const states = groups.map((g) => ({ name: g.name, now: g.now! }));
   const blocking = states.filter(
-    (s) => s.now.state === "blocking" || s.now.state === "lockdown",
+    (s) =>
+      s.now.state === "blocking" ||
+      s.now.state === "lockdown" ||
+      s.now.state === "waiting",
   ).length;
   const paused = states.filter((s) => s.now.state === "paused").length;
   const plural = (n: number) => `${n} ${n === 1 ? "group" : "groups"}`;
@@ -146,7 +161,9 @@ function summary(groups: Group[], now: Date): Snapshot["summary"] {
       ? "starts"
       : next.now.state === "paused"
         ? "resumes"
-        : "ends";
+        : next.now.state === "waiting"
+          ? "access opens"
+          : "ends";
   return {
     headline,
     next: `Next: ${next.name} ${verb} ${moment(next.now.changesAt!, now, true)}`,
@@ -225,6 +242,7 @@ function refresh(state: Snapshot): Snapshot {
         {
           lockdown: "lockdown",
           blocking: "blocking",
+          waiting: "blocking",
           paused: "suspended",
           off: "disabled",
           upcoming: "allowed",

@@ -569,12 +569,32 @@ final class AppModel: ObservableObject {
 
     // MARK: - Passage-gated additional time
 
+    /// The allowance whose access is open now. Anything that shows a group as
+    /// unblocked asks this, so a grant inside its wait never reads as open.
     func activeTimeAllowance(for ruleID: UUID, now: Date = Date()) -> RuleTimeAllowance? {
+        guard let allowance = liveTimeAllowance(for: ruleID, now: now), allowance.isOpen(at: now) else { return nil }
+        return allowance
+    }
+
+    /// The allowance that exists now, pending or open: session spend, passage
+    /// growth, extensions and cancellation all count it.
+    func liveTimeAllowance(for ruleID: UUID, now: Date = Date()) -> RuleTimeAllowance? {
         guard TimedLockdownSession.expirations(timedLockdowns, at: now)[ruleID] == nil else { return nil }
-        if let stored = SharedConfiguration.activeTimeAllowance(for: ruleID, at: now) {
+        if let stored = SharedConfiguration.liveTimeAllowance(for: ruleID, at: now) {
             return stored
         }
         guard let allowance = ruleTimeAllowances[ruleID], allowance.isActive(at: now) else { return nil }
+        return allowance
+    }
+
+    /// The group's saved wait before temporary access opens.
+    func temporaryAccessWaitMinutes(for ruleID: UUID) -> Int {
+        rules.first { $0.id == ruleID }?.lockdownPolicy.effectiveTemporaryAccessWaitMinutes ?? 0
+    }
+
+    /// A granted allowance still inside its wait.
+    func pendingTimeAllowance(for ruleID: UUID, now: Date = Date()) -> RuleTimeAllowance? {
+        guard let allowance = liveTimeAllowance(for: ruleID, now: now), allowance.isPending(at: now) else { return nil }
         return allowance
     }
 
@@ -582,7 +602,7 @@ final class AppModel: ObservableObject {
         guard let rule = rules.first(where: { $0.id == ruleID }) else { return 40 }
         let base = rule.lockdownPolicy.temporaryAccessPassageWordCount
             ?? ruleLockdownConfiguration(for: rule).passageWordCount
-        let granted = activeTimeAllowance(for: ruleID, now: now)?.grantCount ?? 0
+        let granted = liveTimeAllowance(for: ruleID, now: now)?.grantCount ?? 0
         let sessionWords = TimeAllowancePolicy.passageWordCount(base: base, incrementsAlreadyGranted: granted)
         if let days = rule.lockdownPolicy.temporaryAllowanceResetDays {
             // A grant taken on another device still cost a passage, so it has
@@ -606,7 +626,7 @@ final class AppModel: ObservableObject {
     func otherDeviceAllowanceMinutes(for ruleID: UUID, now: Date = Date()) -> Int {
         temporaryAccessCloudStore.load().additionalCommittedMinutes(
             forRule: ruleID,
-            localMinutes: activeTimeAllowance(for: ruleID, now: now)?.totalMinutesGranted ?? 0,
+            localMinutes: liveTimeAllowance(for: ruleID, now: now)?.totalMinutesGranted ?? 0,
             at: now
         )
     }
@@ -631,8 +651,10 @@ final class AppModel: ObservableObject {
                   locked[rule.id] == nil else { return nil }
             return (rule.id, rule.lockdownPolicy.effectiveMaximumTemporaryAccessMinutes)
         }, uniquingKeysWith: { first, _ in first })
+        let waits = Dictionary(rules.map { ($0.id, $0.lockdownPolicy.effectiveTemporaryAccessWaitMinutes) },
+                               uniquingKeysWith: { first, _ in first })
         var merged = replica.applyingSharedPauses(to: stored, device: temporaryAccessCloudStore.deviceID,
-            maximumMinutes: limits, at: now)
+            maximumMinutes: limits, waitMinutes: waits, at: now)
         for id in merged.keys where EnforcementEngine.usageShieldIsConfigured(ruleID: id) {
             merged[id]?.restoreUsageShield = true
         }
@@ -647,24 +669,36 @@ final class AppModel: ObservableObject {
             ruleTimeAllowances = merged
             synchronize()
         }
+        publishOpenedPendingSpend(now: now)
     }
 
     private func publishTemporaryAccessSpend(for ruleID: UUID, now: Date) {
-        let allowance = SharedConfiguration.activeTimeAllowance(for: ruleID, at: now)
+        let allowance = SharedConfiguration.liveTimeAllowance(for: ruleID, at: now)
         let history = SharedConfiguration.allowanceBackoffHistory(for: ruleID)
         temporaryAccessCloudStore.record(
             rule: ruleID,
-            minutesGranted: allowance?.totalMinutesGranted ?? 0,
-            pauseEndsAt: allowance?.expiresAt ?? .distantPast,
+            allowance: allowance,
             backoffGrants: history?.grants ?? 0,
             backoffStartedAt: history?.startedAt ?? now,
-            at: now,
-            sessionGrantCount: allowance?.grantCount
+            at: now
         )
     }
 
+    /// A pending grant is shared in a form older builds read as "no pause"
+    /// (see `ICloudTemporaryAccessStore.record(rule:allowance:)`). Once it
+    /// has opened, republish it as an ordinary pause so they open too, late
+    /// rather than early. Runs whenever the app refreshes.
+    private func publishOpenedPendingSpend(now: Date) {
+        let replica = temporaryAccessCloudStore.load()
+        for allowance in SharedConfiguration.loadRuleTimeAllowances().values where allowance.isOpen(at: now) {
+            guard replica.ownEntryIsLatestPending(rule: allowance.ruleID, device: temporaryAccessCloudStore.deviceID)
+            else { continue }
+            publishTemporaryAccessSpend(for: allowance.ruleID, now: now)
+        }
+    }
+
     func nextTimeAllowanceIncrement(for ruleID: UUID, now: Date = Date()) -> Int {
-        (activeTimeAllowance(for: ruleID, now: now)?.grantCount ?? 0) + 1
+        (liveTimeAllowance(for: ruleID, now: now)?.grantCount ?? 0) + 1
     }
 
     @discardableResult
@@ -698,8 +732,8 @@ final class AppModel: ObservableObject {
             errorMessage = "The required passage changed. Reopen temporary access and type the new passage."
             return false
         }
-        let existing = SharedConfiguration.activeTimeAllowance(for: ruleID, at: now)
-            ?? activeTimeAllowance(for: ruleID, now: now)
+        let existing = SharedConfiguration.liveTimeAllowance(for: ruleID, at: now)
+            ?? liveTimeAllowance(for: ruleID, now: now)
         let sharedMinutes = otherDeviceAllowanceMinutes(for: ruleID, now: now)
         let minutesGranted = (existing?.totalMinutesGranted ?? 0) + sharedMinutes
         guard TimeAllowancePolicy.canGrant(
@@ -714,20 +748,29 @@ final class AppModel: ObservableObject {
                 : "This pause would exceed the rule's maximum of \(maximum) for the current allowance session."
             return false
         }
+        let timing = TimeAllowancePolicy.timing(
+            existing: existing, duration: duration,
+            waitMinutes: rule.lockdownPolicy.effectiveTemporaryAccessWaitMinutes, now: now)
+        guard case let .scheduled(opensAt, expiresAt) = timing else {
+            if case let .refused(endsAt) = timing {
+                errorMessage = "Access is already scheduled. Request more after it ends at \(endsAt.formatted(date: .omitted, time: .shortened))."
+            }
+            return false
+        }
         if existing == nil,
            RuleScheduler.requiredActivityCount(for: rules) + 1 > RuleScheduler.maximumConcurrentActivities {
             errorMessage = "No Screen Time monitor slot is available for a temporary pause. Remove or combine a time block first."
             return false
         }
 
-        let baseDate = existing?.expiresAt ?? now
         let allowance = RuleTimeAllowance(
             ruleID: ruleID,
-            expiresAt: baseDate.addingTimeInterval(duration.seconds),
+            expiresAt: expiresAt,
             totalMinutesGranted: minutesGranted + duration.minutes,
             grantCount: (existing?.grantCount ?? 0) + 1,
             restoreUsageShield: (existing?.restoreUsageShield ?? false)
-                || EnforcementEngine.usageShieldIsConfigured(ruleID: ruleID)
+                || EnforcementEngine.usageShieldIsConfigured(ruleID: ruleID),
+            opensAt: opensAt > now ? opensAt : existing?.opensAt
         )
         var storedAllowances = SharedConfiguration.loadRuleTimeAllowances()
         storedAllowances[ruleID] = allowance
@@ -735,14 +778,14 @@ final class AppModel: ObservableObject {
         SharedConfiguration.saveRuleTimeAllowances(storedAllowances)
         synchronize()
         // Rebuilding may reject the expiry monitor and revoke this grant.
-        guard SharedConfiguration.activeTimeAllowance(for: ruleID, at: now) != nil else { return false }
+        guard SharedConfiguration.liveTimeAllowance(for: ruleID, at: now) != nil else { return false }
         if let days = rule.lockdownPolicy.temporaryAllowanceResetDays {
             SharedConfiguration.recordAllowanceBackoff(for: ruleID, resetDays: days, at: now)
         }
         publishTemporaryAccessSpend(for: ruleID, now: now)
         BypassHistoryStore.record([BypassEvent(id: UUID(), groupID: ruleID, groupName: rule.name,
             grantedAt: now, expiresAt: allowance.expiresAt, grantedMinutes: duration.minutes, source: .app, intent: intent,
-            reflection: reflection)],
+            reflection: reflection, opensAt: opensAt > now ? opensAt : nil)],
             defaults: SharedConfiguration.bypassHistoryDefaults, at: now)
         return true
     }
@@ -754,7 +797,7 @@ final class AppModel: ObservableObject {
         guard let rule = rules.first(where: { $0.id == ruleID }),
               rule.isEnabled,
               rule.lockdownPolicy.allowsTimeExtensions else { return [] }
-        let minutesGranted = (activeTimeAllowance(for: ruleID, now: now)?.totalMinutesGranted ?? 0)
+        let minutesGranted = (liveTimeAllowance(for: ruleID, now: now)?.totalMinutesGranted ?? 0)
             + otherDeviceAllowanceMinutes(for: ruleID, now: now)
         return TemporaryAccessDuration.allCases.filter {
             TimeAllowancePolicy.canGrant(
@@ -799,7 +842,7 @@ final class AppModel: ObservableObject {
         }
         guard rules.contains(where: { $0.id == ruleID }),
               ShieldTemporaryAccessCoordinator.currentlyEnforcedRuleIDs(in: rules).contains(ruleID),
-              activeTimeAllowance(for: ruleID, now: now) == nil
+              liveTimeAllowance(for: ruleID, now: now) == nil
         else {
             errorMessage = "That rule is no longer the active blocker for this request."
             clearPendingTemporaryAccessRequest(id: request.id)
@@ -830,7 +873,8 @@ final class AppModel: ObservableObject {
 
     @discardableResult
     func cancelTemporaryPause(for ruleID: UUID) -> Bool {
-        guard activeTimeAllowance(for: ruleID) != nil else { return false }
+        // A pending grant is cancelled the same way; it only strengthens.
+        guard liveTimeAllowance(for: ruleID) != nil else { return false }
         removeTimeAllowance(ruleID)
         synchronize()
         return true
